@@ -23,6 +23,8 @@ export class ParticleVeil {
   private readonly alphas: Float32Array;
   private readonly sizes: Float32Array;
   private readonly twinkles: Float32Array;
+  private readonly activeIndices: number[] = [];
+  private readonly activeSlots: Int32Array;
   private cursor = 0;
   private elapsedSeconds = 0;
   private auraAccumulator = 0;
@@ -34,6 +36,8 @@ export class ParticleVeil {
     this.alphas = new Float32Array(budget);
     this.sizes = new Float32Array(budget);
     this.twinkles = new Float32Array(budget);
+    this.activeSlots = new Int32Array(budget);
+    this.activeSlots.fill(-1);
 
     for (let index = 0; index < budget; index += 1) {
       this.particles.push({ age: 999, life: 1, size: 0, baseAlpha: 0 });
@@ -41,11 +45,11 @@ export class ParticleVeil {
     }
 
     this.geometry = new THREE.BufferGeometry();
-    this.geometry.setAttribute("position", new THREE.BufferAttribute(this.positions, 3));
-    this.geometry.setAttribute("color", new THREE.BufferAttribute(this.colors, 3));
-    this.geometry.setAttribute("aAlpha", new THREE.BufferAttribute(this.alphas, 1));
-    this.geometry.setAttribute("aSize", new THREE.BufferAttribute(this.sizes, 1));
-    this.geometry.setAttribute("aTwinkle", new THREE.BufferAttribute(this.twinkles, 1));
+    this.geometry.setAttribute("position", createDynamicAttribute(this.positions, 3));
+    this.geometry.setAttribute("color", createDynamicAttribute(this.colors, 3));
+    this.geometry.setAttribute("aAlpha", createDynamicAttribute(this.alphas, 1));
+    this.geometry.setAttribute("aSize", createDynamicAttribute(this.sizes, 1));
+    this.geometry.setAttribute("aTwinkle", createDynamicAttribute(this.twinkles, 1));
 
     this.material = new THREE.ShaderMaterial({
       transparent: true,
@@ -124,9 +128,9 @@ export class ParticleVeil {
     // The avatar should feel wrapped in particulate light even while idle. The
     // accumulator makes the emission rate frame-rate independent, so a slow
     // machine does not get a thinner cloud just because fewer frames ran.
-    const particlesPerSecond = 225 + movementStrength * 175;
+    const particlesPerSecond = 2250 + movementStrength * 1750;
     this.auraAccumulator += delta * particlesPerSecond;
-    const count = Math.min(34, Math.floor(this.auraAccumulator));
+    const count = Math.min(340, Math.floor(this.auraAccumulator));
     if (count <= 0) return;
 
     this.auraAccumulator -= count;
@@ -139,18 +143,24 @@ export class ParticleVeil {
 
   spawnWake(center: THREE.Vector3, movementStrength: number): void {
     if (movementStrength <= 0.08 || Math.random() > movementStrength * 0.55) return;
-    this.spawnBurst(center, 14 + Math.floor(movementStrength * 36), 0.12 + movementStrength * 0.16);
+    this.spawnBurst(center, 140 + Math.floor(movementStrength * 360), 0.12 + movementStrength * 0.16);
   }
 
   update(delta: number): void {
     this.elapsedSeconds += delta;
     this.material.uniforms.uTime.value = this.elapsedSeconds;
 
-    for (let index = 0; index < this.particles.length; index += 1) {
+    for (let activeSlot = this.activeIndices.length - 1; activeSlot >= 0; activeSlot -= 1) {
+      const index = this.activeIndices[activeSlot];
       const particle = this.particles[index];
-      if (particle.age >= particle.life) continue;
-
       particle.age += delta;
+
+      if (particle.age >= particle.life) {
+        this.seedDormantParticle(index);
+        this.deactivateParticle(activeSlot);
+        continue;
+      }
+
       const offset = index * 3;
       const normalizedAge = Math.min(1, particle.age / particle.life);
       const drag = Math.exp(-delta * 0.9);
@@ -194,6 +204,7 @@ export class ParticleVeil {
   ): void {
     const index = this.cursor;
     this.cursor = (this.cursor + 1) % this.particles.length;
+    this.activateParticle(index);
 
     const angle = Math.random() * Math.PI * 2;
     // Keep bursts cloud-like: many tiny motes suspended near the source,
@@ -234,9 +245,31 @@ export class ParticleVeil {
     this.geometry.attributes.aSize.needsUpdate = true;
     this.geometry.attributes.aTwinkle.needsUpdate = true;
   }
+
+  private activateParticle(index: number): void {
+    if (this.activeSlots[index] !== -1) return;
+    this.activeSlots[index] = this.activeIndices.length;
+    this.activeIndices.push(index);
+  }
+
+  private deactivateParticle(activeSlot: number): void {
+    const index = this.activeIndices[activeSlot];
+    const movedIndex = this.activeIndices.pop();
+    this.activeSlots[index] = -1;
+
+    if (movedIndex === undefined || activeSlot >= this.activeIndices.length) return;
+    this.activeIndices[activeSlot] = movedIndex;
+    this.activeSlots[movedIndex] = activeSlot;
+  }
 }
 
 function pickParticleColor(seed: number): THREE.Color {
   if (seed < 0.5) return TEMP_COLOR.copy(TURQUOISE).lerp(VIOLET, seed * 1.4);
   return TEMP_COLOR.copy(TURQUOISE).lerp(GOLD, (seed - 0.5) * 1.2);
+}
+
+function createDynamicAttribute(array: Float32Array, itemSize: number): THREE.BufferAttribute {
+  // The 10x particle pass keeps the GPU vertex budget high, while this hint
+  // tells Three these buffers are expected to be rewritten as particles move.
+  return new THREE.BufferAttribute(array, itemSize).setUsage(THREE.DynamicDrawUsage);
 }

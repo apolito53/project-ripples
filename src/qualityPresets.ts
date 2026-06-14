@@ -13,14 +13,16 @@ export type QualityPreset = {
   readonly fogDensity: number;
 };
 
+// The lab is currently in "make the GPU sweat" mode: particle budgets and burst
+// counts are deliberately 10x the previously tuned values.
 export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
   clean: {
     id: "clean",
     label: "Clean",
     fieldRadius: 24,
     cubeSpacing: 1.2,
-    particleBudget: 3000,
-    burstParticleCount: 720,
+    particleBudget: 30000,
+    burstParticleCount: 7200,
     bloomStrength: 0,
     shadowMapSize: 0,
     pulseLightCount: 0,
@@ -31,8 +33,8 @@ export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
     label: "Pretty",
     fieldRadius: 32,
     cubeSpacing: 1,
-    particleBudget: 8200,
-    burstParticleCount: 2050,
+    particleBudget: 82000,
+    burstParticleCount: 20500,
     bloomStrength: 0.14,
     shadowMapSize: 1024,
     pulseLightCount: 3,
@@ -43,8 +45,8 @@ export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
     label: "Showoff",
     fieldRadius: 42,
     cubeSpacing: 0.9,
-    particleBudget: 16500,
-    burstParticleCount: 4100,
+    particleBudget: 165000,
+    burstParticleCount: 41000,
     bloomStrength: 0.24,
     shadowMapSize: 2048,
     pulseLightCount: 5,
@@ -55,8 +57,8 @@ export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
     label: "Meltdown",
     fieldRadius: 56,
     cubeSpacing: 0.72,
-    particleBudget: 32000,
-    burstParticleCount: 8200,
+    particleBudget: 320000,
+    burstParticleCount: 82000,
     bloomStrength: 0.38,
     shadowMapSize: 4096,
     pulseLightCount: 8,

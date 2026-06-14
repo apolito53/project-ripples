@@ -23,6 +23,8 @@
   of dense particles instead of relying on a soft glowing shell.
 - Slightly increased sparkle mote size and count after visual tuning, keeping
   the cloud particulate instead of returning to a glowing blob.
+- Multiplied particle budgets, burst counts, aura emission, and wake emission
+  by 10 for an intentionally heavier visual stress test.
 
 ## 0.1.0 - 2026-06-14
 
