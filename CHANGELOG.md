@@ -17,6 +17,10 @@
 - Changed burst particles from soft additive discs into small star-like
   sparkles, then decoupled sparkle count from pulse brightness so pulses can be
   dense without becoming a volumetric glow blob.
+- Retuned those sparkles again into lower-opacity particle clouds, trading the
+  fat star/snowflake silhouette for many smaller glitter motes.
+- Added a persistent player-local sparkle aura so the avatar reads as a cloud
+  of dense particles instead of relying on a soft glowing shell.
 
 ## 0.1.0 - 2026-06-14
 

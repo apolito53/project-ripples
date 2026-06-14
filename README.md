@@ -61,7 +61,8 @@ Dedicated ports:
 
 - `src/rippleField.ts` owns the shader-displaced instanced cube field.
 - `src/rippleSources.ts` keeps the tiny CPU-side pulse buffer sent to the GPU.
-- `src/particleVeil.ts` owns additive spark bursts and wake trails.
+- `src/particleVeil.ts` owns the player sparkle aura, additive glitter-cloud
+  bursts, and wake trails.
 - `src/pulseLights.ts` maps recent pulses onto a small pool of point lights.
 - `src/controls.ts` owns the avatar movement and camera pointer-lock behavior.
 

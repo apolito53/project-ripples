@@ -30,7 +30,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Avatar movement, pointer lock, and camera follow behavior: `src/controls.ts`
 - Shader-displaced instanced cube field: `src/rippleField.ts`
 - Pulse source ring-buffer/uniform writer: `src/rippleSources.ts`
-- Additive particle bursts and wake trails: `src/particleVeil.ts`
+- Player sparkle aura, additive particle bursts, and wake trails:
+  `src/particleVeil.ts`
 - Recent-pulse point light pool: `src/pulseLights.ts`
 - Quality preset budgets and labels: `src/qualityPresets.ts`
 - Runtime settings shape/defaults: `src/labSettings.ts`
@@ -45,7 +46,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 4. Clicks, `Space`, wake trails, and ambient timers add pulse sources.
 5. `RippleField` sends active source uniforms to the shader; cube matrices stay
    static while the GPU animates lift/stretch/glow.
-6. `ParticleVeil` animates spark bursts and wake motes.
+6. `ParticleVeil` animates the player sparkle aura, burst clouds, and wake motes.
 7. `PulseLightRig` assigns recent pulses to point lights.
 8. The scene renders through bloom when bloom strength is above zero.
 

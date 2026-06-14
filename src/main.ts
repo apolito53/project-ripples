@@ -87,6 +87,7 @@ function animate(): void {
   avatar.update(delta, player.position);
 
   const playerSpeed = player.getSpeed();
+  particles.spawnAura(player.position, delta, playerSpeed / 18);
   particles.spawnWake(player.position, playerSpeed / 18);
   maybeSpawnAmbientPulse(time);
   particles.update(delta);
@@ -105,7 +106,7 @@ function animate(): void {
 function spawnPulse(position: THREE.Vector3, strength: number): void {
   rippleSources.add(position, clock.elapsedTime, strength);
   // Particle density is intentionally decoupled from pulse brightness. A pulse
-  // can throw lots of tiny crisp sparkles without becoming a giant emissive fog.
+  // should read as a little cloud of tiny glitter motes, not as one bright blob.
   const count = Math.max(0, Math.floor(
     preset.burstParticleCount * settings.particleDensity * (0.42 + strength * 1.7)
   ));
