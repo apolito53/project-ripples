@@ -13,6 +13,8 @@ export type QualityPreset = {
   readonly fogDensity: number;
 };
 
+export const ARENA_RADIUS = 92;
+
 // Meltdown carries the intentionally rude particle ceiling. Lower presets stay
 // under that cap so the normal lab experience does not inherit stress-test
 // numbers from a one-off experiment.
@@ -20,7 +22,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
   clean: {
     id: "clean",
     label: "Clean",
-    fieldRadius: 24,
+    fieldRadius: ARENA_RADIUS,
     cubeSpacing: 1.2,
     particleBudget: 30000,
     burstParticleCount: 7200,
@@ -32,7 +34,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
   pretty: {
     id: "pretty",
     label: "Pretty",
-    fieldRadius: 32,
+    fieldRadius: ARENA_RADIUS,
     cubeSpacing: 1,
     particleBudget: 82000,
     burstParticleCount: 20500,
@@ -44,7 +46,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
   showoff: {
     id: "showoff",
     label: "Showoff",
-    fieldRadius: 42,
+    fieldRadius: ARENA_RADIUS,
     cubeSpacing: 0.9,
     particleBudget: 165000,
     burstParticleCount: 41000,
@@ -56,7 +58,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
   meltdown: {
     id: "meltdown",
     label: "Meltdown",
-    fieldRadius: 56,
+    fieldRadius: ARENA_RADIUS,
     cubeSpacing: 0.72,
     particleBudget: 320000,
     burstParticleCount: 82000,

@@ -4,6 +4,7 @@ export type PlayerRigOptions = {
   readonly canvas: HTMLCanvasElement;
   readonly camera: THREE.PerspectiveCamera;
   readonly sampleHeight: (x: number, z: number) => number;
+  readonly getBoundaryRadius: () => number;
   readonly onPulse: (position: THREE.Vector3) => void;
 };
 
@@ -28,6 +29,7 @@ export class PlayerRig {
   private readonly canvas: HTMLCanvasElement;
   private readonly camera: THREE.PerspectiveCamera;
   private readonly sampleHeight: (x: number, z: number) => number;
+  private readonly getBoundaryRadius: () => number;
   private readonly onPulse: (position: THREE.Vector3) => void;
   private readonly desiredCameraPosition = new THREE.Vector3();
   private readonly movementIntent = new THREE.Vector3();
@@ -39,6 +41,7 @@ export class PlayerRig {
     this.canvas = options.canvas;
     this.camera = options.camera;
     this.sampleHeight = options.sampleHeight;
+    this.getBoundaryRadius = options.getBoundaryRadius;
     this.onPulse = options.onPulse;
 
     window.addEventListener("keydown", this.handleKeyDown);
@@ -74,6 +77,7 @@ export class PlayerRig {
       this.velocity.set(0, 0, 0);
     }
     this.position.addScaledVector(this.velocity, delta);
+    this.clampToArenaBoundary();
 
     const groundY = this.sampleHeight(this.position.x, this.position.z) + PLAYER_HEIGHT;
     this.position.y = THREE.MathUtils.lerp(this.position.y, groundY, 1 - Math.exp(-delta * 14));
@@ -82,6 +86,7 @@ export class PlayerRig {
 
   createPulsePosition(): THREE.Vector3 {
     const pulse = this.position.clone().addScaledVector(this.getPlanarForward(), PULSE_DISTANCE);
+    this.clampVectorToArenaBoundary(pulse);
     pulse.y = this.sampleHeight(pulse.x, pulse.z) + 0.4;
     return pulse;
   }
@@ -111,6 +116,36 @@ export class PlayerRig {
 
   private getPlanarForward(): THREE.Vector3 {
     return new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw)).normalize();
+  }
+
+  private clampToArenaBoundary(): void {
+    const wasClamped = this.clampVectorToArenaBoundary(this.position);
+    if (!wasClamped) return;
+
+    // When the player presses into the circular wall, remove only the outward
+    // velocity component. Tangential velocity stays intact, so the avatar slides
+    // along the rim instead of sticking to it.
+    const planarDistance = Math.hypot(this.position.x, this.position.z);
+    if (planarDistance <= 0) return;
+
+    const normalX = this.position.x / planarDistance;
+    const normalZ = this.position.z / planarDistance;
+    const outwardSpeed = this.velocity.x * normalX + this.velocity.z * normalZ;
+    if (outwardSpeed <= 0) return;
+
+    this.velocity.x -= normalX * outwardSpeed;
+    this.velocity.z -= normalZ * outwardSpeed;
+  }
+
+  private clampVectorToArenaBoundary(vector: THREE.Vector3): boolean {
+    const boundaryRadius = Math.max(0, this.getBoundaryRadius());
+    const planarDistance = Math.hypot(vector.x, vector.z);
+    if (planarDistance <= boundaryRadius || planarDistance <= 0) return false;
+
+    const scale = boundaryRadius / planarDistance;
+    vector.x *= scale;
+    vector.z *= scale;
+    return true;
   }
 
   private handleKeyDown = (event: KeyboardEvent): void => {

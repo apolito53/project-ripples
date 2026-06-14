@@ -62,8 +62,29 @@ export class RippleField {
     this.geometry = new THREE.BoxGeometry(1, 1, 1, 1, 1, 1);
     this.material = this.createMaterial();
 
-    const cellsPerSide = Math.floor((radius * 2) / spacing) + 1;
-    this.instanceCount = cellsPerSide * cellsPerSide;
+    const halfCellCount = Math.ceil(radius / spacing);
+    const placementRadius = radius + spacing * 0.5;
+    const placementRadiusSquared = placementRadius * placementRadius;
+
+    // The arena floor is circular, so the voxel field should be circular too.
+    // We still walk a square coordinate range because it is the simplest grid
+    // generator, but only cells whose footprint reaches the arena disc survive.
+    for (let iz = -halfCellCount; iz <= halfCellCount; iz += 1) {
+      for (let ix = -halfCellCount; ix <= halfCellCount; ix += 1) {
+        const x = ix * spacing;
+        const z = iz * spacing;
+        if (x * x + z * z > placementRadiusSquared) continue;
+
+        const y = sampleFieldHeight(x, z);
+        const terrainTint = createTerrainTint(x, y, z);
+
+        positions.push(x, y, z);
+        phases.push(pseudoRandom(x, z) * Math.PI * 2);
+        tints.push(terrainTint.r, terrainTint.g, terrainTint.b);
+      }
+    }
+
+    this.instanceCount = positions.length / 3;
     this.mesh = new THREE.InstancedMesh(this.geometry, this.material, this.instanceCount);
     this.mesh.name = `${preset.label} ripple cube field`;
     this.mesh.frustumCulled = false;
@@ -72,21 +93,10 @@ export class RippleField {
     this.mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
 
     const matrix = new THREE.Matrix4();
-    let index = 0;
-    for (let iz = 0; iz < cellsPerSide; iz += 1) {
-      for (let ix = 0; ix < cellsPerSide; ix += 1) {
-        const x = -radius + ix * spacing;
-        const z = -radius + iz * spacing;
-        const y = sampleFieldHeight(x, z);
-        const terrainTint = createTerrainTint(x, y, z);
-
-        matrix.makeTranslation(x, y, z);
-        this.mesh.setMatrixAt(index, matrix);
-        positions.push(x, y, z);
-        phases.push(pseudoRandom(x, z) * Math.PI * 2);
-        tints.push(terrainTint.r, terrainTint.g, terrainTint.b);
-        index += 1;
-      }
+    for (let index = 0; index < this.instanceCount; index += 1) {
+      const offset = index * 3;
+      matrix.makeTranslation(positions[offset], positions[offset + 1], positions[offset + 2]);
+      this.mesh.setMatrixAt(index, matrix);
     }
 
     // These per-instance attributes let the shader know where each cube lives

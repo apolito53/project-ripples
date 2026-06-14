@@ -7,7 +7,7 @@ import { PlayerRig } from "./controls";
 import { cloneDefaultSettings, getQualityPreset } from "./labSettings";
 import { ParticleVeil } from "./particleVeil";
 import { PulseLightRig } from "./pulseLights";
-import { isQualityId, type QualityPreset } from "./qualityPresets";
+import { ARENA_RADIUS, isQualityId, type QualityPreset } from "./qualityPresets";
 import { RippleField } from "./rippleField";
 import { RippleSourceStore } from "./rippleSources";
 import "./styles.css";
@@ -22,6 +22,7 @@ const radiusSlider = requireElement<HTMLInputElement>("#radius-slider");
 const speedSlider = requireElement<HTMLInputElement>("#speed-slider");
 const particleSlider = requireElement<HTMLInputElement>("#particle-slider");
 const bloomSlider = requireElement<HTMLInputElement>("#bloom-slider");
+const PLAYER_BOUNDARY_PADDING = 1.1;
 
 const renderer = new THREE.WebGLRenderer({
   antialias: true,
@@ -64,6 +65,7 @@ const player = new PlayerRig({
   canvas: renderer.domElement,
   camera,
   sampleHeight: sampleFieldHeight,
+  getBoundaryRadius: () => Math.max(0, preset.fieldRadius - PLAYER_BOUNDARY_PADDING),
   onPulse: (position) => spawnPulse(position, 0.45)
 });
 
@@ -173,16 +175,17 @@ function applyQualityPreset(nextPreset: QualityPreset, initial: boolean): void {
 }
 
 function updateShadowResolution(size: number): void {
+  const shadowBounds = ARENA_RADIUS + 8;
   for (const child of scene.children) {
     if (!(child instanceof THREE.DirectionalLight)) continue;
     child.castShadow = size > 0;
     child.shadow.mapSize.set(Math.max(1, size), Math.max(1, size));
     child.shadow.camera.near = 1;
-    child.shadow.camera.far = 120;
-    child.shadow.camera.left = -48;
-    child.shadow.camera.right = 48;
-    child.shadow.camera.top = 48;
-    child.shadow.camera.bottom = -48;
+    child.shadow.camera.far = 180;
+    child.shadow.camera.left = -shadowBounds;
+    child.shadow.camera.right = shadowBounds;
+    child.shadow.camera.top = shadowBounds;
+    child.shadow.camera.bottom = -shadowBounds;
     child.shadow.needsUpdate = true;
   }
 }
@@ -203,7 +206,7 @@ function createLighting(): void {
 }
 
 function createStageFloor(): void {
-  const geometry = new THREE.CircleGeometry(92, 160);
+  const geometry = new THREE.CircleGeometry(ARENA_RADIUS, 192);
   const material = new THREE.MeshStandardMaterial({
     color: 0x06101b,
     metalness: 0.38,

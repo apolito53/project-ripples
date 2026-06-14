@@ -30,6 +30,8 @@
   overhead.
 - Capped the particle stress target back to the x10 Meltdown scale after the
   x100 experiment proved too brute-force for the intended look.
+- Changed cube placement from a square grid patch into a circular arena fill,
+  and clamped the player avatar inside that same circular boundary.
 
 ## 0.1.0 - 2026-06-14
 

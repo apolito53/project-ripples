@@ -33,6 +33,8 @@ Open `http://127.0.0.1:5183`.
 - `Shift` increases movement speed.
 - `Esc` releases pointer lock.
 
+The avatar is clamped inside the circular arena edge.
+
 The tuning panel changes quality, ripple height/radius/speed, particle density,
 and bloom strength while the scene is running.
 
@@ -59,12 +61,13 @@ Dedicated ports:
 
 ## Design Notes
 
-- `src/rippleField.ts` owns the shader-displaced instanced cube field.
+- `src/rippleField.ts` owns the circular shader-displaced instanced cube field.
 - `src/rippleSources.ts` keeps the tiny CPU-side pulse buffer sent to the GPU.
 - `src/particleVeil.ts` owns the player sparkle aura, additive glitter-cloud
   bursts, and wake trails.
 - `src/pulseLights.ts` maps recent pulses onto a small pool of point lights.
-- `src/controls.ts` owns the avatar movement and camera pointer-lock behavior.
+- `src/controls.ts` owns avatar movement, circular arena clamping, and camera
+  pointer-lock behavior.
 
 The CPU decides where the player and pulse sources are. The GPU handles cube
 lift, stretch, tint, and emissive glow from those few uniforms.

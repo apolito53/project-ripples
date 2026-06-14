@@ -27,8 +27,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Visual styling and overlay layout: `src/styles.css`
 - App bootstrap, Three.js scene, render loop, quality wiring, and postprocessing:
   `src/main.ts`
-- Avatar movement, pointer lock, and camera follow behavior: `src/controls.ts`
-- Shader-displaced instanced cube field: `src/rippleField.ts`
+- Avatar movement, circular arena clamp, pointer lock, and camera follow behavior:
+  `src/controls.ts`
+- Circular shader-displaced instanced cube field: `src/rippleField.ts`
 - Pulse source ring-buffer/uniform writer: `src/rippleSources.ts`
 - Player sparkle aura, additive particle bursts, and wake trails:
   `src/particleVeil.ts`
@@ -44,8 +45,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
    pulse lights, and glow avatar.
 3. `PlayerRig` updates planar movement and camera follow every frame.
 4. Clicks, `Space`, wake trails, and ambient timers add pulse sources.
-5. `RippleField` sends active source uniforms to the shader; cube matrices stay
-   static while the GPU animates lift/stretch/glow.
+5. `RippleField` builds cube instances inside the circular arena and sends
+   active source uniforms to the shader; cube matrices stay static while the GPU
+   animates lift/stretch/glow.
 6. `ParticleVeil` animates the player sparkle aura, burst clouds, and wake motes.
 7. `PulseLightRig` assigns recent pulses to point lights.
 8. The scene renders through bloom when bloom strength is above zero.
@@ -56,7 +58,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Change ripple math, cube shape, tint, or glow: `src/rippleField.ts`
 - Change particles, wake behavior, or burst count: `src/particleVeil.ts` and
   `src/main.ts`
-- Change movement/camera feel: `src/controls.ts`
+- Change movement/camera feel or the circular player boundary: `src/controls.ts`
 - Change panel layout or labels: `index.html` and `src/styles.css`
 
 ## Sharp Edges
