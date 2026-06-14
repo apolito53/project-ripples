@@ -206,7 +206,7 @@ export class RippleField {
 
           float nearLift = proximity * (0.25 + shimmer * 0.75) * (0.4 + movementPush * 0.9);
           float lift = (nearLift + sourceWave * 0.92) * uRippleHeight;
-          float glow = clamp(proximity * (0.08 + shimmer * 0.2) + sourceWave * 0.32, 0.0, 0.62);
+          float glow = clamp(proximity * (0.045 + shimmer * 0.11) + sourceWave * 0.18, 0.0, 0.36);
           float cubeHeight = ${BASE_CUBE_HEIGHT.toFixed(2)} + proximity * 0.48 + sourceWave * 0.44;
           float footprint = ${CUBE_FOOTPRINT.toFixed(2)} + glow * 0.05;
 
@@ -227,12 +227,12 @@ export class RippleField {
         .replace(
           "#include <color_fragment>",
           `#include <color_fragment>
-          diffuseColor.rgb *= vRippleTint * (0.68 + vRippleGlow * 0.08);`
+          diffuseColor.rgb *= vRippleTint * (0.64 + vRippleGlow * 0.05);`
         )
         .replace(
           "#include <emissivemap_fragment>",
           `#include <emissivemap_fragment>
-          totalEmissiveRadiance += vRippleTint * vRippleGlow * (0.06 + uBloomMood * 0.1);`
+          totalEmissiveRadiance += vRippleTint * vRippleGlow * (0.025 + uBloomMood * 0.055);`
         );
     };
 

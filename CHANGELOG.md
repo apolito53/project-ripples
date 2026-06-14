@@ -14,6 +14,9 @@
   the field.
 - Capped the live Bloom and Particles sliders so maxed Pretty settings remain
   readable instead of blooming into a white screen.
+- Changed burst particles from soft additive discs into small star-like
+  sparkles, then decoupled sparkle count from pulse brightness so pulses can be
+  dense without becoming a volumetric glow blob.
 
 ## 0.1.0 - 2026-06-14
 

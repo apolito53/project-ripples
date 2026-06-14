@@ -14,7 +14,7 @@ export const DEFAULT_SETTINGS: LabSettings = {
   rippleHeight: 1.25,
   rippleRadius: 9,
   waveSpeed: 9,
-  particleDensity: 0.42,
+  particleDensity: 0.62,
   bloomStrength: QUALITY_PRESETS.pretty.bloomStrength
 };
 

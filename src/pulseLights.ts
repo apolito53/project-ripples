@@ -39,8 +39,8 @@ export class PulseLightRig {
       const pulse = Math.sin(age * 9) * 0.5 + 0.5;
       light.color.copy(LIGHT_COLORS[index % LIGHT_COLORS.length]);
       light.position.set(source.position.x, source.position.y + 2.4 + pulse * 0.8, source.position.z);
-      light.intensity = intensityScale * source.strength * fade * (1.8 + pulse * 2.6);
-      light.distance = 9 + age * 1.6;
+      light.intensity = intensityScale * source.strength * fade * (0.75 + pulse * 1.15);
+      light.distance = 6.5 + age * 1.15;
     }
   }
 

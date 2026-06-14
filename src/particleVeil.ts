@@ -21,7 +21,9 @@ export class ParticleVeil {
   private readonly colors: Float32Array;
   private readonly alphas: Float32Array;
   private readonly sizes: Float32Array;
+  private readonly twinkles: Float32Array;
   private cursor = 0;
+  private elapsedSeconds = 0;
 
   constructor(scene: THREE.Scene, budget: number, pixelRatio: number) {
     this.positions = new Float32Array(budget * 3);
@@ -29,6 +31,7 @@ export class ParticleVeil {
     this.colors = new Float32Array(budget * 3);
     this.alphas = new Float32Array(budget);
     this.sizes = new Float32Array(budget);
+    this.twinkles = new Float32Array(budget);
 
     for (let index = 0; index < budget; index += 1) {
       this.particles.push({ age: 999, life: 1, size: 0 });
@@ -40,6 +43,7 @@ export class ParticleVeil {
     this.geometry.setAttribute("color", new THREE.BufferAttribute(this.colors, 3));
     this.geometry.setAttribute("aAlpha", new THREE.BufferAttribute(this.alphas, 1));
     this.geometry.setAttribute("aSize", new THREE.BufferAttribute(this.sizes, 1));
+    this.geometry.setAttribute("aTwinkle", new THREE.BufferAttribute(this.twinkles, 1));
 
     this.material = new THREE.ShaderMaterial({
       transparent: true,
@@ -47,33 +51,48 @@ export class ParticleVeil {
       blending: THREE.AdditiveBlending,
       vertexColors: true,
       uniforms: {
-        uPixelRatio: { value: pixelRatio }
+        uPixelRatio: { value: pixelRatio },
+        uTime: { value: 0 }
       },
       vertexShader: `
         uniform float uPixelRatio;
+        uniform float uTime;
         attribute float aAlpha;
         attribute float aSize;
+        attribute float aTwinkle;
         varying vec3 vColor;
         varying float vAlpha;
+        varying float vTwinkle;
 
         void main() {
           vColor = color;
           vAlpha = aAlpha;
+          vTwinkle = 0.58 + 0.42 * sin(uTime * 8.0 + aTwinkle * 6.2831853);
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
           gl_Position = projectionMatrix * mvPosition;
-          gl_PointSize = aSize * uPixelRatio * (280.0 / max(8.0, -mvPosition.z));
+          gl_PointSize = aSize * uPixelRatio * (250.0 / max(8.0, -mvPosition.z));
         }
       `,
       fragmentShader: `
         varying vec3 vColor;
         varying float vAlpha;
+        varying float vTwinkle;
 
         void main() {
           vec2 center = gl_PointCoord - vec2(0.5);
           float dist = length(center);
-          float softDisc = smoothstep(0.5, 0.05, dist);
-          float hotCore = smoothstep(0.18, 0.0, dist);
-          gl_FragColor = vec4(vColor * (0.45 + hotCore * 1.05), softDisc * vAlpha);
+          float pinCore = smoothstep(0.12, 0.0, dist);
+          float horizontalRay =
+            (1.0 - smoothstep(0.0, 0.035, abs(center.y))) *
+            (1.0 - smoothstep(0.02, 0.36, abs(center.x)));
+          float verticalRay =
+            (1.0 - smoothstep(0.0, 0.035, abs(center.x))) *
+            (1.0 - smoothstep(0.02, 0.36, abs(center.y)));
+          float tinyHalo = smoothstep(0.38, 0.05, dist) * 0.055;
+          float sparkle = min(1.0, pinCore + (horizontalRay + verticalRay) * 0.22 + tinyHalo);
+          float alpha = sparkle * vAlpha * vTwinkle;
+          if (alpha < 0.012) discard;
+          gl_FragColor = vec4(vColor * (0.95 + pinCore * 2.1), alpha);
         }
       `
     });
@@ -99,9 +118,9 @@ export class ParticleVeil {
       this.cursor = (this.cursor + 1) % this.particles.length;
 
       const angle = Math.random() * Math.PI * 2;
-      const radius = Math.random() * 1.4;
-      const upward = 1.5 + Math.random() * 4.2 * strength;
-      const outward = 1.2 + Math.random() * 7.5 * strength;
+      const radius = Math.random() * 2.2;
+      const upward = 0.75 + Math.random() * 2.8 * strength;
+      const outward = 1.9 + Math.random() * 8.8 * strength;
       const positionOffset = index * 3;
       const color = pickParticleColor(Math.random());
 
@@ -114,11 +133,12 @@ export class ParticleVeil {
       this.colors[positionOffset] = color.r;
       this.colors[positionOffset + 1] = color.g;
       this.colors[positionOffset + 2] = color.b;
-      this.alphas[index] = 0.48;
-      this.sizes[index] = 7 + Math.random() * 22 * strength;
+      this.alphas[index] = 0.24 + Math.random() * 0.18;
+      this.sizes[index] = 3.2 + Math.random() * 7.2 * strength;
+      this.twinkles[index] = Math.random();
       this.particles[index] = {
         age: 0,
-        life: 1.1 + Math.random() * 1.9,
+        life: 1.05 + Math.random() * 1.75,
         size: this.sizes[index]
       };
     }
@@ -128,10 +148,13 @@ export class ParticleVeil {
 
   spawnWake(center: THREE.Vector3, movementStrength: number): void {
     if (movementStrength <= 0.08 || Math.random() > movementStrength * 0.55) return;
-    this.spawnBurst(center, 3 + Math.floor(movementStrength * 9), 0.28 + movementStrength * 0.35);
+    this.spawnBurst(center, 7 + Math.floor(movementStrength * 18), 0.18 + movementStrength * 0.22);
   }
 
   update(delta: number): void {
+    this.elapsedSeconds += delta;
+    this.material.uniforms.uTime.value = this.elapsedSeconds;
+
     for (let index = 0; index < this.particles.length; index += 1) {
       const particle = this.particles[index];
       if (particle.age >= particle.life) continue;
@@ -147,8 +170,8 @@ export class ParticleVeil {
       this.positions[offset] += this.velocities[offset] * delta;
       this.positions[offset + 1] += this.velocities[offset + 1] * delta;
       this.positions[offset + 2] += this.velocities[offset + 2] * delta;
-      this.alphas[index] = Math.pow(1 - normalizedAge, 1.65);
-      this.sizes[index] = particle.size * (1 + normalizedAge * 1.15);
+      this.alphas[index] = Math.pow(1 - normalizedAge, 1.3) * 0.42;
+      this.sizes[index] = particle.size * (1 + normalizedAge * 0.25);
     }
 
     this.markDirty();
@@ -174,6 +197,7 @@ export class ParticleVeil {
     this.geometry.attributes.color.needsUpdate = true;
     this.geometry.attributes.aAlpha.needsUpdate = true;
     this.geometry.attributes.aSize.needsUpdate = true;
+    this.geometry.attributes.aTwinkle.needsUpdate = true;
   }
 }
 

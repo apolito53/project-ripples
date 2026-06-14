@@ -46,7 +46,7 @@ let nextAmbientPulseAt = 0.8;
 
 const composer = new EffectComposer(renderer);
 const renderPass = new RenderPass(scene, camera);
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), settings.bloomStrength, 0.38, 0.91);
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), settings.bloomStrength, 0.3, 0.95);
 const outputPass = new OutputPass();
 composer.addPass(renderPass);
 composer.addPass(bloomPass);
@@ -91,7 +91,7 @@ function animate(): void {
   maybeSpawnAmbientPulse(time);
   particles.update(delta);
   rippleField.update(time, settings, preset, rippleSources, player.position, playerSpeed);
-  pulseLights.update(rippleSources.getActiveSources(time), time, 0.55 + settings.bloomStrength * 0.65);
+  pulseLights.update(rippleSources.getActiveSources(time), time, 0.28 + settings.bloomStrength * 0.42);
   updateStats(delta);
 
   bloomPass.strength = settings.bloomStrength;
@@ -104,7 +104,11 @@ function animate(): void {
 
 function spawnPulse(position: THREE.Vector3, strength: number): void {
   rippleSources.add(position, clock.elapsedTime, strength);
-  const count = Math.max(0, Math.floor(preset.burstParticleCount * settings.particleDensity * strength));
+  // Particle density is intentionally decoupled from pulse brightness. A pulse
+  // can throw lots of tiny crisp sparkles without becoming a giant emissive fog.
+  const count = Math.max(0, Math.floor(
+    preset.burstParticleCount * settings.particleDensity * (0.42 + strength * 1.7)
+  ));
   particles.spawnBurst(position, count, strength);
 }
 
@@ -146,7 +150,7 @@ function wireControls(): void {
     settings.particleDensity = Number(particleSlider.value);
   });
   bloomSlider.addEventListener("input", () => {
-    settings.bloomStrength = THREE.MathUtils.clamp(Number(bloomSlider.value), 0, 0.85);
+    settings.bloomStrength = THREE.MathUtils.clamp(Number(bloomSlider.value), 0, 0.38);
   });
 }
 
