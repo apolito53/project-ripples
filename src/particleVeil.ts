@@ -76,7 +76,7 @@ export class ParticleVeil {
           vTwinkle = 0.62 + 0.38 * sin(uTime * 9.5 + aTwinkle * 6.2831853);
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
           gl_Position = projectionMatrix * mvPosition;
-          gl_PointSize = aSize * uPixelRatio * (96.0 / max(9.0, -mvPosition.z));
+          gl_PointSize = aSize * uPixelRatio * (102.0 / max(9.0, -mvPosition.z));
         }
       `,
       fragmentShader: `
@@ -124,14 +124,14 @@ export class ParticleVeil {
     // The avatar should feel wrapped in particulate light even while idle. The
     // accumulator makes the emission rate frame-rate independent, so a slow
     // machine does not get a thinner cloud just because fewer frames ran.
-    const particlesPerSecond = 190 + movementStrength * 150;
+    const particlesPerSecond = 225 + movementStrength * 175;
     this.auraAccumulator += delta * particlesPerSecond;
-    const count = Math.min(28, Math.floor(this.auraAccumulator));
+    const count = Math.min(34, Math.floor(this.auraAccumulator));
     if (count <= 0) return;
 
     this.auraAccumulator -= count;
     for (let auraIndex = 0; auraIndex < count; auraIndex += 1) {
-      this.emitCloudParticle(center, 0.12 + movementStrength * 0.16, 0.66, 0.92, 0.05);
+      this.emitCloudParticle(center, 0.12 + movementStrength * 0.16, 0.7, 0.92, 0.05);
     }
 
     this.markDirty();
@@ -217,7 +217,7 @@ export class ParticleVeil {
     this.colors[positionOffset + 1] = color.g;
     this.colors[positionOffset + 2] = color.b;
     this.alphas[index] = (0.11 + Math.random() * 0.12) * alphaScale;
-    this.sizes[index] = (0.42 + Math.random() * (0.98 + strength * 0.55)) * cloudScale;
+    this.sizes[index] = (0.45 + Math.random() * (1.05 + strength * 0.58)) * cloudScale;
     this.twinkles[index] = Math.random();
     this.particles[index] = {
       age: 0,

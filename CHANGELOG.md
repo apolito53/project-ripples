@@ -21,6 +21,8 @@
   fat star/snowflake silhouette for many smaller glitter motes.
 - Added a persistent player-local sparkle aura so the avatar reads as a cloud
   of dense particles instead of relying on a soft glowing shell.
+- Slightly increased sparkle mote size and count after visual tuning, keeping
+  the cloud particulate instead of returning to a glowing blob.
 
 ## 0.1.0 - 2026-06-14
 
