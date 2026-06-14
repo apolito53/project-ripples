@@ -25,6 +25,9 @@
   the cloud particulate instead of returning to a glowing blob.
 - Multiplied particle budgets, burst counts, aura emission, and wake emission
   by 10 for an intentionally heavier visual stress test.
+- Multiplied the same particle counts by 10 again, while moving particle
+  lifecycle state into typed arrays so the 100x pass avoids per-particle object
+  overhead.
 
 ## 0.1.0 - 2026-06-14
 

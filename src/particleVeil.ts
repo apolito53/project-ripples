@@ -1,12 +1,5 @@
 import * as THREE from "three";
 
-type Particle = {
-  age: number;
-  life: number;
-  size: number;
-  baseAlpha: number;
-};
-
 const TEMP_COLOR = new THREE.Color();
 const TURQUOISE = new THREE.Color(0x7dffd8);
 const VIOLET = new THREE.Color(0x7f7dff);
@@ -16,15 +9,19 @@ export class ParticleVeil {
   readonly points: THREE.Points;
   private readonly geometry: THREE.BufferGeometry;
   private readonly material: THREE.ShaderMaterial;
-  private readonly particles: Particle[] = [];
   private readonly positions: Float32Array;
   private readonly velocities: Float32Array;
   private readonly colors: Float32Array;
   private readonly alphas: Float32Array;
   private readonly sizes: Float32Array;
   private readonly twinkles: Float32Array;
-  private readonly activeIndices: number[] = [];
+  private readonly ages: Float32Array;
+  private readonly lifetimes: Float32Array;
+  private readonly baseSizes: Float32Array;
+  private readonly baseAlphas: Float32Array;
+  private readonly activeIndices: Int32Array;
   private readonly activeSlots: Int32Array;
+  private activeCount = 0;
   private cursor = 0;
   private elapsedSeconds = 0;
   private auraAccumulator = 0;
@@ -36,13 +33,13 @@ export class ParticleVeil {
     this.alphas = new Float32Array(budget);
     this.sizes = new Float32Array(budget);
     this.twinkles = new Float32Array(budget);
+    this.ages = new Float32Array(budget);
+    this.lifetimes = new Float32Array(budget);
+    this.baseSizes = new Float32Array(budget);
+    this.baseAlphas = new Float32Array(budget);
+    this.activeIndices = new Int32Array(budget);
     this.activeSlots = new Int32Array(budget);
     this.activeSlots.fill(-1);
-
-    for (let index = 0; index < budget; index += 1) {
-      this.particles.push({ age: 999, life: 1, size: 0, baseAlpha: 0 });
-      this.seedDormantParticle(index);
-    }
 
     this.geometry = new THREE.BufferGeometry();
     this.geometry.setAttribute("position", createDynamicAttribute(this.positions, 3));
@@ -128,9 +125,9 @@ export class ParticleVeil {
     // The avatar should feel wrapped in particulate light even while idle. The
     // accumulator makes the emission rate frame-rate independent, so a slow
     // machine does not get a thinner cloud just because fewer frames ran.
-    const particlesPerSecond = 2250 + movementStrength * 1750;
+    const particlesPerSecond = 22500 + movementStrength * 17500;
     this.auraAccumulator += delta * particlesPerSecond;
-    const count = Math.min(340, Math.floor(this.auraAccumulator));
+    const count = Math.min(3400, Math.floor(this.auraAccumulator));
     if (count <= 0) return;
 
     this.auraAccumulator -= count;
@@ -143,26 +140,26 @@ export class ParticleVeil {
 
   spawnWake(center: THREE.Vector3, movementStrength: number): void {
     if (movementStrength <= 0.08 || Math.random() > movementStrength * 0.55) return;
-    this.spawnBurst(center, 140 + Math.floor(movementStrength * 360), 0.12 + movementStrength * 0.16);
+    this.spawnBurst(center, 1400 + Math.floor(movementStrength * 3600), 0.12 + movementStrength * 0.16);
   }
 
   update(delta: number): void {
     this.elapsedSeconds += delta;
     this.material.uniforms.uTime.value = this.elapsedSeconds;
 
-    for (let activeSlot = this.activeIndices.length - 1; activeSlot >= 0; activeSlot -= 1) {
+    for (let activeSlot = this.activeCount - 1; activeSlot >= 0; activeSlot -= 1) {
       const index = this.activeIndices[activeSlot];
-      const particle = this.particles[index];
-      particle.age += delta;
+      const age = this.ages[index] + delta;
+      this.ages[index] = age;
 
-      if (particle.age >= particle.life) {
+      if (age >= this.lifetimes[index]) {
         this.seedDormantParticle(index);
         this.deactivateParticle(activeSlot);
         continue;
       }
 
       const offset = index * 3;
-      const normalizedAge = Math.min(1, particle.age / particle.life);
+      const normalizedAge = Math.min(1, age / this.lifetimes[index]);
       const drag = Math.exp(-delta * 0.9);
       const fadeIn = Math.sin(Math.min(1, normalizedAge * 3.2) * Math.PI * 0.5);
       const fadeOut = Math.pow(1 - normalizedAge, 1.28);
@@ -173,8 +170,8 @@ export class ParticleVeil {
       this.positions[offset] += this.velocities[offset] * delta;
       this.positions[offset + 1] += this.velocities[offset + 1] * delta;
       this.positions[offset + 2] += this.velocities[offset + 2] * delta;
-      this.alphas[index] = particle.baseAlpha * fadeIn * fadeOut;
-      this.sizes[index] = particle.size * (0.92 + Math.sin(normalizedAge * Math.PI) * 0.08);
+      this.alphas[index] = this.baseAlphas[index] * fadeIn * fadeOut;
+      this.sizes[index] = this.baseSizes[index] * (0.92 + Math.sin(normalizedAge * Math.PI) * 0.08);
     }
 
     this.markDirty();
@@ -193,6 +190,10 @@ export class ParticleVeil {
     this.positions[offset + 2] = 0;
     this.alphas[index] = 0;
     this.sizes[index] = 0;
+    this.ages[index] = 0;
+    this.lifetimes[index] = 0;
+    this.baseSizes[index] = 0;
+    this.baseAlphas[index] = 0;
   }
 
   private emitCloudParticle(
@@ -203,7 +204,7 @@ export class ParticleVeil {
     verticalLift: number
   ): void {
     const index = this.cursor;
-    this.cursor = (this.cursor + 1) % this.particles.length;
+    this.cursor = (this.cursor + 1) % this.alphas.length;
     this.activateParticle(index);
 
     const angle = Math.random() * Math.PI * 2;
@@ -227,15 +228,13 @@ export class ParticleVeil {
     this.colors[positionOffset] = color.r;
     this.colors[positionOffset + 1] = color.g;
     this.colors[positionOffset + 2] = color.b;
-    this.alphas[index] = (0.11 + Math.random() * 0.12) * alphaScale;
-    this.sizes[index] = (0.45 + Math.random() * (1.05 + strength * 0.58)) * cloudScale;
+    this.ages[index] = 0;
+    this.lifetimes[index] = 0.9 + Math.random() * 1.85;
+    this.baseAlphas[index] = (0.11 + Math.random() * 0.12) * alphaScale;
+    this.baseSizes[index] = (0.45 + Math.random() * (1.05 + strength * 0.58)) * cloudScale;
+    this.alphas[index] = this.baseAlphas[index];
+    this.sizes[index] = this.baseSizes[index];
     this.twinkles[index] = Math.random();
-    this.particles[index] = {
-      age: 0,
-      life: 0.9 + Math.random() * 1.85,
-      size: this.sizes[index],
-      baseAlpha: this.alphas[index]
-    };
   }
 
   private markDirty(): void {
@@ -248,16 +247,18 @@ export class ParticleVeil {
 
   private activateParticle(index: number): void {
     if (this.activeSlots[index] !== -1) return;
-    this.activeSlots[index] = this.activeIndices.length;
-    this.activeIndices.push(index);
+    this.activeSlots[index] = this.activeCount;
+    this.activeIndices[this.activeCount] = index;
+    this.activeCount += 1;
   }
 
   private deactivateParticle(activeSlot: number): void {
     const index = this.activeIndices[activeSlot];
-    const movedIndex = this.activeIndices.pop();
+    this.activeCount -= 1;
+    const movedIndex = this.activeIndices[this.activeCount];
     this.activeSlots[index] = -1;
 
-    if (movedIndex === undefined || activeSlot >= this.activeIndices.length) return;
+    if (activeSlot >= this.activeCount) return;
     this.activeIndices[activeSlot] = movedIndex;
     this.activeSlots[movedIndex] = activeSlot;
   }
@@ -269,7 +270,7 @@ function pickParticleColor(seed: number): THREE.Color {
 }
 
 function createDynamicAttribute(array: Float32Array, itemSize: number): THREE.BufferAttribute {
-  // The 10x particle pass keeps the GPU vertex budget high, while this hint
+  // The 100x particle pass keeps the GPU vertex budget high, while this hint
   // tells Three these buffers are expected to be rewritten as particles move.
   return new THREE.BufferAttribute(array, itemSize).setUsage(THREE.DynamicDrawUsage);
 }
