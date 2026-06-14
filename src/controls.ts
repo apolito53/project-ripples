@@ -19,6 +19,7 @@ const CAMERA_PITCH_RANGE = { min: 0.18, max: 0.82 };
 const CAMERA_SMOOTHING = 1 - Math.exp(-14 / 60);
 const PLAYER_HEIGHT = 1.05;
 const PULSE_DISTANCE = 4.2;
+const PULSE_COOLDOWN_SECONDS = 0.42;
 const LOOK_SENSITIVITY_X = 0.002;
 const LOOK_SENSITIVITY_Y = 0.00155;
 
@@ -34,6 +35,7 @@ export class PlayerRig {
   private readonly desiredCameraPosition = new THREE.Vector3();
   private readonly movementIntent = new THREE.Vector3();
   private readonly lookTarget = new THREE.Vector3();
+  private lastPulseSecond = -Infinity;
   private yaw = Math.PI * 0.23;
   private pitch = 0.45;
 
@@ -153,7 +155,10 @@ export class PlayerRig {
     this.keys.add(event.code);
     if (event.code === "Space") {
       event.preventDefault();
-      this.onPulse(this.createPulsePosition());
+      // Holding Space fires repeated keydown events in most browsers. The
+      // cooldown keeps pulse creation intentional and gives existing rings time
+      // to age out instead of being visually replaced by rapid spam.
+      if (!event.repeat) this.tryCreatePulse();
     }
   };
 
@@ -166,7 +171,7 @@ export class PlayerRig {
     if (event.button !== 0) return;
     if (event.target !== this.canvas) return;
     void this.canvas.requestPointerLock();
-    this.onPulse(this.createPulsePosition());
+    this.tryCreatePulse();
   };
 
   private handlePointerMove = (event: PointerEvent): void => {
@@ -178,4 +183,11 @@ export class PlayerRig {
       CAMERA_PITCH_RANGE.max
     );
   };
+
+  private tryCreatePulse(): void {
+    const now = performance.now() / 1000;
+    if (now - this.lastPulseSecond < PULSE_COOLDOWN_SECONDS) return;
+    this.lastPulseSecond = now;
+    this.onPulse(this.createPulsePosition());
+  }
 }

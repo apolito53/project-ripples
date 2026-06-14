@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import type { LabSettings } from "./labSettings";
 import type { QualityPreset } from "./qualityPresets";
-import { MAX_RIPPLE_SOURCES, type RippleSourceStore } from "./rippleSources";
+import { MAX_SHADER_RIPPLE_SOURCES, type RippleSourceStore } from "./rippleSources";
 import { sampleFieldHeight } from "./terrain";
 
 const CUBE_FOOTPRINT = 0.68;
@@ -34,7 +34,7 @@ type RippleShader = {
 export class RippleField {
   readonly object = new THREE.Group();
   private readonly rippleUniforms = Array.from(
-    { length: MAX_RIPPLE_SOURCES },
+    { length: MAX_SHADER_RIPPLE_SOURCES },
     () => new THREE.Vector4(0, 0, -999, 0)
   );
   private mesh: THREE.InstancedMesh | null = null;
@@ -182,7 +182,7 @@ export class RippleField {
           uniform float uWaveSpeed;
           uniform float uBloomMood;
           uniform int uRippleCount;
-          uniform vec4 uRipples[${MAX_RIPPLE_SOURCES}];
+          uniform vec4 uRipples[${MAX_SHADER_RIPPLE_SOURCES}];
           attribute vec3 instanceFieldPosition;
           attribute float instancePhase;
           attribute vec3 instanceTint;
@@ -208,10 +208,12 @@ export class RippleField {
           float shimmer = sin(uTime * 5.8 - playerDistance * 2.15 + instancePhase) * 0.5 + 0.5;
           float sourceWave = 0.0;
 
-          for (int index = 0; index < ${MAX_RIPPLE_SOURCES}; index += 1) {
-            float sourceActive = step(float(index), float(uRippleCount - 1));
+          for (int index = 0; index < ${MAX_SHADER_RIPPLE_SOURCES}; index += 1) {
+            if (index >= uRippleCount) {
+              break;
+            }
             vec4 ripple = uRipples[index];
-            sourceWave += sourceActive * rippleRing(ripple.xy, ripple.z, ripple.w, cellPosition);
+            sourceWave += rippleRing(ripple.xy, ripple.z, ripple.w, cellPosition);
           }
 
           float nearLift = proximity * (0.25 + shimmer * 0.75) * (0.4 + movementPush * 0.9);

@@ -30,7 +30,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Avatar movement, circular arena clamp, pointer lock, and camera follow behavior:
   `src/controls.ts`
 - Circular shader-displaced instanced cube field: `src/rippleField.ts`
-- Pulse source ring-buffer/uniform writer: `src/rippleSources.ts`
+- Lifetime-pruned pulse source list and shader uniform writer:
+  `src/rippleSources.ts`
 - Player sparkle aura, additive particle bursts, and wake trails:
   `src/particleVeil.ts`
 - Recent-pulse point light pool: `src/pulseLights.ts`
@@ -46,7 +47,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 2. `main.ts` creates the renderer, scene, camera, bloom composer, field, particles,
    pulse lights, and glow avatar.
 3. `PlayerRig` updates planar movement and camera follow every frame.
-4. Clicks, `Space`, wake trails, and ambient timers add pulse sources.
+4. Cooldown-gated clicks, `Space`, wake trails, and ambient timers add pulse
+   sources.
 5. `RippleField` builds cube instances inside the circular arena and sends
    active source uniforms to the shader; cube matrices stay static while the GPU
    animates lift/stretch/glow.
@@ -68,7 +70,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - The field is a visual lab, not voxel terrain. Do not add save data or chunk
   loading here unless the project deliberately changes shape.
 - Keep the CPU/GPU contract small: pulse uniforms, player position, and settings
-  go in; shader animation comes out.
+  go in; shader animation comes out. The shader still has a fixed upload budget,
+  but ripple retention should be governed by lifetime and input cooldown rather
+  than a tiny gameplay cap.
 - `Meltdown` is intentionally rude to weak GPUs. Keep it available, but do not
   tune the normal experience around it.
 - Pointer-lock behavior should be browser-tested in Chrome, not trusted from a
