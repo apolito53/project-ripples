@@ -28,6 +28,8 @@
 - Multiplied the same particle counts by 10 again, while moving particle
   lifecycle state into typed arrays so the 100x pass avoids per-particle object
   overhead.
+- Capped the particle stress target back to the x10 Meltdown scale after the
+  x100 experiment proved too brute-force for the intended look.
 
 ## 0.1.0 - 2026-06-14
 

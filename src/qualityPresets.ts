@@ -13,16 +13,17 @@ export type QualityPreset = {
   readonly fogDensity: number;
 };
 
-// The lab is currently in "make the GPU sweat" mode: particle budgets and burst
-// counts are deliberately 100x the previously tuned values.
+// Meltdown carries the intentionally rude particle ceiling. Lower presets stay
+// under that cap so the normal lab experience does not inherit stress-test
+// numbers from a one-off experiment.
 export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
   clean: {
     id: "clean",
     label: "Clean",
     fieldRadius: 24,
     cubeSpacing: 1.2,
-    particleBudget: 300000,
-    burstParticleCount: 72000,
+    particleBudget: 30000,
+    burstParticleCount: 7200,
     bloomStrength: 0,
     shadowMapSize: 0,
     pulseLightCount: 0,
@@ -33,8 +34,8 @@ export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
     label: "Pretty",
     fieldRadius: 32,
     cubeSpacing: 1,
-    particleBudget: 820000,
-    burstParticleCount: 205000,
+    particleBudget: 82000,
+    burstParticleCount: 20500,
     bloomStrength: 0.14,
     shadowMapSize: 1024,
     pulseLightCount: 3,
@@ -45,8 +46,8 @@ export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
     label: "Showoff",
     fieldRadius: 42,
     cubeSpacing: 0.9,
-    particleBudget: 1650000,
-    burstParticleCount: 410000,
+    particleBudget: 165000,
+    burstParticleCount: 41000,
     bloomStrength: 0.24,
     shadowMapSize: 2048,
     pulseLightCount: 5,
@@ -57,8 +58,8 @@ export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
     label: "Meltdown",
     fieldRadius: 56,
     cubeSpacing: 0.72,
-    particleBudget: 3200000,
-    burstParticleCount: 820000,
+    particleBudget: 320000,
+    burstParticleCount: 82000,
     bloomStrength: 0.38,
     shadowMapSize: 4096,
     pulseLightCount: 8,

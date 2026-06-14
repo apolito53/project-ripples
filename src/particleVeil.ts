@@ -125,9 +125,9 @@ export class ParticleVeil {
     // The avatar should feel wrapped in particulate light even while idle. The
     // accumulator makes the emission rate frame-rate independent, so a slow
     // machine does not get a thinner cloud just because fewer frames ran.
-    const particlesPerSecond = 22500 + movementStrength * 17500;
+    const particlesPerSecond = 2250 + movementStrength * 1750;
     this.auraAccumulator += delta * particlesPerSecond;
-    const count = Math.min(3400, Math.floor(this.auraAccumulator));
+    const count = Math.min(340, Math.floor(this.auraAccumulator));
     if (count <= 0) return;
 
     this.auraAccumulator -= count;
@@ -140,7 +140,7 @@ export class ParticleVeil {
 
   spawnWake(center: THREE.Vector3, movementStrength: number): void {
     if (movementStrength <= 0.08 || Math.random() > movementStrength * 0.55) return;
-    this.spawnBurst(center, 1400 + Math.floor(movementStrength * 3600), 0.12 + movementStrength * 0.16);
+    this.spawnBurst(center, 140 + Math.floor(movementStrength * 360), 0.12 + movementStrength * 0.16);
   }
 
   update(delta: number): void {
@@ -270,7 +270,7 @@ function pickParticleColor(seed: number): THREE.Color {
 }
 
 function createDynamicAttribute(array: Float32Array, itemSize: number): THREE.BufferAttribute {
-  // The 100x particle pass keeps the GPU vertex budget high, while this hint
-  // tells Three these buffers are expected to be rewritten as particles move.
+  // Higher particle caps keep the GPU vertex budget high, while this hint tells
+  // Three these buffers are expected to be rewritten as particles move.
   return new THREE.BufferAttribute(array, itemSize).setUsage(THREE.DynamicDrawUsage);
 }
