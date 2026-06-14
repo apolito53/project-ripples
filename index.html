@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23020815'/%3E%3Cpath d='M10 36c12-14 32-14 44 0' fill='none' stroke='%237dffd8' stroke-width='5' stroke-linecap='round'/%3E%3Ccircle cx='32' cy='30' r='8' fill='%23d9fff5'/%3E%3C/svg%3E"
+    />
+    <title>Ripple Field Lab</title>
+  </head>
+  <body>
+    <main id="app">
+      <section id="hud" aria-label="Runtime status">
+        <div class="title-lockup">
+          <span class="title">Ripple Field Lab</span>
+          <span id="quality-badge" class="badge">Pretty</span>
+        </div>
+        <div id="stats-line" class="stats-line">booting</div>
+      </section>
+
+      <section id="panel" aria-label="Tuning controls">
+        <label class="control-row">
+          <span>Quality</span>
+          <select id="quality-select">
+            <option value="clean">Clean</option>
+            <option value="pretty" selected>Pretty</option>
+            <option value="showoff">Showoff</option>
+            <option value="meltdown">Meltdown</option>
+          </select>
+        </label>
+        <label class="control-row">
+          <span>Ripple Height</span>
+          <input id="height-slider" type="range" min="0.2" max="3.2" step="0.05" value="1.25" />
+        </label>
+        <label class="control-row">
+          <span>Ripple Radius</span>
+          <input id="radius-slider" type="range" min="4" max="18" step="0.5" value="9" />
+        </label>
+        <label class="control-row">
+          <span>Wave Speed</span>
+          <input id="speed-slider" type="range" min="3" max="18" step="0.25" value="9" />
+        </label>
+        <label class="control-row">
+          <span>Particles</span>
+          <input id="particle-slider" type="range" min="0" max="1" step="0.01" value="0.72" />
+        </label>
+        <label class="control-row">
+          <span>Bloom</span>
+          <input id="bloom-slider" type="range" min="0" max="2.4" step="0.05" value="0.75" />
+        </label>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
