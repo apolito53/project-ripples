@@ -33,7 +33,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
     cubeSpacing: 1,
     particleBudget: 2400,
     burstParticleCount: 160,
-    bloomStrength: 0.75,
+    bloomStrength: 0.24,
     shadowMapSize: 1024,
     pulseLightCount: 3,
     fogDensity: 0.016
@@ -45,7 +45,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
     cubeSpacing: 0.9,
     particleBudget: 5200,
     burstParticleCount: 260,
-    bloomStrength: 1.1,
+    bloomStrength: 0.42,
     shadowMapSize: 2048,
     pulseLightCount: 5,
     fogDensity: 0.013
@@ -57,7 +57,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
     cubeSpacing: 0.72,
     particleBudget: 11000,
     burstParticleCount: 520,
-    bloomStrength: 1.55,
+    bloomStrength: 0.65,
     shadowMapSize: 4096,
     pulseLightCount: 8,
     fogDensity: 0.01

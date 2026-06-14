@@ -7,14 +7,19 @@ export type PlayerRigOptions = {
   readonly onPulse: (position: THREE.Vector3) => void;
 };
 
-const WALK_SPEED = 10;
-const SPRINT_MULTIPLIER = 1.8;
-const CAMERA_DISTANCE = 13;
-const CAMERA_BASE_HEIGHT = 7;
-const CAMERA_PITCH_RANGE = { min: -0.62, max: 0.38 };
-const CAMERA_SMOOTHING = 1 - Math.exp(-12 / 60);
+const WALK_SPEED = 8.4;
+const SPRINT_MULTIPLIER = 1.65;
+const MOVE_ACCELERATION = 16;
+const MOVE_BRAKE = 22;
+const STOP_EPSILON = 0.035;
+const CAMERA_DISTANCE = 15;
+const CAMERA_TARGET_HEIGHT = 0.72;
+const CAMERA_PITCH_RANGE = { min: 0.18, max: 0.82 };
+const CAMERA_SMOOTHING = 1 - Math.exp(-14 / 60);
 const PLAYER_HEIGHT = 1.05;
 const PULSE_DISTANCE = 4.2;
+const LOOK_SENSITIVITY_X = 0.002;
+const LOOK_SENSITIVITY_Y = 0.00155;
 
 export class PlayerRig {
   readonly position = new THREE.Vector3(0, PLAYER_HEIGHT, 0);
@@ -25,9 +30,10 @@ export class PlayerRig {
   private readonly sampleHeight: (x: number, z: number) => number;
   private readonly onPulse: (position: THREE.Vector3) => void;
   private readonly desiredCameraPosition = new THREE.Vector3();
+  private readonly movementIntent = new THREE.Vector3();
   private readonly lookTarget = new THREE.Vector3();
   private yaw = Math.PI * 0.23;
-  private pitch = -0.18;
+  private pitch = 0.45;
 
   constructor(options: PlayerRigOptions) {
     this.canvas = options.canvas;
@@ -51,17 +57,22 @@ export class PlayerRig {
   update(delta: number): void {
     const forward = this.getPlanarForward();
     const right = new THREE.Vector3(forward.z, 0, -forward.x);
-    const intent = new THREE.Vector3();
+    const intent = this.movementIntent.set(0, 0, 0);
 
     if (this.keys.has("KeyW")) intent.add(forward);
     if (this.keys.has("KeyS")) intent.sub(forward);
-    if (this.keys.has("KeyD")) intent.add(right);
-    if (this.keys.has("KeyA")) intent.sub(right);
+    if (this.keys.has("KeyA")) intent.add(right);
+    if (this.keys.has("KeyD")) intent.sub(right);
 
-    if (intent.lengthSq() > 0) intent.normalize();
+    const hasIntent = intent.lengthSq() > 0;
+    if (hasIntent) intent.normalize();
     const speed = WALK_SPEED * (this.keys.has("ShiftLeft") || this.keys.has("ShiftRight") ? SPRINT_MULTIPLIER : 1);
     const targetVelocity = intent.multiplyScalar(speed);
-    this.velocity.lerp(targetVelocity, 1 - Math.exp(-delta * 11));
+    const response = hasIntent ? MOVE_ACCELERATION : MOVE_BRAKE;
+    this.velocity.lerp(targetVelocity, 1 - Math.exp(-delta * response));
+    if (!hasIntent && this.velocity.lengthSq() < STOP_EPSILON * STOP_EPSILON) {
+      this.velocity.set(0, 0, 0);
+    }
     this.position.addScaledVector(this.velocity, delta);
 
     const groundY = this.sampleHeight(this.position.x, this.position.z) + PLAYER_HEIGHT;
@@ -80,8 +91,8 @@ export class PlayerRig {
   }
 
   private updateCamera(delta: number): void {
-    const behind = this.getPlanarForward().multiplyScalar(-CAMERA_DISTANCE);
-    const height = CAMERA_BASE_HEIGHT + this.pitch * 8;
+    const behind = this.getPlanarForward().multiplyScalar(-Math.cos(this.pitch) * CAMERA_DISTANCE);
+    const height = Math.sin(this.pitch) * CAMERA_DISTANCE;
     this.desiredCameraPosition.set(
       this.position.x + behind.x,
       this.position.y + height,
@@ -89,10 +100,12 @@ export class PlayerRig {
     );
 
     // Smoothly dragging the camera gives the field motion a heavier, more
-    // cinematic feel than a rigidly attached debug camera.
+    // cinematic feel than a rigidly attached debug camera. Pitch now changes
+    // the actual orbit arc instead of just hoisting the camera vertically, so
+    // mouse look feels like orbiting a subject rather than dragging a crane.
     const smoothing = 1 - Math.pow(1 - CAMERA_SMOOTHING, Math.max(1, delta * 60));
     this.camera.position.lerp(this.desiredCameraPosition, smoothing);
-    this.lookTarget.set(this.position.x, this.position.y + 0.25, this.position.z);
+    this.lookTarget.set(this.position.x, this.position.y + CAMERA_TARGET_HEIGHT, this.position.z);
     this.camera.lookAt(this.lookTarget);
   }
 
@@ -101,6 +114,7 @@ export class PlayerRig {
   }
 
   private handleKeyDown = (event: KeyboardEvent): void => {
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
     this.keys.add(event.code);
     if (event.code === "Space") {
       event.preventDefault();
@@ -109,6 +123,7 @@ export class PlayerRig {
   };
 
   private handleKeyUp = (event: KeyboardEvent): void => {
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
     this.keys.delete(event.code);
   };
 
@@ -121,9 +136,9 @@ export class PlayerRig {
 
   private handlePointerMove = (event: PointerEvent): void => {
     if (document.pointerLockElement !== this.canvas) return;
-    this.yaw -= event.movementX * 0.0022;
+    this.yaw -= event.movementX * LOOK_SENSITIVITY_X;
     this.pitch = THREE.MathUtils.clamp(
-      this.pitch - event.movementY * 0.0018,
+      this.pitch + event.movementY * LOOK_SENSITIVITY_Y,
       CAMERA_PITCH_RANGE.min,
       CAMERA_PITCH_RANGE.max
     );

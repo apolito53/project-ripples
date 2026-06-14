@@ -29,7 +29,7 @@ const renderer = new THREE.WebGLRenderer({
 });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.82;
+renderer.toneMappingExposure = 0.72;
 renderer.setClearColor(0x020409, 1);
 app.append(renderer.domElement);
 
@@ -46,7 +46,7 @@ let nextAmbientPulseAt = 0.8;
 
 const composer = new EffectComposer(renderer);
 const renderPass = new RenderPass(scene, camera);
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), settings.bloomStrength, 0.62, 0.42);
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), settings.bloomStrength, 0.38, 0.91);
 const outputPass = new OutputPass();
 composer.addPass(renderPass);
 composer.addPass(bloomPass);
@@ -64,7 +64,7 @@ const player = new PlayerRig({
   canvas: renderer.domElement,
   camera,
   sampleHeight: sampleFieldHeight,
-  onPulse: (position) => spawnPulse(position, 1.15)
+  onPulse: (position) => spawnPulse(position, 0.45)
 });
 
 createLighting();
@@ -75,8 +75,8 @@ resize();
 window.addEventListener("resize", resize);
 
 // Seed a few pulses so the first rendered second already has motion and bloom.
-spawnPulse(new THREE.Vector3(0, sampleFieldHeight(0, 0) + 0.45, 0), 1.05);
-spawnPulse(new THREE.Vector3(9, sampleFieldHeight(9, -7) + 0.45, -7), 0.74);
+spawnPulse(new THREE.Vector3(0, sampleFieldHeight(0, 0) + 0.45, 0), 0.28);
+spawnPulse(new THREE.Vector3(9, sampleFieldHeight(9, -7) + 0.45, -7), 0.18);
 
 renderer.setAnimationLoop(animate);
 
@@ -91,7 +91,7 @@ function animate(): void {
   maybeSpawnAmbientPulse(time);
   particles.update(delta);
   rippleField.update(time, settings, preset, rippleSources, player.position, playerSpeed);
-  pulseLights.update(rippleSources.getActiveSources(time), time, 0.85 + settings.bloomStrength);
+  pulseLights.update(rippleSources.getActiveSources(time), time, 0.55 + settings.bloomStrength * 0.65);
   updateStats(delta);
 
   bloomPass.strength = settings.bloomStrength;
@@ -119,7 +119,7 @@ function maybeSpawnAmbientPulse(time: number): void {
     Math.sin(angle) * radius
   );
   position.y = sampleFieldHeight(position.x, position.z) + 0.45;
-  spawnPulse(position, 0.45 + Math.random() * 0.55);
+  spawnPulse(position, 0.1 + Math.random() * 0.16);
   nextAmbientPulseAt = time + 1.6 + Math.random() * 2.2;
 }
 
@@ -146,7 +146,7 @@ function wireControls(): void {
     settings.particleDensity = Number(particleSlider.value);
   });
   bloomSlider.addEventListener("input", () => {
-    settings.bloomStrength = Number(bloomSlider.value);
+    settings.bloomStrength = THREE.MathUtils.clamp(Number(bloomSlider.value), 0, 0.85);
   });
 }
 
@@ -219,31 +219,62 @@ function createAvatar(): { readonly object: THREE.Group; update(delta: number, p
   object.name = "Player glow avatar";
 
   const core = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(0.42, 2),
+    new THREE.IcosahedronGeometry(0.34, 2),
     new THREE.MeshStandardMaterial({
-      color: 0xd9fff5,
-      emissive: 0x72ffd4,
-      emissiveIntensity: 2.8,
-      metalness: 0.05,
-      roughness: 0.2
+      color: 0x39ffd7,
+      emissive: 0x0c8f88,
+      emissiveIntensity: 0.75,
+      metalness: 0.18,
+      roughness: 0.28
     })
   );
   core.castShadow = true;
   object.add(core);
 
-  const ring = new THREE.Mesh(
-    new THREE.TorusGeometry(0.82, 0.018, 10, 96),
+  const shell = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.54, 1),
+    new THREE.MeshPhysicalMaterial({
+      color: 0x7dffd8,
+      emissive: 0x0b4c57,
+      emissiveIntensity: 0.28,
+      metalness: 0.06,
+      roughness: 0.16,
+      transparent: true,
+      opacity: 0.26,
+      depthWrite: false
+    })
+  );
+  shell.name = "Player readable glass shell";
+  object.add(shell);
+
+  const equatorRing = new THREE.Mesh(
+    new THREE.TorusGeometry(0.78, 0.012, 10, 96),
     new THREE.MeshBasicMaterial({
       color: 0x7dffd8,
       transparent: true,
-      opacity: 0.88,
+      opacity: 0.54,
       blending: THREE.AdditiveBlending
     })
   );
-  ring.rotation.x = Math.PI / 2;
-  object.add(ring);
+  equatorRing.name = "Player equator ring";
+  equatorRing.rotation.x = Math.PI / 2;
+  object.add(equatorRing);
 
-  const light = new THREE.PointLight(0x7dffd8, 5.5, 12, 2.2);
+  const tiltedRing = new THREE.Mesh(
+    new THREE.TorusGeometry(0.64, 0.01, 10, 96),
+    new THREE.MeshBasicMaterial({
+      color: 0x8ea2ff,
+      transparent: true,
+      opacity: 0.38,
+      blending: THREE.AdditiveBlending
+    })
+  );
+  tiltedRing.name = "Player tilted ring";
+  tiltedRing.rotation.set(Math.PI / 2.8, 0, Math.PI / 5);
+  object.add(tiltedRing);
+
+  const light = new THREE.PointLight(0x7dffd8, 1.7, 8, 2.4);
+  light.name = "Player restrained glow light";
   object.add(light);
 
   return {
@@ -252,8 +283,11 @@ function createAvatar(): { readonly object: THREE.Group; update(delta: number, p
       object.position.copy(position);
       core.rotation.x += delta * 1.3;
       core.rotation.y += delta * 1.9;
-      ring.rotation.z += delta * 1.6;
-      light.intensity = 4.6 + Math.sin(clock.elapsedTime * 4) * 1.2;
+      shell.rotation.x -= delta * 0.55;
+      shell.rotation.y += delta * 0.7;
+      equatorRing.rotation.z += delta * 1.6;
+      tiltedRing.rotation.z -= delta * 1.15;
+      light.intensity = 1.25 + Math.sin(clock.elapsedTime * 4) * 0.25;
     }
   };
 }

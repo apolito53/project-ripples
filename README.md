@@ -28,7 +28,7 @@ Open `http://127.0.0.1:5183`.
 
 - `WASD` moves the glow avatar across the field.
 - `Mouse click` captures camera look and drops a pulse.
-- `Mouse movement` rotates the camera while captured.
+- `Mouse movement` orbits the follow camera while captured.
 - `Space` drops a pulse in front of the avatar.
 - `Shift` increases movement speed.
 - `Esc` releases pointer lock.

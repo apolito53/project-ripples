@@ -205,15 +205,15 @@ export class RippleField {
           }
 
           float nearLift = proximity * (0.25 + shimmer * 0.75) * (0.4 + movementPush * 0.9);
-          float lift = (nearLift + sourceWave * 1.35) * uRippleHeight;
-          float glow = clamp(proximity * (0.35 + shimmer * 0.65) + sourceWave * 1.8, 0.0, 1.8);
-          float cubeHeight = ${BASE_CUBE_HEIGHT.toFixed(2)} + proximity * 0.52 + sourceWave * 0.72;
+          float lift = (nearLift + sourceWave * 0.92) * uRippleHeight;
+          float glow = clamp(proximity * (0.08 + shimmer * 0.2) + sourceWave * 0.32, 0.0, 0.62);
+          float cubeHeight = ${BASE_CUBE_HEIGHT.toFixed(2)} + proximity * 0.48 + sourceWave * 0.44;
           float footprint = ${CUBE_FOOTPRINT.toFixed(2)} + glow * 0.05;
 
           transformed.xz *= footprint;
           transformed.y = transformed.y * cubeHeight + cubeHeight * 0.5 + lift;
           vRippleGlow = glow;
-          vRippleTint = mix(instanceTint, vec3(0.42, 1.0, 0.86), clamp(glow * 0.55, 0.0, 0.82));`
+          vRippleTint = mix(instanceTint, vec3(0.18, 0.82, 0.74), clamp(glow * 0.46, 0.0, 0.7));`
         );
 
       rippleShader.fragmentShader = shader.fragmentShader
@@ -227,12 +227,12 @@ export class RippleField {
         .replace(
           "#include <color_fragment>",
           `#include <color_fragment>
-          diffuseColor.rgb *= vRippleTint;`
+          diffuseColor.rgb *= vRippleTint * (0.68 + vRippleGlow * 0.08);`
         )
         .replace(
           "#include <emissivemap_fragment>",
           `#include <emissivemap_fragment>
-          totalEmissiveRadiance += vRippleTint * vRippleGlow * (0.45 + uBloomMood * 0.42);`
+          totalEmissiveRadiance += vRippleTint * vRippleGlow * (0.06 + uBloomMood * 0.1);`
         );
     };
 

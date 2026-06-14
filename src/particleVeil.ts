@@ -73,7 +73,7 @@ export class ParticleVeil {
           float dist = length(center);
           float softDisc = smoothstep(0.5, 0.05, dist);
           float hotCore = smoothstep(0.18, 0.0, dist);
-          gl_FragColor = vec4(vColor * (0.65 + hotCore * 1.8), softDisc * vAlpha);
+          gl_FragColor = vec4(vColor * (0.45 + hotCore * 1.05), softDisc * vAlpha);
         }
       `
     });
@@ -114,8 +114,8 @@ export class ParticleVeil {
       this.colors[positionOffset] = color.r;
       this.colors[positionOffset + 1] = color.g;
       this.colors[positionOffset + 2] = color.b;
-      this.alphas[index] = 0.95;
-      this.sizes[index] = 15 + Math.random() * 42 * strength;
+      this.alphas[index] = 0.48;
+      this.sizes[index] = 7 + Math.random() * 22 * strength;
       this.particles[index] = {
         age: 0,
         life: 1.1 + Math.random() * 1.9,

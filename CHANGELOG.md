@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Changed
+
+- Smoothed movement/camera feel by switching pitch to a real orbit arc, tightening
+  acceleration/braking, and ignoring movement hotkeys while tuning inputs are focused.
+- Corrected inverted keyboard strafing and inverted vertical mouse look.
+- Reworked the player avatar from an overexposed white core into a dimmer glassy
+  cyan marker with layered rings and restrained local light.
+- Reduced default bloom, particle brightness, pulse-light intensity, and
+  shader-emissive gain so player-local ripples stay luminous without washing out
+  the field.
+- Capped the live Bloom and Particles sliders so maxed Pretty settings remain
+  readable instead of blooming into a white screen.
+
 ## 0.1.0 - 2026-06-14
 
 ### Added
