@@ -59,6 +59,12 @@ Dedicated ports:
 - Dev server: `5183`
 - Preview server: `4183`
 
+Project planning:
+
+- `TODO.md` tracks concrete high-priority and medium-priority follow-up work.
+- `SPITBALL_IDEAS.md` keeps loose visual, interaction, and engine ideas separate
+  from the committed roadmap.
+
 ## Design Notes
 
 - `src/rippleField.ts` owns the circular shader-displaced instanced cube field.

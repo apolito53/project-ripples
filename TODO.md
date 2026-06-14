@@ -1,0 +1,47 @@
+# TODO
+
+Prioritized work for the standalone ripple-field visual lab. Keep this file for
+concrete follow-ups that we actually intend to revisit.
+
+## High Priority
+
+- Replace brute-force particle density with a more deliberate sparkle system.
+  The x100 particle experiment proved that raw count can become expensive and
+  visually flat. The next pass should separate "sparkle mass" from haze, likely
+  with a smaller visible particle budget plus shader/procedural density.
+- Make particle buffer uploads less blunt.
+  `ParticleVeil.markDirty()` currently marks large dynamic attributes every
+  frame. Investigate update ranges, packed/interleaved buffers, or a more
+  GPU-driven particle state path before raising budgets again.
+- Add a proper arena edge treatment.
+  The cube field now fills the circular arena and the player is clamped inside
+  it, but the boundary could use a visible rim, edge fade, collision feedback,
+  or pulse shimmer so it feels intentional instead of invisible.
+- Add a small debug/perf overlay.
+  Useful readings: frame time, draw mode, cube count, active particle count,
+  resident particle budget, pixel ratio, bloom state, and quality preset.
+- Decide how this lab plugs into `voxel-sandbox-engine`.
+  Keep this project standalone for now. Later, harvest visual patterns, shader
+  tricks, or control ideas instead of merging the lab directly into the engine.
+
+## Medium Priority
+
+- Add browser-test hooks for pointer lock, camera orbit, and arena boundary
+  behavior.
+- Clean up quality presets after the fixed-radius arena change so each mode has
+  a clear performance story.
+- Split bloom/haze from visible glitter so the player can have atmosphere
+  without becoming a glowing blob.
+- Improve pulse interaction design: charged pulses, pulse cooldown feel,
+  movement-speed influence, and clearer impact timing.
+- Add a camera preset or screenshot mode for comparing visual changes quickly.
+
+## Done / Recent Decisions
+
+- Filled the circular arena with cubes instead of stopping the field at a square
+  patch.
+- Clamped the player avatar inside the same circular arena used by the cube
+  field.
+- Capped particle budgets back to the x10 Meltdown scale after the x100 stress
+  pass became too brute-force for the intended sparkle-cloud look.
+- Published the standalone project to GitHub as `project-ripples`.

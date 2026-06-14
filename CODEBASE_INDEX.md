@@ -37,6 +37,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Quality preset budgets and labels: `src/qualityPresets.ts`
 - Runtime settings shape/defaults: `src/labSettings.ts`
 - Procedural field height sampler: `src/terrain.ts`
+- Prioritized concrete follow-up work: `TODO.md`
+- Loose visual, interaction, and engine ideas: `SPITBALL_IDEAS.md`
 
 ## Runtime Flow
 

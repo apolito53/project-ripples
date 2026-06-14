@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- Added TODO and spitball-ideas docs to separate concrete near-term work from
+  loose visual, interaction, and engine experiments.
+
 ### Changed
 
 - Smoothed movement/camera feel by switching pitch to a real orbit arc, tightening
