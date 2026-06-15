@@ -68,8 +68,9 @@ canvas {
 }
 
 #panel {
-  right: 18px;
-  bottom: 18px;
+  top: 16px;
+  right: 74px;
+  bottom: auto;
   display: grid;
   width: min(320px, calc(100vw - 36px));
   gap: 10px;
@@ -143,8 +144,9 @@ input[type="range"] {
   }
 
   #panel {
+    top: 64px;
     right: 12px;
-    bottom: 12px;
+    bottom: auto;
     padding: 12px;
   }
 

@@ -331,9 +331,6 @@ function updateTouchStick(event: PointerEvent): void {
   const state = activeTouchSticks.get(event.pointerId);
   if (!state) return;
   event.preventDefault();
-  if (state.kind === "look") {
-    player.rotateFromMobileLook(event.clientX - state.lastX, event.clientY - state.lastY);
-  }
   state.lastX = event.clientX;
   state.lastY = event.clientY;
   applyTouchStick(state, event.clientX, event.clientY);
@@ -345,6 +342,7 @@ function endTouchStick(event: PointerEvent): void {
   activeTouchSticks.delete(event.pointerId);
   state.knob.style.transform = "translate3d(-50%, -50%, 0)";
   if (state.kind === "move") player.setMobileMoveIntent(0, 0);
+  if (state.kind === "look") player.setMobileLookIntent(0, 0);
 }
 
 function applyTouchStick(state: TouchStickState, clientX: number, clientY: number): void {
@@ -357,6 +355,7 @@ function applyTouchStick(state: TouchStickState, clientX: number, clientY: numbe
   const y = Math.sin(angle) * distance;
   state.knob.style.transform = `translate3d(calc(-50% + ${x}px), calc(-50% + ${y}px), 0)`;
   if (state.kind === "move") player.setMobileMoveIntent(x / maxDistance, -y / maxDistance);
+  if (state.kind === "look") player.setMobileLookIntent(x / maxDistance, y / maxDistance);
 }
 
 function requireChild<T extends HTMLElement>(parent: HTMLElement, selector: string): T {
