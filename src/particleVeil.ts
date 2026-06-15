@@ -4,6 +4,8 @@ const TEMP_COLOR = new THREE.Color();
 const TURQUOISE = new THREE.Color(0x7dffd8);
 const VIOLET = new THREE.Color(0x7f7dff);
 const GOLD = new THREE.Color(0xffd36a);
+const PARTICLE_ALPHA_MIN = 0.16;
+const PARTICLE_ALPHA_VARIANCE = 0.15;
 
 export class ParticleVeil {
   readonly points: THREE.Points;
@@ -93,7 +95,7 @@ export class ParticleVeil {
           float sparkle = pinCore * 0.86 + softMote * 0.14;
           float alpha = sparkle * vAlpha * vTwinkle;
           if (alpha < 0.004) discard;
-          gl_FragColor = vec4(vColor * (0.76 + pinCore * 1.45 + vTwinkle * 0.2), alpha);
+          gl_FragColor = vec4(vColor * (1.05 + pinCore * 1.85 + vTwinkle * 0.32), alpha);
         }
       `
     });
@@ -230,7 +232,9 @@ export class ParticleVeil {
     this.colors[positionOffset + 2] = color.b;
     this.ages[index] = 0;
     this.lifetimes[index] = 0.9 + Math.random() * 1.85;
-    this.baseAlphas[index] = (0.11 + Math.random() * 0.12) * alphaScale;
+    // Brightness lives mostly in alpha and shader energy, not mote size. That
+    // keeps the sparkle cloud crisp instead of sliding back into soft blobs.
+    this.baseAlphas[index] = (PARTICLE_ALPHA_MIN + Math.random() * PARTICLE_ALPHA_VARIANCE) * alphaScale;
     this.baseSizes[index] = (0.45 + Math.random() * (1.05 + strength * 0.58)) * cloudScale;
     this.alphas[index] = this.baseAlphas[index];
     this.sizes[index] = this.baseSizes[index];

@@ -15,6 +15,8 @@
   ripples, with a HUD readout for source count and newest ring radius.
 - Renamed the medium-depth control to `Depth / Speed` and added a live derived
   `m/s` readout beside the slider so its effect is visible while tuning.
+- Increased sparkle alpha and shader color energy so particle clouds read
+  brighter without increasing mote size or count.
 - Replaced the 8-ripple gameplay cap with lifetime-based ripple retention and a
   short manual pulse cooldown, so older rings age out naturally instead of
   disappearing as soon as new pulses are spammed.
