@@ -27,6 +27,7 @@ const LOOK_SENSITIVITY_Y = 0.00155;
 const TOUCH_LOOK_RATE_X = 2.65;
 const TOUCH_LOOK_RATE_Y = 2.05;
 
+
 export class PlayerRig {
   readonly position = new THREE.Vector3(0, PLAYER_HEIGHT, 0);
   readonly velocity = new THREE.Vector3();
