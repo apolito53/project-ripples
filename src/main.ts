@@ -25,6 +25,9 @@ const depthSlider = requireElement<HTMLInputElement>("#depth-slider");
 const depthSpeedValue = requireElement<HTMLOutputElement>("#depth-speed-value");
 const particleSlider = requireElement<HTMLInputElement>("#particle-slider");
 const bloomSlider = requireElement<HTMLInputElement>("#bloom-slider");
+const menuToggle = requireElement<HTMLButtonElement>("#menu-toggle");
+const mobileControls = requireElement<HTMLDivElement>("#mobile-controls");
+const pulseButton = requireElement<HTMLButtonElement>("#pulse-button");
 const PLAYER_BOUNDARY_PADDING = 1.1;
 const MOVEMENT_RIPPLE_MIN_SPEED = 2.2;
 const MOVEMENT_RIPPLE_MIN_DISTANCE = 0.9;
@@ -73,6 +76,21 @@ const lastMovementRipplePosition = new THREE.Vector3(Infinity, 0, Infinity);
 const movementDirection = new THREE.Vector3();
 const movementShoulder = new THREE.Vector3();
 const movementPerpendicular = new THREE.Vector3();
+const mobileQuery = window.matchMedia("(pointer: coarse), (hover: none)");
+const activeTouchSticks = new Map<number, TouchStickState>();
+let menuVisible = true;
+
+type TouchStickKind = "move" | "look";
+
+type TouchStickState = {
+  readonly element: HTMLElement;
+  readonly knob: HTMLElement;
+  readonly kind: TouchStickKind;
+  readonly originX: number;
+  readonly originY: number;
+  lastX: number;
+  lastY: number;
+};
 
 const composer = new EffectComposer(renderer);
 const renderPass = new RenderPass(scene, camera);
@@ -230,6 +248,19 @@ function maybeSpawnAmbientPulse(time: number): void {
 }
 
 function wireControls(): void {
+  menuToggle.addEventListener("click", () => {
+    setMenuVisible(!menuVisible);
+  });
+
+  mobileQuery.addEventListener("change", updateMobileControlsVisibility);
+  updateMobileControlsVisibility();
+  wireMobileControls();
+
+  pulseButton.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    player.triggerPulse();
+  });
+
   qualitySelect.addEventListener("change", () => {
     if (!isQualityId(qualitySelect.value)) return;
     settings.qualityId = qualitySelect.value;
@@ -255,6 +286,82 @@ function wireControls(): void {
   bloomSlider.addEventListener("input", () => {
     settings.bloomStrength = THREE.MathUtils.clamp(Number(bloomSlider.value), 0, 0.38);
   });
+}
+
+function setMenuVisible(visible: boolean): void {
+  menuVisible = visible;
+  document.body.classList.toggle("menu-hidden", !visible);
+  menuToggle.setAttribute("aria-expanded", String(visible));
+  menuToggle.setAttribute("aria-label", visible ? "Hide menu" : "Show menu");
+}
+
+function updateMobileControlsVisibility(): void {
+  mobileControls.hidden = !mobileQuery.matches;
+}
+
+function wireMobileControls(): void {
+  for (const stick of mobileControls.querySelectorAll<HTMLElement>(".touch-stick")) {
+    const knob = requireChild<HTMLElement>(stick, ".touch-stick__knob");
+    const kind = stick.dataset.stick === "look" ? "look" : "move";
+    stick.addEventListener("pointerdown", (event) => beginTouchStick(event, stick, knob, kind));
+    stick.addEventListener("pointermove", updateTouchStick);
+    stick.addEventListener("pointerup", endTouchStick);
+    stick.addEventListener("pointercancel", endTouchStick);
+  }
+}
+
+function beginTouchStick(event: PointerEvent, element: HTMLElement, knob: HTMLElement, kind: TouchStickKind): void {
+  event.preventDefault();
+  element.setPointerCapture(event.pointerId);
+  const rect = element.getBoundingClientRect();
+  const state: TouchStickState = {
+    element,
+    knob,
+    kind,
+    originX: rect.left + rect.width / 2,
+    originY: rect.top + rect.height / 2,
+    lastX: event.clientX,
+    lastY: event.clientY
+  };
+  activeTouchSticks.set(event.pointerId, state);
+  applyTouchStick(state, event.clientX, event.clientY);
+}
+
+function updateTouchStick(event: PointerEvent): void {
+  const state = activeTouchSticks.get(event.pointerId);
+  if (!state) return;
+  event.preventDefault();
+  state.lastX = event.clientX;
+  state.lastY = event.clientY;
+  applyTouchStick(state, event.clientX, event.clientY);
+}
+
+function endTouchStick(event: PointerEvent): void {
+  const state = activeTouchSticks.get(event.pointerId);
+  if (!state) return;
+  activeTouchSticks.delete(event.pointerId);
+  state.knob.style.transform = "translate3d(-50%, -50%, 0)";
+  if (state.kind === "move") player.setMobileMoveIntent(0, 0);
+  if (state.kind === "look") player.setMobileLookIntent(0, 0);
+}
+
+function applyTouchStick(state: TouchStickState, clientX: number, clientY: number): void {
+  const maxDistance = state.element.clientWidth * 0.32;
+  const rawX = clientX - state.originX;
+  const rawY = clientY - state.originY;
+  const distance = Math.min(maxDistance, Math.hypot(rawX, rawY));
+  const angle = Math.atan2(rawY, rawX);
+  const x = Math.cos(angle) * distance;
+  const y = Math.sin(angle) * distance;
+  state.knob.style.transform = `translate3d(calc(-50% + ${x}px), calc(-50% + ${y}px), 0)`;
+  if (state.kind === "move") player.setMobileMoveIntent(x / maxDistance, -y / maxDistance);
+  if (state.kind === "look") player.setMobileLookIntent(x / maxDistance, y / maxDistance);
+}
+
+function requireChild<T extends HTMLElement>(parent: HTMLElement, selector: string): T {
+  const element = parent.querySelector<T>(selector);
+  if (!element) throw new Error(`Missing required child: ${selector}`);
+  return element;
 }
 
 function updateDepthSpeedValue(): void {
