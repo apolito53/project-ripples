@@ -116,9 +116,8 @@ function animate(): void {
   const delta = Math.min(clock.getDelta(), 1 / 24);
   const time = clock.elapsedTime;
   player.update(delta);
-  avatar.update(delta, player.position);
-
   const playerSpeed = player.getSpeed();
+  avatar.update(delta, player.position, playerSpeed);
   particles.spawnAura(player.position, delta, playerSpeed / 18);
   particles.spawnWake(player.position, playerSpeed / 18);
   maybeSpawnMovementRipple(time, playerSpeed);
@@ -329,7 +328,10 @@ function createStageFloor(): void {
   scene.add(floor);
 }
 
-function createAvatar(): { readonly object: THREE.Group; update(delta: number, position: THREE.Vector3): void } {
+function createAvatar(): {
+  readonly object: THREE.Group;
+  update(delta: number, position: THREE.Vector3, movementSpeed: number): void;
+} {
   const object = new THREE.Group();
   object.name = "Player glow avatar";
 
@@ -338,7 +340,7 @@ function createAvatar(): { readonly object: THREE.Group; update(delta: number, p
     new THREE.MeshStandardMaterial({
       color: 0x39ffd7,
       emissive: 0x0c8f88,
-      emissiveIntensity: 0.75,
+      emissiveIntensity: 1.05,
       metalness: 0.18,
       roughness: 0.28
     })
@@ -351,7 +353,7 @@ function createAvatar(): { readonly object: THREE.Group; update(delta: number, p
     new THREE.MeshPhysicalMaterial({
       color: 0x7dffd8,
       emissive: 0x0b4c57,
-      emissiveIntensity: 0.28,
+      emissiveIntensity: 0.38,
       metalness: 0.06,
       roughness: 0.16,
       transparent: true,
@@ -388,13 +390,19 @@ function createAvatar(): { readonly object: THREE.Group; update(delta: number, p
   tiltedRing.rotation.set(Math.PI / 2.8, 0, Math.PI / 5);
   object.add(tiltedRing);
 
-  const light = new THREE.PointLight(0x7dffd8, 1.7, 8, 2.4);
-  light.name = "Player restrained glow light";
-  object.add(light);
+  const coreLight = new THREE.PointLight(0x8fffe0, 4.4, 19, 1.65);
+  coreLight.name = "Player bright local cube light";
+  coreLight.position.y = 0.5;
+  object.add(coreLight);
+
+  const floorLight = new THREE.PointLight(0x55cfff, 2.1, 14, 1.45);
+  floorLight.name = "Player low cyan block fill";
+  floorLight.position.y = -0.55;
+  object.add(floorLight);
 
   return {
     object,
-    update(delta, position) {
+    update(delta, position, movementSpeed) {
       object.position.copy(position);
       core.rotation.x += delta * 1.3;
       core.rotation.y += delta * 1.9;
@@ -402,7 +410,16 @@ function createAvatar(): { readonly object: THREE.Group; update(delta: number, p
       shell.rotation.y += delta * 0.7;
       equatorRing.rotation.z += delta * 1.6;
       tiltedRing.rotation.z -= delta * 1.15;
-      light.intensity = 1.25 + Math.sin(clock.elapsedTime * 4) * 0.25;
+      const breathingGlow = Math.sin(clock.elapsedTime * 4) * 0.5 + 0.5;
+      const movementGlow = THREE.MathUtils.clamp(movementSpeed / 18, 0, 1);
+
+      // The player should now behave like an actual local light source for the
+      // cube field. Keep shadows off for this moving light pair; point-light
+      // shadows would be expensive with tens of thousands of instanced cubes.
+      coreLight.intensity = 3.8 + breathingGlow * 0.9 + movementGlow * 1.4;
+      coreLight.distance = 17 + movementGlow * 5;
+      floorLight.intensity = 1.65 + breathingGlow * 0.42 + movementGlow * 0.9;
+      floorLight.distance = 12 + movementGlow * 4;
     }
   };
 }

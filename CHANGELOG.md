@@ -19,6 +19,8 @@
   brighter without increasing mote size or count.
 - Cranked sparkle brightness again with a much higher alpha range and hotter
   shader core while still leaving particle size and density unchanged.
+- Reworked the player avatar into a stronger local light source with a bright
+  core light and lower cyan fill light that illuminate nearby cubes.
 - Replaced the 8-ripple gameplay cap with lifetime-based ripple retention and a
   short manual pulse cooldown, so older rings age out naturally instead of
   disappearing as soon as new pulses are spammed.
