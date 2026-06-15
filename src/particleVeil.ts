@@ -4,8 +4,8 @@ const TEMP_COLOR = new THREE.Color();
 const TURQUOISE = new THREE.Color(0x7dffd8);
 const VIOLET = new THREE.Color(0x7f7dff);
 const GOLD = new THREE.Color(0xffd36a);
-const PARTICLE_ALPHA_MIN = 0.16;
-const PARTICLE_ALPHA_VARIANCE = 0.15;
+const PARTICLE_ALPHA_MIN = 0.34;
+const PARTICLE_ALPHA_VARIANCE = 0.32;
 
 export class ParticleVeil {
   readonly points: THREE.Points;
@@ -95,7 +95,7 @@ export class ParticleVeil {
           float sparkle = pinCore * 0.86 + softMote * 0.14;
           float alpha = sparkle * vAlpha * vTwinkle;
           if (alpha < 0.004) discard;
-          gl_FragColor = vec4(vColor * (1.05 + pinCore * 1.85 + vTwinkle * 0.32), alpha);
+          gl_FragColor = vec4(vColor * (1.75 + pinCore * 3.4 + vTwinkle * 0.75), alpha);
         }
       `
     });
