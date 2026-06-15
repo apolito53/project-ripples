@@ -14,6 +14,9 @@
   disappearing as soon as new pulses are spammed.
 - Added subtle movement wake ripples that propagate after the avatar slows down
   instead of leaving all movement deformation pinned to player proximity.
+- Reworked movement response toward a water-like body wake, with a directional
+  bow/shoulder deformation in the shader and denser alternating trailing wake
+  sources behind the avatar.
 - Smoothed movement/camera feel by switching pitch to a real orbit arc, tightening
   acceleration/braking, and ignoring movement hotkeys while tuning inputs are focused.
 - Corrected inverted keyboard strafing and inverted vertical mouse look.

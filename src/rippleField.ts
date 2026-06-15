@@ -16,6 +16,7 @@ type Uniform<T> = {
 type RippleShaderUniforms = {
   readonly uTime: Uniform<number>;
   readonly uPlayerPosition: Uniform<THREE.Vector3>;
+  readonly uPlayerVelocity: Uniform<THREE.Vector2>;
   readonly uPlayerSpeed: Uniform<number>;
   readonly uRippleHeight: Uniform<number>;
   readonly uRippleRadius: Uniform<number>;
@@ -124,6 +125,7 @@ export class RippleField {
     preset: QualityPreset,
     sources: RippleSourceStore,
     playerPosition: THREE.Vector3,
+    playerVelocity: THREE.Vector3,
     playerSpeed: number
   ): void {
     if (!this.shader) return;
@@ -131,6 +133,7 @@ export class RippleField {
     const activeCount = sources.writeUniforms(this.rippleUniforms, time);
     this.shader.uniforms.uTime.value = time;
     this.shader.uniforms.uPlayerPosition.value.copy(playerPosition);
+    this.shader.uniforms.uPlayerVelocity.value.set(playerVelocity.x, playerVelocity.z);
     this.shader.uniforms.uPlayerSpeed.value = playerSpeed;
     this.shader.uniforms.uRippleHeight.value = settings.rippleHeight;
     this.shader.uniforms.uRippleRadius.value = settings.rippleRadius;
@@ -162,6 +165,7 @@ export class RippleField {
       this.shader = rippleShader;
       shader.uniforms.uTime = { value: 0 };
       shader.uniforms.uPlayerPosition = { value: new THREE.Vector3() };
+      shader.uniforms.uPlayerVelocity = { value: new THREE.Vector2() };
       shader.uniforms.uPlayerSpeed = { value: 0 };
       shader.uniforms.uRippleHeight = { value: 1.25 };
       shader.uniforms.uRippleRadius = { value: 9 };
@@ -176,6 +180,7 @@ export class RippleField {
           `#include <common>
           uniform float uTime;
           uniform vec3 uPlayerPosition;
+          uniform vec2 uPlayerVelocity;
           uniform float uPlayerSpeed;
           uniform float uRippleHeight;
           uniform float uRippleRadius;
@@ -196,16 +201,46 @@ export class RippleField {
             float ring = exp(-pow((distanceToCell - front) / ${RIPPLE_WIDTH.toFixed(2)}, 2.0));
             float fade = max(0.0, 1.0 - age / ${RIPPLE_LIFETIME.toFixed(2)});
             return ring * fade * strength;
+          }
+
+          float movingBodyWake(vec2 fromPlayer, float distanceToPlayer, float phase) {
+            float speed = length(uPlayerVelocity);
+            float moving = smoothstep(0.8, 10.5, speed);
+            if (moving <= 0.001 || distanceToPlayer <= 0.001) {
+              return 0.0;
+            }
+
+            vec2 direction = uPlayerVelocity / max(speed, 0.001);
+            vec2 radial = fromPlayer / max(distanceToPlayer, 0.001);
+            float ahead = dot(radial, direction);
+            float sideways = abs(radial.x * direction.y - radial.y * direction.x);
+
+            // Treat the avatar like a small hull: a compact bow ridge in front,
+            // then a wider V-shaped wake and foamy centerline behind it. This is
+            // the immediate displacement field; emitted wake sources keep waves
+            // traveling after the player stops moving.
+            float bowBand = exp(-pow((distanceToPlayer - 2.0) / 1.55, 2.0));
+            float bow = smoothstep(0.12, 0.94, ahead) * bowBand;
+            float behind = smoothstep(0.08, 0.92, -ahead);
+            float centerTrail = exp(-pow(sideways * 2.75, 2.0)) *
+              exp(-distanceToPlayer / max(3.0, uRippleRadius * 0.75));
+            float shoulderWake = exp(-pow((sideways - 0.54) / 0.16, 2.0)) *
+              exp(-distanceToPlayer / max(4.0, uRippleRadius * 1.2));
+            float texture = 0.62 + 0.38 * sin(uTime * 7.1 - distanceToPlayer * 3.2 + phase);
+
+            return moving * (bow * 0.44 + behind * texture * (centerTrail * 0.2 + shoulderWake * 0.36));
           }`
         )
         .replace(
           "#include <begin_vertex>",
           `vec3 transformed = vec3(position);
           vec2 cellPosition = instanceFieldPosition.xz;
-          float playerDistance = distance(cellPosition, uPlayerPosition.xz);
+          vec2 fromPlayer = cellPosition - uPlayerPosition.xz;
+          float playerDistance = length(fromPlayer);
           float proximity = 1.0 - smoothstep(0.0, uRippleRadius, playerDistance);
           float movementPush = clamp(uPlayerSpeed / 16.0, 0.0, 1.0);
           float shimmer = sin(uTime * 5.8 - playerDistance * 2.15 + instancePhase) * 0.5 + 0.5;
+          float flowWave = movingBodyWake(fromPlayer, playerDistance, instancePhase);
           float sourceWave = 0.0;
 
           for (int index = 0; index < ${MAX_SHADER_RIPPLE_SOURCES}; index += 1) {
@@ -216,10 +251,10 @@ export class RippleField {
             sourceWave += rippleRing(ripple.xy, ripple.z, ripple.w, cellPosition);
           }
 
-          float nearLift = proximity * (0.25 + shimmer * 0.75) * (0.4 + movementPush * 0.9);
-          float lift = (nearLift + sourceWave * 0.92) * uRippleHeight;
-          float glow = clamp(proximity * (0.045 + shimmer * 0.11) + sourceWave * 0.18, 0.0, 0.36);
-          float cubeHeight = ${BASE_CUBE_HEIGHT.toFixed(2)} + proximity * 0.48 + sourceWave * 0.44;
+          float nearLift = proximity * (0.22 + shimmer * 0.68) * (0.34 + movementPush * 0.52);
+          float lift = (nearLift + sourceWave * 0.92 + flowWave * 0.82) * uRippleHeight;
+          float glow = clamp(proximity * (0.04 + shimmer * 0.1) + sourceWave * 0.18 + flowWave * 0.14, 0.0, 0.38);
+          float cubeHeight = ${BASE_CUBE_HEIGHT.toFixed(2)} + proximity * 0.42 + sourceWave * 0.44 + flowWave * 0.34;
           float footprint = ${CUBE_FOOTPRINT.toFixed(2)} + glow * 0.05;
 
           transformed.xz *= footprint;
@@ -248,7 +283,7 @@ export class RippleField {
         );
     };
 
-    material.customProgramCacheKey = () => "ripple-field-shader-v1";
+    material.customProgramCacheKey = () => "ripple-field-shader-v2";
     return material;
   }
 

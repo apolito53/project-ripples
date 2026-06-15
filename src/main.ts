@@ -24,10 +24,13 @@ const particleSlider = requireElement<HTMLInputElement>("#particle-slider");
 const bloomSlider = requireElement<HTMLInputElement>("#bloom-slider");
 const PLAYER_BOUNDARY_PADDING = 1.1;
 const MOVEMENT_RIPPLE_MIN_SPEED = 2.2;
-const MOVEMENT_RIPPLE_MIN_DISTANCE = 1.6;
-const MOVEMENT_RIPPLE_INTERVAL_SECONDS = 0.42;
-const MOVEMENT_RIPPLE_MIN_STRENGTH = 0.055;
-const MOVEMENT_RIPPLE_MAX_STRENGTH = 0.15;
+const MOVEMENT_RIPPLE_MIN_DISTANCE = 0.9;
+const MOVEMENT_RIPPLE_INTERVAL_SECONDS = 0.22;
+const MOVEMENT_RIPPLE_MIN_STRENGTH = 0.05;
+const MOVEMENT_RIPPLE_MAX_STRENGTH = 0.12;
+const MOVEMENT_RIPPLE_STERN_OFFSET = 0.9;
+const MOVEMENT_RIPPLE_SHOULDER_OFFSET = 1.15;
+const MOVEMENT_RIPPLE_SHOULDER_BACKSET = 1.95;
 
 const renderer = new THREE.WebGLRenderer({
   antialias: true,
@@ -50,7 +53,11 @@ let fpsAccumulatorSeconds = 0;
 let measuredFps = 60;
 let nextAmbientPulseAt = 0.8;
 let lastMovementRippleAt = -Infinity;
+let movementWakeSide = 1;
 const lastMovementRipplePosition = new THREE.Vector3(Infinity, 0, Infinity);
+const movementDirection = new THREE.Vector3();
+const movementShoulder = new THREE.Vector3();
+const movementPerpendicular = new THREE.Vector3();
 
 const composer = new EffectComposer(renderer);
 const renderPass = new RenderPass(scene, camera);
@@ -101,7 +108,7 @@ function animate(): void {
   maybeSpawnMovementRipple(time, playerSpeed);
   maybeSpawnAmbientPulse(time);
   particles.update(delta);
-  rippleField.update(time, settings, preset, rippleSources, player.position, playerSpeed);
+  rippleField.update(time, settings, preset, rippleSources, player.position, player.velocity, playerSpeed);
   pulseLights.update(rippleSources.getActiveLightSources(time), time, 0.28 + settings.bloomStrength * 0.42);
   updateStats(delta);
 
@@ -139,15 +146,36 @@ function maybeSpawnMovementRipple(time: number, playerSpeed: number): void {
     MOVEMENT_RIPPLE_MAX_STRENGTH,
     movementRatio
   );
-  const position = player.position.clone();
+
+  movementDirection.copy(player.velocity).setY(0).normalize();
+  movementPerpendicular.set(-movementDirection.z, 0, movementDirection.x);
+
+  // A moving body in water leaves more than one perfect circle. We drop a stern
+  // source directly behind the avatar, plus an alternating shoulder source that
+  // builds a soft V wake without doubling both sides every frame.
+  const stern = player.position.clone().addScaledVector(
+    movementDirection,
+    -MOVEMENT_RIPPLE_STERN_OFFSET
+  );
+  addMovementWakeSource(stern, time, strength);
+
+  movementShoulder.copy(player.position)
+    .addScaledVector(movementDirection, -MOVEMENT_RIPPLE_SHOULDER_BACKSET)
+    .addScaledVector(movementPerpendicular, MOVEMENT_RIPPLE_SHOULDER_OFFSET * movementWakeSide);
+  addMovementWakeSource(movementShoulder, time, strength * 0.72);
+  movementWakeSide *= -1;
+
+  lastMovementRippleAt = time;
+  lastMovementRipplePosition.copy(player.position);
+}
+
+function addMovementWakeSource(position: THREE.Vector3, time: number, strength: number): void {
   position.y = sampleFieldHeight(position.x, position.z) + 0.4;
 
-  // Movement wakes use the same shader path as intentional pulses, but they do
-  // not spawn burst particles or pulse lights. They should read as persistent
-  // terrain waves left behind by motion, not as another activated ability.
+  // Movement wakes feed the terrain shader only. No burst particles, no point
+  // lights: just lingering displacement, like water remembering the body that
+  // passed through it.
   rippleSources.add(position, time, strength, "wake");
-  lastMovementRippleAt = time;
-  lastMovementRipplePosition.copy(position);
 }
 
 function maybeSpawnAmbientPulse(time: number): void {

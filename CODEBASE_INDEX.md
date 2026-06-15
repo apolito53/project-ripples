@@ -29,7 +29,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `src/main.ts`
 - Avatar movement, circular arena clamp, pointer lock, and camera follow behavior:
   `src/controls.ts`
-- Circular shader-displaced instanced cube field: `src/rippleField.ts`
+- Circular shader-displaced instanced cube field and directional movement
+  wake deformation: `src/rippleField.ts`
 - Lifetime-pruned pulse/wake source list and shader uniform writer:
   `src/rippleSources.ts`
 - Player sparkle aura, additive particle bursts, and wake trails:
@@ -47,8 +48,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 2. `main.ts` creates the renderer, scene, camera, bloom composer, field, particles,
    pulse lights, and glow avatar.
 3. `PlayerRig` updates planar movement and camera follow every frame.
-4. Cooldown-gated clicks, `Space`, movement wake spacing, and ambient timers add
-   ripple sources.
+4. Cooldown-gated clicks, `Space`, denser movement wake spacing, and ambient
+   timers add ripple sources.
 5. `RippleField` builds cube instances inside the circular arena and sends
    active source uniforms to the shader; cube matrices stay static while the GPU
    animates lift/stretch/glow.
@@ -59,7 +60,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 ## Common Change Targets
 
 - Tune visual density or GPU pressure: `src/qualityPresets.ts`
-- Change ripple math, cube shape, tint, or glow: `src/rippleField.ts`
+- Change ripple math, cube shape, directional water-like movement response,
+  tint, or glow: `src/rippleField.ts`
 - Change particles, wake behavior, or burst count: `src/particleVeil.ts` and
   `src/main.ts`
 - Change movement wake cadence or source strength: `src/main.ts`
