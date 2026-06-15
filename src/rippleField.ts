@@ -276,6 +276,8 @@ export class RippleField {
           vec2 fromPlayer = cellPosition - uPlayerPosition.xz;
           float playerDistance = length(fromPlayer);
           float proximity = 1.0 - smoothstep(0.0, uRippleRadius, playerDistance);
+          float bodyPressure = 1.0 - smoothstep(0.15, 2.55, playerDistance);
+          float pressureRim = exp(-pow((playerDistance - 2.35) / 0.9, 2.0));
           float movementPush = clamp(uPlayerSpeed / 16.0, 0.0, 1.0);
           float shimmer = sin(uTime * 5.8 - playerDistance * 2.15 + instancePhase) * 0.5 + 0.5;
           float flowWave = movingBodyWake(fromPlayer, playerDistance, instancePhase);
@@ -290,10 +292,15 @@ export class RippleField {
             sourceWave += rippleRing(ripple, metadata, cellPosition);
           }
 
-          float nearLift = proximity * (0.22 + shimmer * 0.68) * (0.34 + movementPush * 0.52);
-          float lift = (nearLift + sourceWave * 0.92 + flowWave * 0.82) * uRippleHeight;
-          float glow = clamp(proximity * (0.04 + shimmer * 0.1) + sourceWave * 0.18 + flowWave * 0.14, 0.0, 0.38);
-          float cubeHeight = ${BASE_CUBE_HEIGHT.toFixed(2)} + proximity * 0.42 + sourceWave * 0.44 + flowWave * 0.34;
+          // The player presses into the field now. The center becomes a trough,
+          // while a small rim and movement wake keep the surface feeling like a
+          // responsive fabric instead of a flat hole punched through the grid.
+          float pressureDepression = bodyPressure * (0.82 + shimmer * 0.22 + movementPush * 0.28);
+          float rimLift = pressureRim * (0.16 + shimmer * 0.14 + movementPush * 0.1);
+          float shelteredSourceWave = sourceWave * (1.0 - bodyPressure * 0.5);
+          float lift = (-pressureDepression + rimLift + shelteredSourceWave * 0.92 + flowWave * 0.82) * uRippleHeight;
+          float glow = clamp(proximity * (0.04 + shimmer * 0.08) + pressureRim * 0.08 + shelteredSourceWave * 0.18 + flowWave * 0.14, 0.0, 0.4);
+          float cubeHeight = max(0.045, ${BASE_CUBE_HEIGHT.toFixed(2)} + pressureRim * 0.16 + shelteredSourceWave * 0.44 + flowWave * 0.34 - bodyPressure * 0.025);
           float footprint = ${CUBE_FOOTPRINT.toFixed(2)} + glow * 0.05;
 
           transformed.xz *= footprint;
@@ -322,7 +329,7 @@ export class RippleField {
         );
     };
 
-    material.customProgramCacheKey = () => "ripple-field-shader-v3";
+    material.customProgramCacheKey = () => "ripple-field-shader-v4";
     return material;
   }
 

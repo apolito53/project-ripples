@@ -21,6 +21,8 @@
   shader core while still leaving particle size and density unchanged.
 - Reworked the player avatar into a stronger local light source with a bright
   core light and lower cyan fill light that illuminate nearby cubes.
+- Raised the avatar's hover height and changed the player-proximity shader
+  response from a lifting hill into a depressed fabric trough with a small rim.
 - Replaced the 8-ripple gameplay cap with lifetime-based ripple retention and a
   short manual pulse cooldown, so older rings age out naturally instead of
   disappearing as soon as new pulses are spammed.

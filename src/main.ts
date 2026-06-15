@@ -392,12 +392,12 @@ function createAvatar(): {
 
   const coreLight = new THREE.PointLight(0x8fffe0, 4.4, 19, 1.65);
   coreLight.name = "Player bright local cube light";
-  coreLight.position.y = 0.5;
+  coreLight.position.y = 0.35;
   object.add(coreLight);
 
   const floorLight = new THREE.PointLight(0x55cfff, 2.1, 14, 1.45);
   floorLight.name = "Player low cyan block fill";
-  floorLight.position.y = -0.55;
+  floorLight.position.y = -1.05;
   object.add(floorLight);
 
   return {

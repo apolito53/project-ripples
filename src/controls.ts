@@ -14,10 +14,12 @@ const MOVE_ACCELERATION = 16;
 const MOVE_BRAKE = 22;
 const STOP_EPSILON = 0.035;
 const CAMERA_DISTANCE = 15;
-const CAMERA_TARGET_HEIGHT = 0.72;
+const CAMERA_TARGET_HEIGHT = 0.58;
 const CAMERA_PITCH_RANGE = { min: 0.18, max: 0.82 };
 const CAMERA_SMOOTHING = 1 - Math.exp(-14 / 60);
-const PLAYER_HEIGHT = 1.05;
+// This is a visual hover height, not a collision capsule. Keeping the avatar
+// above the fabric prevents nearby displaced blocks from swallowing the marker.
+const PLAYER_HEIGHT = 1.75;
 const PULSE_DISTANCE = 4.2;
 const PULSE_COOLDOWN_SECONDS = 0.42;
 const LOOK_SENSITIVITY_X = 0.002;

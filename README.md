@@ -37,8 +37,9 @@ The avatar is clamped inside the circular arena edge.
 Manual pulses have a short shared cooldown so held keys or rapid clicks do not
 flood the field.
 Movement behaves like a small body pushing through water: the shader forms a
-bow/wake displacement around the avatar, and trailing wake ripples propagate
-outward after the avatar slows down.
+pressed fabric depression, bow/wake displacement, and small raised rim around
+the avatar, while trailing wake ripples propagate outward after the avatar slows
+down.
 
 The tuning panel changes quality, ripple height/radius, Depth / Speed, particle
 density, and bloom strength while the scene is running. Depth / Speed changes
