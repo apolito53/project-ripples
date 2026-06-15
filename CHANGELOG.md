@@ -9,6 +9,10 @@
 
 ### Changed
 
+- Replaced the old global wave-speed slider with a medium-depth control that
+  derives base propagation speed from `sqrt(g * depth)`, and added per-source
+  speed, width, damping, and direction metadata for manual, ambient, and wake
+  ripples, with a HUD readout for source count and newest ring radius.
 - Replaced the 8-ripple gameplay cap with lifetime-based ripple retention and a
   short manual pulse cooldown, so older rings age out naturally instead of
   disappearing as soon as new pulses are spammed.

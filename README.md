@@ -40,8 +40,11 @@ Movement behaves like a small body pushing through water: the shader forms a
 bow/wake displacement around the avatar, and trailing wake ripples propagate
 outward after the avatar slows down.
 
-The tuning panel changes quality, ripple height/radius/speed, particle density,
-and bloom strength while the scene is running.
+The tuning panel changes quality, ripple height/radius, medium depth, particle
+density, and bloom strength while the scene is running. Medium depth derives the
+base propagation speed with a shallow-water-inspired `sqrt(g * depth)` model.
+The HUD shows that derived speed, active source count, and the newest ring's
+approximate radius so propagation tuning has a quick visual sanity check.
 
 ## Quality Modes
 
@@ -75,7 +78,9 @@ Project planning:
 - `src/rippleField.ts` owns the circular shader-displaced instanced cube field,
   including the directional bow/wake deformation around the moving avatar.
 - `src/rippleSources.ts` keeps the lifetime-pruned pulse and movement-wake list
-  sent to the GPU.
+  sent to the GPU, including per-source speed, width, damping, and direction
+  metadata.
+- `src/waveMedium.ts` defines the medium settings and derived propagation speed.
 - `src/particleVeil.ts` owns the player sparkle aura, additive glitter-cloud
   bursts, and wake trails.
 - `src/pulseLights.ts` maps recent pulses onto a small pool of point lights.
@@ -83,6 +88,6 @@ Project planning:
   pointer-lock behavior.
 
 The CPU decides where the player, manual pulses, ambient pulses, and movement
-wakes are. Manual pulse input is cooldown-gated, and sources age out by
-lifetime. The GPU handles cube lift, stretch, tint, and emissive glow from the
-current source uniforms.
+wakes are. Manual pulse input is cooldown-gated, sources age out by lifetime,
+and propagation speed comes from the current wave medium. The GPU handles cube
+lift, stretch, tint, and emissive glow from the current source uniforms.

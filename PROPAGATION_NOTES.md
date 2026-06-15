@@ -8,22 +8,22 @@ less arbitrary and more like a coherent medium.
 - Source ripples are analytic rings in `src/rippleField.ts`.
   Each source stores x/z position, start time, and strength. The shader computes
   `age = uTime - startTime`, then moves the ring front with
-  `front = age * uWaveSpeed`.
-- `uWaveSpeed` comes from `settings.waveSpeed`, defaulting to `9` in
-  `src/labSettings.ts`.
-- `RIPPLE_WIDTH` controls the thickness of the ring, and
-  `RIPPLE_LIFETIME` controls fade-out. Strength changes amplitude, not speed.
+  `front = age * basePropagationSpeed * sourceSpeedMultiplier`.
+- `basePropagationSpeed` is derived in `src/waveMedium.ts` using the
+  shallow-water-inspired relationship `sqrt(gravity * effectiveDepth)`.
+- `RIPPLE_WIDTH` is still the default ring thickness, but each source can now
+  scale width, damping, speed, and optional travel direction.
 - The moving avatar has two effects:
   - an immediate velocity-shaped bow/wake deformation in the shader;
   - emitted wake sources behind the avatar that reuse the same analytic ring
     propagation as manual and ambient pulses.
-- Particles and pulse lights have separate fake propagation:
+- Particles still have their own fake propagation:
   - burst particles move by their own particle velocities;
-  - pulse-light radius expands with a hard-coded `age` multiplier in
-    `src/pulseLights.ts`.
+- pulse-light radius now follows the same base propagation speed, scaled down so
+  the light supports the ring instead of drowning it.
 
-The short version: propagation speed is currently an art-directed global scalar,
-not an emergent result of simulated water/terrain physics.
+The short version: propagation is now a physically inspired analytic model. It
+is still not an emergent fluid/heightfield simulation.
 
 ## Research Notes
 
@@ -61,7 +61,7 @@ not an emergent result of simulated water/terrain physics.
    we want this lab to eventually inspire. Keep the slider labels artistic, but
    give the internals names like `propagationMetersPerSecond`.
 
-2. Replace the single global `waveSpeed` idea with a medium model.
+2. Replace the single global `waveSpeed` idea with a medium model. Done.
    Add a small `waveMedium` settings object:
    - `gravity`
    - `effectiveDepth`
@@ -71,7 +71,7 @@ not an emergent result of simulated water/terrain physics.
    Then derive base propagation speed from the medium, starting with
    `sqrt(gravity * effectiveDepth)` for a shallow-water-inspired mode.
 
-3. Give each source explicit propagation metadata.
+3. Give each source explicit propagation metadata. Done.
    Pack or parallel-upload:
    - position
    - start time
@@ -82,18 +82,18 @@ not an emergent result of simulated water/terrain physics.
    Manual pulses, ambient pulses, and movement wakes can then share the same
    medium while still feeling different.
 
-4. Make the shader equation read like a wave model.
-   Replace the current `front = age * uWaveSpeed` plus linear fade with:
+4. Make the shader equation read like a wave model. Partially done.
+   Replaced the old `front = age * uWaveSpeed` plus linear fade with:
    - phase based on `distance - speed * age`;
    - amplitude falloff from damping and distance;
    - optional dispersion widening/phase offset for longer-lived waves.
 
-5. Treat movement wake as an oriented source family.
+5. Treat movement wake as an oriented source family. Done.
    Keep the immediate bow/wake deformation, but make emitted wake sources carry
    direction and object-speed metadata. That lets the shader shape lingering
    wakes around the path rather than pretending every wake is a circular splash.
 
-6. Add a debug propagation overlay.
+6. Add a debug propagation overlay. Done.
    Show base propagation speed, source count, effective depth, damping, and the
    expected ring radius for the newest pulse. This makes tuning less mystical and
    gives us a quick sanity check: if speed is `9 m/s`, the ring should be about

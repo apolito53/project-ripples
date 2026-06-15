@@ -25,7 +25,12 @@ export class PulseLightRig {
     return new PulseLightRig(scene, count);
   }
 
-  update(sources: readonly RippleSource[], time: number, intensityScale: number): void {
+  update(
+    sources: readonly RippleSource[],
+    time: number,
+    intensityScale: number,
+    basePropagationSpeed: number
+  ): void {
     for (let index = 0; index < this.lights.length; index += 1) {
       const source = sources[index];
       const light = this.lights[index];
@@ -37,10 +42,13 @@ export class PulseLightRig {
       const age = time - source.startTime;
       const fade = Math.max(0, 1 - age / RIPPLE_LIFETIME_SECONDS);
       const pulse = Math.sin(age * 9) * 0.5 + 0.5;
+      const speedMultiplier = Number.isFinite(source.speedMultiplier) ? source.speedMultiplier : 1;
       light.color.copy(LIGHT_COLORS[index % LIGHT_COLORS.length]);
       light.position.set(source.position.x, source.position.y + 2.4 + pulse * 0.8, source.position.z);
       light.intensity = intensityScale * source.strength * fade * (0.75 + pulse * 1.15);
-      light.distance = 6.5 + age * 1.15;
+      // Keep the light halo tied to the same propagation model as the cube
+      // shader, just scaled down so it supports the ring instead of flooding it.
+      light.distance = 5.8 + age * basePropagationSpeed * speedMultiplier * 0.42;
     }
   }
 

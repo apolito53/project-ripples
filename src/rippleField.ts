@@ -3,6 +3,7 @@ import type { LabSettings } from "./labSettings";
 import type { QualityPreset } from "./qualityPresets";
 import { MAX_SHADER_RIPPLE_SOURCES, type RippleSourceStore } from "./rippleSources";
 import { sampleFieldHeight } from "./terrain";
+import { getBasePropagationSpeedMetersPerSecond } from "./waveMedium";
 
 const CUBE_FOOTPRINT = 0.68;
 const BASE_CUBE_HEIGHT = 0.08;
@@ -20,10 +21,13 @@ type RippleShaderUniforms = {
   readonly uPlayerSpeed: Uniform<number>;
   readonly uRippleHeight: Uniform<number>;
   readonly uRippleRadius: Uniform<number>;
-  readonly uWaveSpeed: Uniform<number>;
+  readonly uBasePropagationSpeed: Uniform<number>;
+  readonly uMediumDamping: Uniform<number>;
+  readonly uMediumDispersion: Uniform<number>;
   readonly uBloomMood: Uniform<number>;
   readonly uRippleCount: Uniform<number>;
   readonly uRipples: Uniform<THREE.Vector4[]>;
+  readonly uRippleMetadata: Uniform<THREE.Vector4[]>;
 };
 
 type RippleShader = {
@@ -37,6 +41,10 @@ export class RippleField {
   private readonly rippleUniforms = Array.from(
     { length: MAX_SHADER_RIPPLE_SOURCES },
     () => new THREE.Vector4(0, 0, -999, 0)
+  );
+  private readonly rippleMetadataUniforms = Array.from(
+    { length: MAX_SHADER_RIPPLE_SOURCES },
+    () => new THREE.Vector4(1, 1, 1, -99)
   );
   private mesh: THREE.InstancedMesh | null = null;
   private material: THREE.MeshStandardMaterial | null = null;
@@ -130,14 +138,17 @@ export class RippleField {
   ): void {
     if (!this.shader) return;
 
-    const activeCount = sources.writeUniforms(this.rippleUniforms, time);
+    const basePropagationSpeed = getBasePropagationSpeedMetersPerSecond(settings.waveMedium);
+    const activeCount = sources.writeUniforms(this.rippleUniforms, this.rippleMetadataUniforms, time);
     this.shader.uniforms.uTime.value = time;
     this.shader.uniforms.uPlayerPosition.value.copy(playerPosition);
     this.shader.uniforms.uPlayerVelocity.value.set(playerVelocity.x, playerVelocity.z);
     this.shader.uniforms.uPlayerSpeed.value = playerSpeed;
     this.shader.uniforms.uRippleHeight.value = settings.rippleHeight;
     this.shader.uniforms.uRippleRadius.value = settings.rippleRadius;
-    this.shader.uniforms.uWaveSpeed.value = settings.waveSpeed;
+    this.shader.uniforms.uBasePropagationSpeed.value = basePropagationSpeed;
+    this.shader.uniforms.uMediumDamping.value = settings.waveMedium.damping;
+    this.shader.uniforms.uMediumDispersion.value = settings.waveMedium.dispersion;
     this.shader.uniforms.uBloomMood.value = Math.max(settings.bloomStrength, preset.bloomStrength);
     this.shader.uniforms.uRippleCount.value = activeCount;
   }
@@ -169,10 +180,13 @@ export class RippleField {
       shader.uniforms.uPlayerSpeed = { value: 0 };
       shader.uniforms.uRippleHeight = { value: 1.25 };
       shader.uniforms.uRippleRadius = { value: 9 };
-      shader.uniforms.uWaveSpeed = { value: 9 };
+      shader.uniforms.uBasePropagationSpeed = { value: 9 };
+      shader.uniforms.uMediumDamping = { value: 0.16 };
+      shader.uniforms.uMediumDispersion = { value: 0.22 };
       shader.uniforms.uBloomMood = { value: 1 };
       shader.uniforms.uRippleCount = { value: 0 };
       shader.uniforms.uRipples = { value: this.rippleUniforms };
+      shader.uniforms.uRippleMetadata = { value: this.rippleMetadataUniforms };
 
       rippleShader.vertexShader = shader.vertexShader
         .replace(
@@ -184,23 +198,47 @@ export class RippleField {
           uniform float uPlayerSpeed;
           uniform float uRippleHeight;
           uniform float uRippleRadius;
-          uniform float uWaveSpeed;
+          uniform float uBasePropagationSpeed;
+          uniform float uMediumDamping;
+          uniform float uMediumDispersion;
           uniform float uBloomMood;
           uniform int uRippleCount;
           uniform vec4 uRipples[${MAX_SHADER_RIPPLE_SOURCES}];
+          uniform vec4 uRippleMetadata[${MAX_SHADER_RIPPLE_SOURCES}];
           attribute vec3 instanceFieldPosition;
           attribute float instancePhase;
           attribute vec3 instanceTint;
           varying float vRippleGlow;
           varying vec3 vRippleTint;
 
-          float rippleRing(vec2 origin, float startTime, float strength, vec2 cellPosition) {
+          float rippleRing(vec4 ripple, vec4 metadata, vec2 cellPosition) {
+            vec2 origin = ripple.xy;
+            float startTime = ripple.z;
+            float strength = ripple.w;
             float age = max(0.0, uTime - startTime);
-            float front = age * uWaveSpeed;
+            float propagationSpeed = uBasePropagationSpeed * max(0.05, metadata.x);
             float distanceToCell = distance(origin, cellPosition);
-            float ring = exp(-pow((distanceToCell - front) / ${RIPPLE_WIDTH.toFixed(2)}, 2.0));
+            float front = age * propagationSpeed;
+            float width = ${RIPPLE_WIDTH.toFixed(2)} * max(0.2, metadata.y) +
+              age * uMediumDispersion * 0.16;
+            float ring = exp(-pow((distanceToCell - front) / max(0.12, width), 2.0));
             float fade = max(0.0, 1.0 - age / ${RIPPLE_LIFETIME.toFixed(2)});
-            return ring * fade * strength;
+            float damping = exp(-age * uMediumDamping * max(0.05, metadata.z)) *
+              exp(-distanceToCell * uMediumDamping * max(0.05, metadata.z) * 0.018);
+            float directionalSource = step(-10.0, metadata.w);
+            float directionMask = 1.0;
+
+            if (directionalSource > 0.5 && distanceToCell > 0.001) {
+              vec2 direction = vec2(cos(metadata.w), sin(metadata.w));
+              vec2 radial = (cellPosition - origin) / distanceToCell;
+              float behind = smoothstep(-0.15, 0.78, dot(radial, -direction));
+              float lateral = abs(radial.x * direction.y - radial.y * direction.x);
+              float centerTrail = exp(-pow(lateral / 0.42, 2.0)) * 0.34;
+              float shoulderTrail = exp(-pow((lateral - 0.52) / 0.24, 2.0)) * 0.72;
+              directionMask = clamp(behind * (0.25 + centerTrail + shoulderTrail), 0.0, 1.0);
+            }
+
+            return ring * fade * damping * strength * mix(1.0, directionMask, directionalSource);
           }
 
           float movingBodyWake(vec2 fromPlayer, float distanceToPlayer, float phase) {
@@ -248,7 +286,8 @@ export class RippleField {
               break;
             }
             vec4 ripple = uRipples[index];
-            sourceWave += rippleRing(ripple.xy, ripple.z, ripple.w, cellPosition);
+            vec4 metadata = uRippleMetadata[index];
+            sourceWave += rippleRing(ripple, metadata, cellPosition);
           }
 
           float nearLift = proximity * (0.22 + shimmer * 0.68) * (0.34 + movementPush * 0.52);
@@ -283,7 +322,7 @@ export class RippleField {
         );
     };
 
-    material.customProgramCacheKey = () => "ripple-field-shader-v2";
+    material.customProgramCacheKey = () => "ripple-field-shader-v3";
     return material;
   }
 

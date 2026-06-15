@@ -56,10 +56,15 @@ canvas {
   padding: 4px 8px;
 }
 
-.stats-line {
+.stats-line,
+.medium-line {
   color: rgba(237, 247, 255, 0.68);
   font-size: 12px;
   font-weight: 800;
+}
+
+.medium-line {
+  color: rgba(158, 255, 231, 0.62);
 }
 
 #panel {

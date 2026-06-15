@@ -9,17 +9,19 @@ import { ParticleVeil } from "./particleVeil";
 import { PulseLightRig } from "./pulseLights";
 import { ARENA_RADIUS, isQualityId, type QualityPreset } from "./qualityPresets";
 import { RippleField } from "./rippleField";
-import { RippleSourceStore } from "./rippleSources";
+import { RippleSourceStore, type RippleSourceOptions } from "./rippleSources";
 import "./styles.css";
 import { sampleFieldHeight } from "./terrain";
+import { getBasePropagationSpeedMetersPerSecond } from "./waveMedium";
 
 const app = requireElement<HTMLElement>("#app");
 const statsLine = requireElement<HTMLElement>("#stats-line");
+const mediumLine = requireElement<HTMLElement>("#medium-line");
 const qualityBadge = requireElement<HTMLElement>("#quality-badge");
 const qualitySelect = requireElement<HTMLSelectElement>("#quality-select");
 const heightSlider = requireElement<HTMLInputElement>("#height-slider");
 const radiusSlider = requireElement<HTMLInputElement>("#radius-slider");
-const speedSlider = requireElement<HTMLInputElement>("#speed-slider");
+const depthSlider = requireElement<HTMLInputElement>("#depth-slider");
 const particleSlider = requireElement<HTMLInputElement>("#particle-slider");
 const bloomSlider = requireElement<HTMLInputElement>("#bloom-slider");
 const PLAYER_BOUNDARY_PADDING = 1.1;
@@ -31,6 +33,18 @@ const MOVEMENT_RIPPLE_MAX_STRENGTH = 0.12;
 const MOVEMENT_RIPPLE_STERN_OFFSET = 0.9;
 const MOVEMENT_RIPPLE_SHOULDER_OFFSET = 1.15;
 const MOVEMENT_RIPPLE_SHOULDER_BACKSET = 1.95;
+const MANUAL_PULSE_OPTIONS: RippleSourceOptions = {
+  kind: "pulse",
+  speedMultiplier: 1,
+  widthMultiplier: 1,
+  dampingMultiplier: 0.92
+};
+const AMBIENT_PULSE_OPTIONS: RippleSourceOptions = {
+  kind: "pulse",
+  speedMultiplier: 0.72,
+  widthMultiplier: 1.35,
+  dampingMultiplier: 1.18
+};
 
 const renderer = new THREE.WebGLRenderer({
   antialias: true,
@@ -109,8 +123,13 @@ function animate(): void {
   maybeSpawnAmbientPulse(time);
   particles.update(delta);
   rippleField.update(time, settings, preset, rippleSources, player.position, player.velocity, playerSpeed);
-  pulseLights.update(rippleSources.getActiveLightSources(time), time, 0.28 + settings.bloomStrength * 0.42);
-  updateStats(delta);
+  pulseLights.update(
+    rippleSources.getActiveLightSources(time),
+    time,
+    0.28 + settings.bloomStrength * 0.42,
+    getBasePropagationSpeedMetersPerSecond(settings.waveMedium)
+  );
+  updateStats(delta, time);
 
   bloomPass.strength = settings.bloomStrength;
   if (settings.bloomStrength > 0.02) {
@@ -120,10 +139,20 @@ function animate(): void {
   }
 }
 
-function spawnPulse(position: THREE.Vector3, strength: number): void {
-  rippleSources.add(position, clock.elapsedTime, strength);
+function spawnPulse(
+  position: THREE.Vector3,
+  strength: number,
+  options = MANUAL_PULSE_OPTIONS,
+  startTime = clock.elapsedTime
+): void {
+  rippleSources.add(position, startTime, strength, options);
+
   // Particle density is intentionally decoupled from pulse brightness. A pulse
   // should read as a little cloud of tiny glitter motes, not as one bright blob.
+  spawnPulseParticles(position, strength);
+}
+
+function spawnPulseParticles(position: THREE.Vector3, strength: number): void {
   const count = Math.max(0, Math.floor(
     preset.burstParticleCount * settings.particleDensity * (0.42 + strength * 1.7)
   ));
@@ -175,7 +204,13 @@ function addMovementWakeSource(position: THREE.Vector3, time: number, strength: 
   // Movement wakes feed the terrain shader only. No burst particles, no point
   // lights: just lingering displacement, like water remembering the body that
   // passed through it.
-  rippleSources.add(position, time, strength, "wake");
+  rippleSources.add(position, time, strength, {
+    kind: "wake",
+    speedMultiplier: settings.waveMedium.wakeSpeedMultiplier,
+    widthMultiplier: 1.45,
+    dampingMultiplier: 0.72,
+    direction: movementDirection
+  });
 }
 
 function maybeSpawnAmbientPulse(time: number): void {
@@ -189,7 +224,7 @@ function maybeSpawnAmbientPulse(time: number): void {
     Math.sin(angle) * radius
   );
   position.y = sampleFieldHeight(position.x, position.z) + 0.45;
-  spawnPulse(position, 0.1 + Math.random() * 0.16);
+  spawnPulse(position, 0.1 + Math.random() * 0.16, AMBIENT_PULSE_OPTIONS, time);
   nextAmbientPulseAt = time + 1.6 + Math.random() * 2.2;
 }
 
@@ -209,8 +244,8 @@ function wireControls(): void {
   radiusSlider.addEventListener("input", () => {
     settings.rippleRadius = Number(radiusSlider.value);
   });
-  speedSlider.addEventListener("input", () => {
-    settings.waveSpeed = Number(speedSlider.value);
+  depthSlider.addEventListener("input", () => {
+    settings.waveMedium.effectiveDepth = Number(depthSlider.value);
   });
   particleSlider.addEventListener("input", () => {
     settings.particleDensity = Number(particleSlider.value);
@@ -363,15 +398,32 @@ function createAvatar(): { readonly object: THREE.Group; update(delta: number, p
   };
 }
 
-function updateStats(delta: number): void {
+function updateStats(delta: number, time: number): void {
   frameCount += 1;
   fpsAccumulatorSeconds += delta;
   if (fpsAccumulatorSeconds < 0.35) return;
+
+  const basePropagationSpeed = getBasePropagationSpeedMetersPerSecond(settings.waveMedium);
+  const activeSources = rippleSources.getActiveSources(time);
+  const newestSource = activeSources[0];
+  const rawNewestStartTime = newestSource?.startTime;
+  const rawNewestSpeedMultiplier = newestSource?.speedMultiplier;
+  const newestStartTime = typeof rawNewestStartTime === "number" && Number.isFinite(rawNewestStartTime)
+    ? rawNewestStartTime
+    : time;
+  const newestSpeedMultiplier =
+    typeof rawNewestSpeedMultiplier === "number" && Number.isFinite(rawNewestSpeedMultiplier)
+      ? rawNewestSpeedMultiplier
+      : 1;
+  const newestRingRadius = newestSource
+    ? Math.max(0, time - newestStartTime) * basePropagationSpeed * newestSpeedMultiplier
+    : 0;
 
   measuredFps = frameCount / fpsAccumulatorSeconds;
   frameCount = 0;
   fpsAccumulatorSeconds = 0;
   statsLine.textContent = `${Math.round(measuredFps)} fps | ${rippleField.getInstanceCount().toLocaleString()} cubes | ${preset.particleBudget.toLocaleString()} particles`;
+  mediumLine.textContent = `${basePropagationSpeed.toFixed(1)} m/s | ${settings.waveMedium.effectiveDepth.toFixed(1)}m depth | ${activeSources.length} sources | newest ${newestRingRadius.toFixed(1)}m`;
 }
 
 function resize(): void {

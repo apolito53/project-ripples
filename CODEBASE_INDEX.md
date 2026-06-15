@@ -38,6 +38,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Recent-pulse point light pool: `src/pulseLights.ts`
 - Quality preset budgets and labels: `src/qualityPresets.ts`
 - Runtime settings shape/defaults: `src/labSettings.ts`
+- Wave-medium settings and derived propagation speed: `src/waveMedium.ts`
 - Procedural field height sampler: `src/terrain.ts`
 - Prioritized concrete follow-up work: `TODO.md`
 - Loose visual, interaction, and engine ideas: `SPITBALL_IDEAS.md`
@@ -53,11 +54,13 @@ Purpose: compact map for the standalone ripple-field visual lab.
 4. Cooldown-gated clicks, `Space`, denser movement wake spacing, and ambient
    timers add ripple sources.
 5. `RippleField` builds cube instances inside the circular arena and sends
-   active source uniforms to the shader; cube matrices stay static while the GPU
-   animates lift/stretch/glow.
+   active source/metadata uniforms plus wave-medium values to the shader; cube
+   matrices stay static while the GPU animates lift/stretch/glow.
 6. `ParticleVeil` animates the player sparkle aura, burst clouds, and wake motes.
 7. `PulseLightRig` assigns recent pulses to point lights.
-8. The scene renders through bloom when bloom strength is above zero.
+8. The HUD reports FPS, instance counts, base propagation speed, active source
+   count, and the newest ring radius.
+9. The scene renders through bloom when bloom strength is above zero.
 
 ## Common Change Targets
 
@@ -67,7 +70,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Change particles, wake behavior, or burst count: `src/particleVeil.ts` and
   `src/main.ts`
 - Change movement wake cadence or source strength: `src/main.ts`
-- Plan propagation-speed semantics or medium parameters: `PROPAGATION_NOTES.md`
+- Change propagation-speed semantics or medium parameters: `src/waveMedium.ts`,
+  `src/labSettings.ts`, and `PROPAGATION_NOTES.md`
 - Change movement/camera feel or the circular player boundary: `src/controls.ts`
 - Change panel layout or labels: `index.html` and `src/styles.css`
 
