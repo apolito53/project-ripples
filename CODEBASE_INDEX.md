@@ -41,6 +41,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Procedural field height sampler: `src/terrain.ts`
 - Prioritized concrete follow-up work: `TODO.md`
 - Loose visual, interaction, and engine ideas: `SPITBALL_IDEAS.md`
+- Research notes and plan for physically inspired propagation:
+  `PROPAGATION_NOTES.md`
 
 ## Runtime Flow
 
@@ -65,6 +67,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Change particles, wake behavior, or burst count: `src/particleVeil.ts` and
   `src/main.ts`
 - Change movement wake cadence or source strength: `src/main.ts`
+- Plan propagation-speed semantics or medium parameters: `PROPAGATION_NOTES.md`
 - Change movement/camera feel or the circular player boundary: `src/controls.ts`
 - Change panel layout or labels: `index.html` and `src/styles.css`
 
