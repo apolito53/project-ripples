@@ -24,6 +24,8 @@ const PULSE_DISTANCE = 4.2;
 const PULSE_COOLDOWN_SECONDS = 0.42;
 const LOOK_SENSITIVITY_X = 0.002;
 const LOOK_SENSITIVITY_Y = 0.00155;
+const TOUCH_LOOK_SENSITIVITY_X = 0.0042;
+const TOUCH_LOOK_SENSITIVITY_Y = 0.0034;
 
 export class PlayerRig {
   readonly position = new THREE.Vector3(0, PLAYER_HEIGHT, 0);
@@ -37,6 +39,7 @@ export class PlayerRig {
   private readonly desiredCameraPosition = new THREE.Vector3();
   private readonly movementIntent = new THREE.Vector3();
   private readonly lookTarget = new THREE.Vector3();
+  private readonly mobileMoveIntent = new THREE.Vector2();
   private lastPulseSecond = -Infinity;
   private yaw = Math.PI * 0.23;
   private pitch = 0.45;
@@ -70,6 +73,8 @@ export class PlayerRig {
     if (this.keys.has("KeyS")) intent.sub(forward);
     if (this.keys.has("KeyA")) intent.add(right);
     if (this.keys.has("KeyD")) intent.sub(right);
+    if (this.mobileMoveIntent.y !== 0) intent.addScaledVector(forward, this.mobileMoveIntent.y);
+    if (this.mobileMoveIntent.x !== 0) intent.addScaledVector(right, -this.mobileMoveIntent.x);
 
     const hasIntent = intent.lengthSq() > 0;
     if (hasIntent) intent.normalize();
@@ -97,6 +102,26 @@ export class PlayerRig {
 
   getSpeed(): number {
     return this.velocity.length();
+  }
+
+  setMobileMoveIntent(x: number, y: number): void {
+    this.mobileMoveIntent.set(
+      THREE.MathUtils.clamp(x, -1, 1),
+      THREE.MathUtils.clamp(y, -1, 1)
+    );
+  }
+
+  rotateFromMobileLook(deltaX: number, deltaY: number): void {
+    this.yaw -= deltaX * TOUCH_LOOK_SENSITIVITY_X;
+    this.pitch = THREE.MathUtils.clamp(
+      this.pitch + deltaY * TOUCH_LOOK_SENSITIVITY_Y,
+      CAMERA_PITCH_RANGE.min,
+      CAMERA_PITCH_RANGE.max
+    );
+  }
+
+  triggerPulse(): void {
+    this.tryCreatePulse();
   }
 
   private updateCamera(delta: number): void {

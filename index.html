@@ -11,6 +11,12 @@
   </head>
   <body>
     <main id="app">
+      <button id="menu-toggle" class="menu-toggle" type="button" aria-controls="hud panel" aria-expanded="true" aria-label="Hide menu">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+
       <section id="hud" aria-label="Runtime status">
         <div class="title-lockup">
           <span class="title">Ripple Field Lab</span>
@@ -54,6 +60,18 @@
           <input id="bloom-slider" type="range" min="0" max="0.38" step="0.01" value="0.14" />
         </label>
       </section>
+
+      <div id="mobile-controls" class="mobile-controls" aria-label="Mobile touch controls" hidden>
+        <div class="touch-stick touch-stick--move" data-stick="move" aria-label="Move joystick">
+          <div class="touch-stick__label">MOVE</div>
+          <div class="touch-stick__knob"></div>
+        </div>
+        <button id="pulse-button" class="pulse-button" type="button" aria-label="Create pulse">PULSE</button>
+        <div class="touch-stick touch-stick--look" data-stick="look" aria-label="Look joystick">
+          <div class="touch-stick__label">LOOK</div>
+          <div class="touch-stick__knob"></div>
+        </div>
+      </div>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>
