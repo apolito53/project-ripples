@@ -13,10 +13,13 @@ const SPRINT_MULTIPLIER = 1.65;
 const MOVE_ACCELERATION = 16;
 const MOVE_BRAKE = 22;
 const STOP_EPSILON = 0.035;
-const CAMERA_DISTANCE = 15;
+const CAMERA_DEFAULT_DISTANCE = 15;
+const CAMERA_DISTANCE_RANGE = { min: 7.5, max: 34 };
 const CAMERA_TARGET_HEIGHT = 0.58;
-const CAMERA_PITCH_RANGE = { min: 0.18, max: 0.82 };
+const CAMERA_PITCH_RANGE = { min: 0.055, max: 0.82 };
 const CAMERA_SMOOTHING = 1 - Math.exp(-14 / 60);
+const CAMERA_ZOOM_STEP = 1.4;
+const CAMERA_WHEEL_ZOOM_SPEED = 0.018;
 // This is a visual hover height, not a collision capsule. Keeping the avatar
 // above the fabric prevents nearby displaced blocks from swallowing the marker.
 const PLAYER_HEIGHT = 1.75;
@@ -42,6 +45,8 @@ export class PlayerRig {
   private readonly lookTarget = new THREE.Vector3();
   private readonly mobileMoveIntent = new THREE.Vector2();
   private readonly mobileLookIntent = new THREE.Vector2();
+  private cameraDistance = CAMERA_DEFAULT_DISTANCE;
+  private targetCameraDistance = CAMERA_DEFAULT_DISTANCE;
   private lastPulseSecond = -Infinity;
   private yaw = Math.PI * 0.23;
   private pitch = 0.45;
@@ -57,6 +62,7 @@ export class PlayerRig {
     window.addEventListener("keyup", this.handleKeyUp);
     document.addEventListener("pointermove", this.handlePointerMove);
     this.canvas.addEventListener("pointerdown", this.handlePointerDown);
+    this.canvas.addEventListener("wheel", this.handleWheel, { passive: false });
   }
 
   dispose(): void {
@@ -64,6 +70,7 @@ export class PlayerRig {
     window.removeEventListener("keyup", this.handleKeyUp);
     document.removeEventListener("pointermove", this.handlePointerMove);
     this.canvas.removeEventListener("pointerdown", this.handlePointerDown);
+    this.canvas.removeEventListener("wheel", this.handleWheel);
   }
 
   update(delta: number): void {
@@ -138,8 +145,11 @@ export class PlayerRig {
   }
 
   private updateCamera(delta: number): void {
-    const behind = this.getPlanarForward().multiplyScalar(-Math.cos(this.pitch) * CAMERA_DISTANCE);
-    const height = Math.sin(this.pitch) * CAMERA_DISTANCE;
+    const smoothing = 1 - Math.pow(1 - CAMERA_SMOOTHING, Math.max(1, delta * 60));
+    this.cameraDistance = THREE.MathUtils.lerp(this.cameraDistance, this.targetCameraDistance, smoothing);
+
+    const behind = this.getPlanarForward().multiplyScalar(-Math.cos(this.pitch) * this.cameraDistance);
+    const height = Math.sin(this.pitch) * this.cameraDistance;
     this.desiredCameraPosition.set(
       this.position.x + behind.x,
       this.position.y + height,
@@ -150,10 +160,20 @@ export class PlayerRig {
     // cinematic feel than a rigidly attached debug camera. Pitch now changes
     // the actual orbit arc instead of just hoisting the camera vertically, so
     // mouse look feels like orbiting a subject rather than dragging a crane.
-    const smoothing = 1 - Math.pow(1 - CAMERA_SMOOTHING, Math.max(1, delta * 60));
     this.camera.position.lerp(this.desiredCameraPosition, smoothing);
     this.lookTarget.set(this.position.x, this.position.y + CAMERA_TARGET_HEIGHT, this.position.z);
     this.camera.lookAt(this.lookTarget);
+  }
+
+  private adjustZoom(deltaDistance: number): void {
+    // Zoom changes the orbit radius instead of the camera FOV. That preserves
+    // the lens feel while still letting the user pull back to inspect more of
+    // the field or tuck in close to the avatar.
+    this.targetCameraDistance = THREE.MathUtils.clamp(
+      this.targetCameraDistance + deltaDistance,
+      CAMERA_DISTANCE_RANGE.min,
+      CAMERA_DISTANCE_RANGE.max
+    );
   }
 
   private getPlanarForward(): THREE.Vector3 {
@@ -192,6 +212,22 @@ export class PlayerRig {
 
   private handleKeyDown = (event: KeyboardEvent): void => {
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
+    if (event.code === "Equal" || event.code === "NumpadAdd") {
+      event.preventDefault();
+      this.adjustZoom(-CAMERA_ZOOM_STEP);
+      return;
+    }
+    if (event.code === "Minus" || event.code === "NumpadSubtract") {
+      event.preventDefault();
+      this.adjustZoom(CAMERA_ZOOM_STEP);
+      return;
+    }
+    if (event.code === "Digit0" || event.code === "Numpad0") {
+      event.preventDefault();
+      this.targetCameraDistance = CAMERA_DEFAULT_DISTANCE;
+      return;
+    }
+
     this.keys.add(event.code);
     if (event.code === "Space") {
       event.preventDefault();
@@ -221,6 +257,11 @@ export class PlayerRig {
       CAMERA_PITCH_RANGE.min,
       CAMERA_PITCH_RANGE.max
     );
+  };
+
+  private handleWheel = (event: WheelEvent): void => {
+    event.preventDefault();
+    this.adjustZoom(event.deltaY * CAMERA_WHEEL_ZOOM_SPEED);
   };
 
   private tryCreatePulse(): void {

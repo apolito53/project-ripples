@@ -23,6 +23,8 @@
   core light and lower cyan fill light that illuminate nearby cubes.
 - Raised the avatar's hover height and changed the player-proximity shader
   response from a lifting hill into a depressed fabric trough with a small rim.
+- Added follow-camera zoom with mouse wheel and keyboard controls, plus a lower
+  minimum camera pitch for flatter field-level views.
 - Replaced the 8-ripple gameplay cap with lifetime-based ripple retention and a
   short manual pulse cooldown, so older rings age out naturally instead of
   disappearing as soon as new pulses are spammed.

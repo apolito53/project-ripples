@@ -29,6 +29,8 @@ Open `http://127.0.0.1:5183`.
 - `WASD` moves the glow avatar across the field.
 - `Mouse click` captures camera look and drops a pulse.
 - `Mouse movement` orbits the follow camera while captured.
+- `Mouse wheel` zooms the follow camera in and out.
+- `+` / `-` zoom in and out; `0` resets the camera distance.
 - `Space` drops a pulse in front of the avatar.
 - `Shift` increases movement speed.
 - `Esc` releases pointer lock.
