@@ -40,9 +40,10 @@ Movement behaves like a small body pushing through water: the shader forms a
 bow/wake displacement around the avatar, and trailing wake ripples propagate
 outward after the avatar slows down.
 
-The tuning panel changes quality, ripple height/radius, medium depth, particle
-density, and bloom strength while the scene is running. Medium depth derives the
-base propagation speed with a shallow-water-inspired `sqrt(g * depth)` model.
+The tuning panel changes quality, ripple height/radius, Depth / Speed, particle
+density, and bloom strength while the scene is running. Depth / Speed changes
+the medium's effective depth, then shows the derived propagation speed from the
+shallow-water-inspired `sqrt(g * depth)` model.
 The HUD shows that derived speed, active source count, and the newest ring's
 approximate radius so propagation tuning has a quick visual sanity check.
 

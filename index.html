@@ -39,8 +39,11 @@
           <input id="radius-slider" type="range" min="4" max="18" step="0.5" value="9" />
         </label>
         <label class="control-row">
-          <span>Water Depth</span>
-          <input id="depth-slider" type="range" min="1" max="20" step="0.25" value="8.25" />
+          <span>Depth / Speed</span>
+          <div class="range-with-value">
+            <input id="depth-slider" type="range" min="1" max="20" step="0.25" value="8.25" />
+            <output id="depth-speed-value" class="control-value" for="depth-slider">9.0 m/s</output>
+          </div>
         </label>
         <label class="control-row">
           <span>Particles</span>

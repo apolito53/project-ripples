@@ -120,6 +120,22 @@ input[type="range"] {
   accent-color: #75ffd7;
 }
 
+.range-with-value {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 58px;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.control-value {
+  color: rgba(158, 255, 231, 0.78);
+  font-size: 11px;
+  font-weight: 900;
+  text-align: right;
+  white-space: nowrap;
+}
+
 @media (max-width: 680px) {
   #hud {
     top: 12px;
@@ -135,5 +151,9 @@ input[type="range"] {
   .control-row {
     grid-template-columns: 1fr;
     gap: 5px;
+  }
+
+  .range-with-value {
+    grid-template-columns: minmax(0, 1fr) 62px;
   }
 }

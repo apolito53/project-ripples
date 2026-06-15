@@ -22,6 +22,7 @@ const qualitySelect = requireElement<HTMLSelectElement>("#quality-select");
 const heightSlider = requireElement<HTMLInputElement>("#height-slider");
 const radiusSlider = requireElement<HTMLInputElement>("#radius-slider");
 const depthSlider = requireElement<HTMLInputElement>("#depth-slider");
+const depthSpeedValue = requireElement<HTMLOutputElement>("#depth-speed-value");
 const particleSlider = requireElement<HTMLInputElement>("#particle-slider");
 const bloomSlider = requireElement<HTMLInputElement>("#bloom-slider");
 const PLAYER_BOUNDARY_PADDING = 1.1;
@@ -100,6 +101,7 @@ const player = new PlayerRig({
 createLighting();
 createStageFloor();
 wireControls();
+updateDepthSpeedValue();
 applyQualityPreset(preset, true);
 resize();
 window.addEventListener("resize", resize);
@@ -246,6 +248,7 @@ function wireControls(): void {
   });
   depthSlider.addEventListener("input", () => {
     settings.waveMedium.effectiveDepth = Number(depthSlider.value);
+    updateDepthSpeedValue();
   });
   particleSlider.addEventListener("input", () => {
     settings.particleDensity = Number(particleSlider.value);
@@ -253,6 +256,12 @@ function wireControls(): void {
   bloomSlider.addEventListener("input", () => {
     settings.bloomStrength = THREE.MathUtils.clamp(Number(bloomSlider.value), 0, 0.38);
   });
+}
+
+function updateDepthSpeedValue(): void {
+  // The slider controls effective depth, but the user-facing consequence is
+  // propagation speed. Show the derived value right where the tuning happens.
+  depthSpeedValue.textContent = `${getBasePropagationSpeedMetersPerSecond(settings.waveMedium).toFixed(1)} m/s`;
 }
 
 function applyQualityPreset(nextPreset: QualityPreset, initial: boolean): void {
