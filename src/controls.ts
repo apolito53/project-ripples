@@ -155,10 +155,9 @@ export class PlayerRig {
     this.keys.add(event.code);
     if (event.code === "Space") {
       event.preventDefault();
-      // Holding Space fires repeated keydown events in most browsers. The
-      // cooldown keeps pulse creation intentional and gives existing rings time
-      // to age out instead of being visually replaced by rapid spam.
-      if (!event.repeat) this.tryCreatePulse();
+      // Holding Space fires repeated keydown events in most browsers. The shared
+      // cooldown turns that into a deliberate pulse cadence instead of a flood.
+      this.tryCreatePulse();
     }
   };
 

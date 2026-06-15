@@ -36,6 +36,8 @@ Open `http://127.0.0.1:5183`.
 The avatar is clamped inside the circular arena edge.
 Manual pulses have a short shared cooldown so held keys or rapid clicks do not
 flood the field.
+Movement also leaves subtle wake ripples that propagate outward after the avatar
+slows down.
 
 The tuning panel changes quality, ripple height/radius/speed, particle density,
 and bloom strength while the scene is running.
@@ -70,13 +72,15 @@ Project planning:
 ## Design Notes
 
 - `src/rippleField.ts` owns the circular shader-displaced instanced cube field.
-- `src/rippleSources.ts` keeps the lifetime-pruned pulse list sent to the GPU.
+- `src/rippleSources.ts` keeps the lifetime-pruned pulse and movement-wake list
+  sent to the GPU.
 - `src/particleVeil.ts` owns the player sparkle aura, additive glitter-cloud
   bursts, and wake trails.
 - `src/pulseLights.ts` maps recent pulses onto a small pool of point lights.
 - `src/controls.ts` owns avatar movement, circular arena clamping, and camera
   pointer-lock behavior.
 
-The CPU decides where the player and pulse sources are. Manual pulse input is
-cooldown-gated, and sources age out by lifetime. The GPU handles cube lift,
-stretch, tint, and emissive glow from the current source uniforms.
+The CPU decides where the player, manual pulses, ambient pulses, and movement
+wakes are. Manual pulse input is cooldown-gated, and sources age out by
+lifetime. The GPU handles cube lift, stretch, tint, and emissive glow from the
+current source uniforms.

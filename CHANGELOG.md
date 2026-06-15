@@ -12,6 +12,8 @@
 - Replaced the 8-ripple gameplay cap with lifetime-based ripple retention and a
   short manual pulse cooldown, so older rings age out naturally instead of
   disappearing as soon as new pulses are spammed.
+- Added subtle movement wake ripples that propagate after the avatar slows down
+  instead of leaving all movement deformation pinned to player proximity.
 - Smoothed movement/camera feel by switching pitch to a real orbit arc, tightening
   acceleration/braking, and ignoring movement hotkeys while tuning inputs are focused.
 - Corrected inverted keyboard strafing and inverted vertical mouse look.

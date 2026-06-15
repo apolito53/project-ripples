@@ -23,6 +23,11 @@ const speedSlider = requireElement<HTMLInputElement>("#speed-slider");
 const particleSlider = requireElement<HTMLInputElement>("#particle-slider");
 const bloomSlider = requireElement<HTMLInputElement>("#bloom-slider");
 const PLAYER_BOUNDARY_PADDING = 1.1;
+const MOVEMENT_RIPPLE_MIN_SPEED = 2.2;
+const MOVEMENT_RIPPLE_MIN_DISTANCE = 1.6;
+const MOVEMENT_RIPPLE_INTERVAL_SECONDS = 0.42;
+const MOVEMENT_RIPPLE_MIN_STRENGTH = 0.055;
+const MOVEMENT_RIPPLE_MAX_STRENGTH = 0.15;
 
 const renderer = new THREE.WebGLRenderer({
   antialias: true,
@@ -44,6 +49,8 @@ let frameCount = 0;
 let fpsAccumulatorSeconds = 0;
 let measuredFps = 60;
 let nextAmbientPulseAt = 0.8;
+let lastMovementRippleAt = -Infinity;
+const lastMovementRipplePosition = new THREE.Vector3(Infinity, 0, Infinity);
 
 const composer = new EffectComposer(renderer);
 const renderPass = new RenderPass(scene, camera);
@@ -91,10 +98,11 @@ function animate(): void {
   const playerSpeed = player.getSpeed();
   particles.spawnAura(player.position, delta, playerSpeed / 18);
   particles.spawnWake(player.position, playerSpeed / 18);
+  maybeSpawnMovementRipple(time, playerSpeed);
   maybeSpawnAmbientPulse(time);
   particles.update(delta);
   rippleField.update(time, settings, preset, rippleSources, player.position, playerSpeed);
-  pulseLights.update(rippleSources.getActiveSources(time), time, 0.28 + settings.bloomStrength * 0.42);
+  pulseLights.update(rippleSources.getActiveLightSources(time), time, 0.28 + settings.bloomStrength * 0.42);
   updateStats(delta);
 
   bloomPass.strength = settings.bloomStrength;
@@ -113,6 +121,33 @@ function spawnPulse(position: THREE.Vector3, strength: number): void {
     preset.burstParticleCount * settings.particleDensity * (0.42 + strength * 1.7)
   ));
   particles.spawnBurst(position, count, strength);
+}
+
+function maybeSpawnMovementRipple(time: number, playerSpeed: number): void {
+  if (playerSpeed < MOVEMENT_RIPPLE_MIN_SPEED) return;
+  if (time - lastMovementRippleAt < MOVEMENT_RIPPLE_INTERVAL_SECONDS) return;
+
+  const distanceFromLastWake = Math.hypot(
+    player.position.x - lastMovementRipplePosition.x,
+    player.position.z - lastMovementRipplePosition.z
+  );
+  if (distanceFromLastWake < MOVEMENT_RIPPLE_MIN_DISTANCE) return;
+
+  const movementRatio = THREE.MathUtils.clamp(playerSpeed / 18, 0, 1);
+  const strength = THREE.MathUtils.lerp(
+    MOVEMENT_RIPPLE_MIN_STRENGTH,
+    MOVEMENT_RIPPLE_MAX_STRENGTH,
+    movementRatio
+  );
+  const position = player.position.clone();
+  position.y = sampleFieldHeight(position.x, position.z) + 0.4;
+
+  // Movement wakes use the same shader path as intentional pulses, but they do
+  // not spawn burst particles or pulse lights. They should read as persistent
+  // terrain waves left behind by motion, not as another activated ability.
+  rippleSources.add(position, time, strength, "wake");
+  lastMovementRippleAt = time;
+  lastMovementRipplePosition.copy(position);
 }
 
 function maybeSpawnAmbientPulse(time: number): void {
