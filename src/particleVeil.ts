@@ -123,6 +123,14 @@ export class ParticleVeil {
     this.markDirty();
   }
 
+  spawnDiscBurst(center: THREE.Vector3, count: number, strength: number, radius: number): void {
+    for (let burstIndex = 0; burstIndex < count; burstIndex += 1) {
+      this.emitDiscParticle(center, strength, radius);
+    }
+
+    this.markDirty();
+  }
+
   spawnAura(center: THREE.Vector3, delta: number, movementStrength: number): void {
     // The avatar should feel wrapped in particulate light even while idle. The
     // accumulator makes the emission rate frame-rate independent, so a slow
@@ -236,6 +244,41 @@ export class ParticleVeil {
     // keeps the sparkle cloud crisp instead of sliding back into soft blobs.
     this.baseAlphas[index] = (PARTICLE_ALPHA_MIN + Math.random() * PARTICLE_ALPHA_VARIANCE) * alphaScale;
     this.baseSizes[index] = (0.45 + Math.random() * (1.05 + strength * 0.58)) * cloudScale;
+    this.alphas[index] = this.baseAlphas[index];
+    this.sizes[index] = this.baseSizes[index];
+    this.twinkles[index] = Math.random();
+  }
+
+  private emitDiscParticle(center: THREE.Vector3, strength: number, discRadius: number): void {
+    const index = this.cursor;
+    this.cursor = (this.cursor + 1) % this.alphas.length;
+    this.activateParticle(index);
+
+    const angle = Math.random() * Math.PI * 2;
+    // Echo detonations should read like a flat pressure disc racing across the
+    // field, not another spherical cloud. Square-root radius gives an even disc
+    // fill while the velocity still pushes the motes outward from the center.
+    const normalizedRadius = Math.sqrt(Math.random());
+    const radius = normalizedRadius * discRadius;
+    const outward = (4.2 + Math.random() * 7.6 + strength * 5.4) * (0.54 + normalizedRadius * 0.6);
+    const tangent = (Math.random() - 0.5) * (0.9 + strength * 1.3);
+    const lift = (Math.random() - 0.38) * (0.24 + strength * 0.34);
+    const positionOffset = index * 3;
+    const color = pickParticleColor(Math.random());
+
+    this.positions[positionOffset] = center.x + Math.cos(angle) * radius;
+    this.positions[positionOffset + 1] = center.y + 0.34 + (Math.random() - 0.5) * 0.22;
+    this.positions[positionOffset + 2] = center.z + Math.sin(angle) * radius;
+    this.velocities[positionOffset] = Math.cos(angle) * outward - Math.sin(angle) * tangent;
+    this.velocities[positionOffset + 1] = lift;
+    this.velocities[positionOffset + 2] = Math.sin(angle) * outward + Math.cos(angle) * tangent;
+    this.colors[positionOffset] = color.r;
+    this.colors[positionOffset + 1] = color.g;
+    this.colors[positionOffset + 2] = color.b;
+    this.ages[index] = 0;
+    this.lifetimes[index] = 0.7 + Math.random() * 1.15;
+    this.baseAlphas[index] = PARTICLE_ALPHA_MIN + 0.18 + Math.random() * (PARTICLE_ALPHA_VARIANCE + 0.2);
+    this.baseSizes[index] = 0.55 + Math.random() * (1.3 + strength * 0.85);
     this.alphas[index] = this.baseAlphas[index];
     this.sizes[index] = this.baseSizes[index];
     this.twinkles[index] = Math.random();

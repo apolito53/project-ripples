@@ -1,6 +1,6 @@
 # Codebase Index
 
-Last reviewed: 2026-06-14
+Last reviewed: 2026-06-16
 
 Purpose: compact map for the standalone ripple-field visual lab.
 
@@ -33,6 +33,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
   wake deformation: `src/rippleField.ts`
 - Lifetime-pruned pulse/wake source list and shader uniform writer:
   `src/rippleSources.ts`
+- Persistent collectible Echo-zone markers and run-through trigger detection:
+  `src/echoZones.ts`
 - Player sparkle aura, additive particle bursts, and wake trails:
   `src/particleVeil.ts`
 - Recent-pulse point light pool: `src/pulseLights.ts`
@@ -51,22 +53,28 @@ Purpose: compact map for the standalone ripple-field visual lab.
 2. `main.ts` creates the renderer, scene, camera, bloom composer, field, particles,
    pulse lights, and glow avatar.
 3. `PlayerRig` updates planar movement and camera follow every frame.
-4. Cooldown-gated clicks, `Space`, denser movement wake spacing, and ambient
-   timers add ripple sources.
+4. Cooldown-gated clicks, `Space`, and denser movement wake spacing add ripple
+   sources; Echo-zone timers add persistent collectible markers instead of
+   immediate ambient waves.
 5. `RippleField` builds cube instances inside the circular arena and sends
    active source/metadata/lifetime uniforms plus wave-medium values to the
    shader; cube matrices stay static while the GPU animates lift/stretch/glow.
-6. `ParticleVeil` animates the player sparkle aura, burst clouds, and wake motes.
-7. `PulseLightRig` assigns recent pulses to point lights.
-8. The HUD reports FPS, instance counts, base propagation speed, active source
-   count, and the newest ring radius.
-9. The scene renders through bloom when bloom strength is above zero.
+6. `EchoZoneField` animates live Echo markers and reports run-through triggers.
+7. `ParticleVeil` animates the player sparkle aura, burst clouds, flat Echo
+   disc bursts, and wake motes.
+8. `PulseLightRig` assigns recent pulses and collected Echo detonations to
+   point lights.
+9. The HUD reports FPS, instance counts, base propagation speed, live Echo
+   count, active source count, and the newest ring radius.
+10. The scene renders through bloom when bloom strength is above zero.
 
 ## Common Change Targets
 
 - Tune visual density or GPU pressure: `src/qualityPresets.ts`
 - Change ripple math, cube shape, directional water-like movement response,
   tint, or glow: `src/rippleField.ts`
+- Change Echo-zone spawn count, trigger radius, marker visuals, or collection
+  behavior: `src/echoZones.ts` and `src/main.ts`
 - Change particles, wake behavior, or burst count: `src/particleVeil.ts` and
   `src/main.ts`
 - Change movement wake cadence or source strength: `src/main.ts`
@@ -85,6 +93,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
   cooldown rather than a tiny gameplay cap. Dense movement wakes intentionally
   fade faster than manual pulses so the newest-first upload order does not
   churn through old rings during normal movement.
+- Echo zones are CPU-side gameplay markers. They should not become shader
+  sources until collected, otherwise they turn back into ambient pulses with
+  extra jewelry.
 - `Meltdown` is intentionally rude to weak GPUs. Keep it available, but do not
   tune the normal experience around it.
 - Pointer-lock behavior should be browser-tested in Chrome, not trusted from a

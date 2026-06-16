@@ -38,6 +38,8 @@ Open `http://127.0.0.1:5183`.
 The avatar is clamped inside the circular arena edge.
 Manual pulses have a short shared cooldown so held keys or rapid clicks do not
 flood the field.
+Glowing Echo zones spawn around the arena and wait until the avatar runs
+through them, then detonate into a wider pulse and flat disc burst of sparks.
 Movement behaves like a small body pushing through water: the shader forms a
 pressed fabric depression, local bow/wake displacement, and small raised rim
 around the avatar, while stamped wake ripples remain in the field and propagate
@@ -50,7 +52,8 @@ density, and bloom strength while the scene is running. Depth / Speed changes
 the medium's effective depth, then shows the derived propagation speed from the
 shallow-water-inspired `sqrt(g * depth)` model.
 The HUD shows that derived speed, active source count, and the newest ring's
-approximate radius so propagation tuning has a quick visual sanity check.
+approximate radius, plus the number of live Echo zones, so propagation tuning
+has a quick visual sanity check.
 
 ## Quality Modes
 
@@ -86,15 +89,17 @@ Project planning:
 - `src/rippleSources.ts` keeps the lifetime-pruned pulse and movement-wake list
   sent to the GPU, including per-source speed, width, damping, lifetime, and
   optional direction metadata.
+- `src/echoZones.ts` owns persistent collectible Echo-zone markers and their
+  run-through trigger detection.
 - `src/waveMedium.ts` defines the medium settings and derived propagation speed.
 - `src/particleVeil.ts` owns the player sparkle aura, additive glitter-cloud
-  bursts, and wake trails.
+  bursts, flat Echo disc bursts, and wake trails.
 - `src/pulseLights.ts` maps recent pulses onto a small pool of point lights.
 - `src/controls.ts` owns avatar movement, circular arena clamping, and camera
   pointer-lock behavior.
 
-The CPU decides where the player, manual pulses, ambient pulses, and movement
-wakes are. Manual pulse input is cooldown-gated, sources age out by per-source
-lifetime, and propagation speed comes from the current wave medium. The GPU
-handles cube lift, stretch, tint, and emissive glow from the current source
-uniforms.
+The CPU decides where the player, manual pulses, persistent Echo zones, and
+movement wakes are. Manual pulse input is cooldown-gated, Echo zones only become
+wave sources after collection, sources age out by per-source lifetime, and
+propagation speed comes from the current wave medium. The GPU handles cube lift,
+stretch, tint, and emissive glow from the current source uniforms.

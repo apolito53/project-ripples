@@ -4,6 +4,7 @@ import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { PlayerRig } from "./controls";
+import { EchoZoneField, type TriggeredEchoZone } from "./echoZones";
 import { cloneDefaultSettings, getQualityPreset } from "./labSettings";
 import { ParticleVeil } from "./particleVeil";
 import { PulseLightRig } from "./pulseLights";
@@ -29,6 +30,16 @@ const menuToggle = requireElement<HTMLButtonElement>("#menu-toggle");
 const mobileControls = requireElement<HTMLDivElement>("#mobile-controls");
 const pulseButton = requireElement<HTMLButtonElement>("#pulse-button");
 const PLAYER_BOUNDARY_PADDING = 1.1;
+const ECHO_ZONE_MAX_ACTIVE = 5;
+const ECHO_ZONE_INITIAL_COUNT = 3;
+const ECHO_ZONE_SPAWN_ATTEMPTS = 24;
+const ECHO_ZONE_SPAWN_INTERVAL_SECONDS = 4.2;
+const ECHO_ZONE_RADIUS = 3.05;
+const ECHO_ZONE_TRIGGER_RADIUS = 2.45;
+const ECHO_ZONE_MIN_PLAYER_DISTANCE = 11;
+const ECHO_ZONE_MIN_ZONE_DISTANCE = 12;
+const ECHO_ZONE_BURST_STRENGTH = 0.76;
+const ECHO_ZONE_DISC_BURST_RADIUS = 8.6;
 const MOVEMENT_RIPPLE_MIN_SPEED = 2.2;
 const MOVEMENT_RIPPLE_MIN_DISTANCE = 0.9;
 const MOVEMENT_RIPPLE_INTERVAL_SECONDS = 0.22;
@@ -47,11 +58,12 @@ const MANUAL_PULSE_OPTIONS: RippleSourceOptions = {
   widthMultiplier: 1,
   dampingMultiplier: 0.92
 };
-const AMBIENT_PULSE_OPTIONS: RippleSourceOptions = {
+const ECHO_BURST_OPTIONS: RippleSourceOptions = {
   kind: "pulse",
-  speedMultiplier: 0.72,
-  widthMultiplier: 1.35,
-  dampingMultiplier: 1.18
+  speedMultiplier: 1.08,
+  widthMultiplier: 2.2,
+  dampingMultiplier: 0.58,
+  lifetimeSeconds: 8.6
 };
 
 const renderer = new THREE.WebGLRenderer({
@@ -73,7 +85,7 @@ let preset = getQualityPreset(settings);
 let frameCount = 0;
 let fpsAccumulatorSeconds = 0;
 let measuredFps = 60;
-let nextAmbientPulseAt = 0.8;
+let nextEchoZoneAt = 0.8;
 let lastMovementRippleAt = -Infinity;
 let movementWakeSide = 1;
 const lastMovementRipplePosition = new THREE.Vector3(Infinity, 0, Infinity);
@@ -105,6 +117,7 @@ composer.addPass(bloomPass);
 composer.addPass(outputPass);
 
 const rippleSources = new RippleSourceStore();
+const echoZones = new EchoZoneField(scene);
 const rippleField = new RippleField(scene, preset);
 let particles = new ParticleVeil(scene, preset.particleBudget, getPixelRatio());
 let pulseLights = new PulseLightRig(scene, preset.pulseLightCount);
@@ -131,6 +144,7 @@ window.addEventListener("resize", resize);
 // Seed a few pulses so the first rendered second already has motion and bloom.
 spawnPulse(new THREE.Vector3(0, sampleFieldHeight(0, 0) + 0.45, 0), 0.28);
 spawnPulse(new THREE.Vector3(9, sampleFieldHeight(9, -7) + 0.45, -7), 0.18);
+seedEchoZones(clock.elapsedTime);
 
 renderer.setAnimationLoop(animate);
 
@@ -143,7 +157,9 @@ function animate(): void {
   particles.spawnAura(player.position, delta, playerSpeed / 18);
   particles.spawnWake(player.position, playerSpeed / 18);
   maybeSpawnMovementRipple(time, playerSpeed);
-  maybeSpawnAmbientPulse(time);
+  echoZones.update(time);
+  collectEchoZones(time);
+  maybeSpawnEchoZone(time);
   particles.update(delta);
   rippleField.update(time, settings, preset, rippleSources, player.position, player.velocity, playerSpeed);
   pulseLights.update(
@@ -238,19 +254,109 @@ function addMovementWakeSource(position: THREE.Vector3, time: number, strength: 
   });
 }
 
-function maybeSpawnAmbientPulse(time: number): void {
-  if (time < nextAmbientPulseAt) return;
+function seedEchoZones(time: number): void {
+  const startingAngles = [Math.PI * 0.23, Math.PI * 0.92, -Math.PI * 0.46];
+  const startingRadii = [15, 27, 38];
 
-  const angle = Math.random() * Math.PI * 2;
-  const radius = 8 + Math.random() * preset.fieldRadius * 0.62;
-  const position = new THREE.Vector3(
-    Math.cos(angle) * radius,
-    0,
-    Math.sin(angle) * radius
+  for (let index = 0; index < ECHO_ZONE_INITIAL_COUNT; index += 1) {
+    const angle = startingAngles[index] ?? Math.random() * Math.PI * 2;
+    const radius = startingRadii[index] ?? ECHO_ZONE_MIN_PLAYER_DISTANCE + index * ECHO_ZONE_MIN_ZONE_DISTANCE;
+    if (!spawnEchoZoneAtPolar(time, angle, radius)) {
+      spawnEchoZone(time);
+    }
+  }
+  nextEchoZoneAt = time + ECHO_ZONE_SPAWN_INTERVAL_SECONDS;
+}
+
+function maybeSpawnEchoZone(time: number): void {
+  if (time < nextEchoZoneAt) return;
+  if (echoZones.getActiveCount() >= ECHO_ZONE_MAX_ACTIVE) {
+    nextEchoZoneAt = time + 1;
+    return;
+  }
+
+  const spawned = spawnEchoZone(time);
+  nextEchoZoneAt = time + (spawned ? ECHO_ZONE_SPAWN_INTERVAL_SECONDS : 1.2);
+}
+
+function spawnEchoZone(time: number): boolean {
+  const position = createEchoZonePosition();
+  if (!position) return false;
+  addEchoZoneAtPosition(position, time);
+  return true;
+}
+
+function spawnEchoZoneAtPolar(time: number, angle: number, radius: number): boolean {
+  const maxRadius = Math.max(
+    ECHO_ZONE_MIN_PLAYER_DISTANCE + 1,
+    preset.fieldRadius - PLAYER_BOUNDARY_PADDING - ECHO_ZONE_RADIUS
   );
+  const clampedRadius = THREE.MathUtils.clamp(radius, ECHO_ZONE_MIN_PLAYER_DISTANCE, maxRadius);
+  const position = new THREE.Vector3(
+    Math.cos(angle) * clampedRadius,
+    0,
+    Math.sin(angle) * clampedRadius
+  );
+  if (!echoZones.isPositionClear(position, ECHO_ZONE_MIN_ZONE_DISTANCE)) return false;
+
+  position.y = sampleFieldHeight(position.x, position.z) + 0.16;
+  addEchoZoneAtPosition(position, time);
+  return true;
+}
+
+function addEchoZoneAtPosition(position: THREE.Vector3, time: number): void {
+  echoZones.add(position, time, {
+    radius: ECHO_ZONE_RADIUS,
+    triggerRadius: ECHO_ZONE_TRIGGER_RADIUS,
+    burstStrength: ECHO_ZONE_BURST_STRENGTH,
+    discBurstRadius: ECHO_ZONE_DISC_BURST_RADIUS
+  });
+}
+
+function createEchoZonePosition(): THREE.Vector3 | null {
+  const maxRadius = Math.max(
+    ECHO_ZONE_MIN_PLAYER_DISTANCE + 1,
+    preset.fieldRadius - PLAYER_BOUNDARY_PADDING - ECHO_ZONE_RADIUS
+  );
+
+  for (let attempt = 0; attempt < ECHO_ZONE_SPAWN_ATTEMPTS; attempt += 1) {
+    const angle = Math.random() * Math.PI * 2;
+    const radius = ECHO_ZONE_MIN_PLAYER_DISTANCE + Math.random() * (maxRadius - ECHO_ZONE_MIN_PLAYER_DISTANCE);
+    const position = new THREE.Vector3(
+      Math.cos(angle) * radius,
+      0,
+      Math.sin(angle) * radius
+    );
+    const playerDistance = Math.hypot(position.x - player.position.x, position.z - player.position.z);
+    if (playerDistance < ECHO_ZONE_MIN_PLAYER_DISTANCE) continue;
+    if (!echoZones.isPositionClear(position, ECHO_ZONE_MIN_ZONE_DISTANCE)) continue;
+
+    position.y = sampleFieldHeight(position.x, position.z) + 0.16;
+    return position;
+  }
+
+  return null;
+}
+
+function collectEchoZones(time: number): void {
+  const triggeredZones = echoZones.collectAt(player.position);
+  for (const echo of triggeredZones) {
+    triggerEchoZone(echo, time);
+  }
+}
+
+function triggerEchoZone(echo: TriggeredEchoZone, time: number): void {
+  const position = echo.position.clone();
   position.y = sampleFieldHeight(position.x, position.z) + 0.45;
-  spawnPulse(position, 0.1 + Math.random() * 0.16, AMBIENT_PULSE_OPTIONS, time);
-  nextAmbientPulseAt = time + 1.6 + Math.random() * 2.2;
+
+  // Echoes are map pickups, but once collected they become ordinary pulse
+  // sources so the shader, lights, and HUD can reuse the existing wave path.
+  rippleSources.add(position, time, echo.burstStrength, ECHO_BURST_OPTIONS);
+
+  const particleCount = Math.max(0, Math.floor(
+    preset.burstParticleCount * settings.particleDensity * (0.58 + echo.burstStrength * 0.45)
+  ));
+  particles.spawnDiscBurst(position, particleCount, echo.burstStrength, echo.discBurstRadius);
 }
 
 function wireControls(): void {
@@ -562,7 +668,7 @@ function updateStats(delta: number, time: number): void {
   frameCount = 0;
   fpsAccumulatorSeconds = 0;
   statsLine.textContent = `${Math.round(measuredFps)} fps | ${rippleField.getInstanceCount().toLocaleString()} cubes | ${preset.particleBudget.toLocaleString()} particles`;
-  mediumLine.textContent = `${basePropagationSpeed.toFixed(1)} m/s | ${settings.waveMedium.effectiveDepth.toFixed(1)}m depth | ${activeSources.length} sources | newest ${newestRingRadius.toFixed(1)}m`;
+  mediumLine.textContent = `${basePropagationSpeed.toFixed(1)} m/s | ${settings.waveMedium.effectiveDepth.toFixed(1)}m depth | ${echoZones.getActiveCount()} echoes | ${activeSources.length} waves | newest ${newestRingRadius.toFixed(1)}m`;
 }
 
 function resize(): void {

@@ -6,13 +6,16 @@
 
 - Added TODO and spitball-ideas docs to separate concrete near-term work from
   loose visual, interaction, and engine experiments.
+- Added persistent collectible Echo zones that spawn around the arena, stay
+  alive until the player runs through them, then detonate into a wider ripple
+  and flat disc-shaped sparkle burst.
 
 ### Changed
 
 - Replaced the old global wave-speed slider with a medium-depth control that
   derives base propagation speed from `sqrt(g * depth)`, and added per-source
-  speed, width, damping, and direction metadata for manual, ambient, and wake
-  ripples, with a HUD readout for source count and newest ring radius.
+  speed, width, damping, and direction metadata for manual, Echo-triggered, and
+  wake ripples, with a HUD readout for source count and newest ring radius.
 - Renamed the medium-depth control to `Depth / Speed` and added a live derived
   `m/s` readout beside the slider so its effect is visible while tuning.
 - Increased sparkle alpha and shader color energy so particle clouds read
