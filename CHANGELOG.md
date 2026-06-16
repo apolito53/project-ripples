@@ -19,6 +19,9 @@
 - Replaced the Echo floor-circle marker with a hovering sparkle column so the
   collectible reads as part of the luminous field instead of a UI target, and no
   longer clips through displaced cubes.
+- Reworked Echo columns again to use real stacked point lights plus orbiting
+  pulse-style sparkles with subtle additive trails instead of a fake glowing
+  column surface.
 - Renamed the medium-depth control to `Depth / Speed` and added a live derived
   `m/s` readout beside the slider so its effect is visible while tuning.
 - Increased sparkle alpha and shader color energy so particle clouds read
