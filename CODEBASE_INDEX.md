@@ -33,8 +33,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
   wake deformation: `src/rippleField.ts`
 - Lifetime-pruned pulse/wake source list and shader uniform writer:
   `src/rippleSources.ts`
-- Persistent collectible Echo-column lights, orbiting sparkle trails, and
-  run-through trigger detection: `src/echoZones.ts`
+- Persistent collectible Echo-column lights, bright orb lights, orbiting sparkle
+  trails, and run-through trigger detection: `src/echoZones.ts`
 - Player sparkle aura, additive particle bursts, and wake trails:
   `src/particleVeil.ts`
 - Recent-pulse point light pool: `src/pulseLights.ts`
@@ -93,8 +93,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
   cooldown rather than a tiny gameplay cap. Dense movement wakes intentionally
   fade faster than manual pulses so the newest-first upload order does not
   churn through old rings during normal movement.
-- Echo zones are CPU-side gameplay markers with stacked point lights and
-  orbiting sparkle trails. They should not become shader sources until
+- Echo zones are CPU-side gameplay markers with stacked point lights, bright
+  orb lights, and orbiting sparkle trails. They should not become shader sources until
   collected, otherwise they turn back into ambient pulses with extra jewelry.
 - `Meltdown` is intentionally rude to weak GPUs. Keep it available, but do not
   tune the normal experience around it.

@@ -23,6 +23,7 @@ type EchoZoneVisual = EchoZoneOptions & {
   readonly lowerRing: THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>;
   readonly upperRing: THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>;
   readonly core: THREE.Mesh<THREE.IcosahedronGeometry, THREE.MeshBasicMaterial>;
+  readonly orbShell: THREE.Mesh<THREE.IcosahedronGeometry, THREE.MeshBasicMaterial>;
   readonly columnLights: readonly THREE.PointLight[];
   readonly sparkles: EchoOrbitSparkles;
 };
@@ -45,6 +46,8 @@ type EchoOrbitSparkles = {
 const BEAM_LIGHT_COLOR = 0x67ffe0;
 const RING_COLOR = 0x95a7ff;
 const CORE_COLOR = 0xffd36a;
+const ORB_LIGHT_COLOR = 0xffe08a;
+const ORB_SHELL_COLOR = 0xfff2c6;
 const MOTE_COLOR = 0x7dffd8;
 const COLUMN_HEIGHT = 7.4;
 const COLUMN_BASE_LIFT = 1.45;
@@ -107,16 +110,33 @@ export class EchoZoneField {
     const core = new THREE.Mesh(
       this.coreGeometry,
       new THREE.MeshBasicMaterial({
-        color: CORE_COLOR,
+        color: ORB_LIGHT_COLOR,
         transparent: true,
-        opacity: 0.68,
+        opacity: 0.92,
         depthWrite: false,
         blending: THREE.AdditiveBlending
       })
     );
-    core.name = "Echo unstable core";
+    core.name = "Echo bright inner orb";
     core.position.y = COLUMN_BASE_LIFT + COLUMN_HEIGHT * 0.5;
     object.add(core);
+
+    const orbShell = new THREE.Mesh(
+      this.coreGeometry,
+      new THREE.MeshBasicMaterial({
+        color: ORB_SHELL_COLOR,
+        transparent: true,
+        opacity: 0.34,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      })
+    );
+    orbShell.name = "Echo warm orb glow shell";
+    orbShell.position.y = core.position.y;
+    // The shell is still geometry, not a billboard, so the orb keeps a solid
+    // center while reading brighter from oblique camera angles.
+    orbShell.scale.setScalar(1.42);
+    object.add(orbShell);
 
     const columnLights = createColumnLights();
     for (const light of columnLights) {
@@ -140,6 +160,7 @@ export class EchoZoneField {
       lowerRing,
       upperRing,
       core,
+      orbShell,
       columnLights,
       sparkles
     });
@@ -154,18 +175,20 @@ export class EchoZoneField {
       const radiusPulse = 1 + pulse * 0.08;
 
       // The old marker was a translucent cylinder pretending to be a light
-      // column. These rings/core are just readable accents now; the actual
-      // column glow comes from the point lights below.
+      // column. These rings/shells are just readable accents now; the actual
+      // column and orb glow comes from the point lights below.
       zone.object.position.y = zone.position.y + Math.sin(age * 3 + zone.phase) * 0.045;
       zone.object.rotation.y = slowSpin * 0.2;
       zone.lowerRing.rotation.z = slowSpin * 0.9;
       zone.upperRing.rotation.z = -slowSpin * 1.25;
       zone.lowerRing.scale.setScalar(zone.columnRadius * radiusPulse);
       zone.upperRing.scale.setScalar(zone.columnRadius * (0.55 + pulse * 0.1));
-      zone.core.scale.setScalar(0.78 + pulse * 0.28);
+      zone.core.scale.setScalar(0.86 + pulse * 0.34);
+      zone.orbShell.scale.setScalar(1.2 + pulse * 0.5);
       zone.lowerRing.material.opacity = 0.38 + pulse * 0.28;
       zone.upperRing.material.opacity = 0.2 + pulse * 0.18;
-      zone.core.material.opacity = 0.38 + pulse * 0.34;
+      zone.core.material.opacity = 0.78 + pulse * 0.2;
+      zone.orbShell.material.opacity = 0.18 + pulse * 0.28;
 
       updateColumnLights(zone.columnLights, pulse);
       updateOrbitSparkles(zone.sparkles, age, pulse);
@@ -216,6 +239,7 @@ export class EchoZoneField {
     zone.lowerRing.material.dispose();
     zone.upperRing.material.dispose();
     zone.core.material.dispose();
+    zone.orbShell.material.dispose();
     for (const light of zone.columnLights) {
       light.dispose();
     }
@@ -229,13 +253,14 @@ export class EchoZoneField {
 function createColumnLights(): readonly THREE.PointLight[] {
   // Three real lights give the column volume without relying on a fake glowing
   // texture. Shadows stay off; moving point-light shadows would be far too rude
-  // with this many instanced cubes.
+  // with this many instanced cubes. The central orb light is intentionally the
+  // strongest so the collectible visibly paints nearby blocks.
   const lowerLight = new THREE.PointLight(BEAM_LIGHT_COLOR, 1.35, 13, 1.65);
   lowerLight.name = "Echo lower cube light";
   lowerLight.position.y = COLUMN_BASE_LIFT + 1.1;
 
-  const coreLight = new THREE.PointLight(CORE_COLOR, 1.75, 15, 1.55);
-  coreLight.name = "Echo warm core light";
+  const coreLight = new THREE.PointLight(ORB_LIGHT_COLOR, 2.35, 17, 1.45);
+  coreLight.name = "Echo bright orb light";
   coreLight.position.y = COLUMN_BASE_LIFT + COLUMN_HEIGHT * 0.5;
 
   const upperLight = new THREE.PointLight(RING_COLOR, 0.95, 12, 1.8);
@@ -249,8 +274,8 @@ function updateColumnLights(lights: readonly THREE.PointLight[], pulse: number):
   const [lowerLight, coreLight, upperLight] = lights;
   lowerLight.intensity = 1.05 + pulse * 0.78;
   lowerLight.distance = 11.5 + pulse * 3.5;
-  coreLight.intensity = 1.45 + pulse * 1.15;
-  coreLight.distance = 13 + pulse * 4;
+  coreLight.intensity = 2.25 + pulse * 1.85;
+  coreLight.distance = 16 + pulse * 5.5;
   upperLight.intensity = 0.68 + pulse * 0.7;
   upperLight.distance = 10 + pulse * 3;
 }

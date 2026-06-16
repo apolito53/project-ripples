@@ -22,6 +22,8 @@
 - Reworked Echo columns again to use real stacked point lights plus orbiting
   pulse-style sparkles with subtle additive trails instead of a fake glowing
   column surface.
+- Brightened the Echo core into a readable inner orb and strengthened its point
+  light so collected zones cast warmer light onto nearby cubes.
 - Renamed the medium-depth control to `Depth / Speed` and added a live derived
   `m/s` readout beside the slider so its effect is visible while tuning.
 - Increased sparkle alpha and shader color energy so particle clouds read
