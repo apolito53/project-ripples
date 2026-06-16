@@ -69,20 +69,30 @@ has a quick visual sanity check.
 
 ```powershell
 npm.cmd install
+npm.cmd run debug:logs
 npm.cmd run typecheck
 npm.cmd run build
 npm.cmd run validate
 ```
 
 Local runs emit focused debug logs for Echo detonations, including particle
-burst counts and frame timings around collection. In DevTools, call
-`window.__rippleDebugDump()` to inspect the retained log. Set
-`localStorage.rippleDebug = "0"` or open `?debug=0` to silence it; use
-`?debug=1` to force it back on.
+burst counts and frame timings around collection. Console lines include inline
+JSON so Chrome automation can read the numbers instead of collapsed `Object`
+payloads. In DevTools, call `window.__rippleDebugDump()` to inspect the retained
+in-page log.
+
+For file-backed local logging, run `npm.cmd run debug:logs` in a second terminal.
+The browser batches debug events to
+`http://127.0.0.1:5184/__ripple_debug_log`; the receiver appends JSONL under
+`logs/` and exposes `http://127.0.0.1:5184/tail?limit=80` for quick inspection.
+Set `localStorage.rippleDebug = "0"` or open `?debug=0` to silence browser
+debug logging. Set `localStorage.rippleLogServer = "0"` or open `?logServer=0`
+to keep console logging on while disabling the local receiver writes.
 
 Dedicated ports:
 
 - Dev server: `5183`
+- Debug log receiver: `5184`
 - Preview server: `4183`
 
 Project planning:
@@ -98,8 +108,9 @@ Project planning:
 - `src/rippleSources.ts` keeps the lifetime-pruned pulse and movement-wake list
   sent to the GPU, including per-source speed, width, damping, lifetime, and
   optional direction metadata.
-- `src/debugLog.ts` owns the local diagnostic log buffer and console logging
-  used to profile Echo detonations and frame spikes.
+- `src/debugLog.ts` owns the local diagnostic log buffer, inline JSON console
+  logging, and optional batching to the `5184` debug receiver used to profile
+  Echo detonations and frame spikes.
 - `src/echoZones.ts` owns persistent collectible Echo-column lights, bright orb
   lights, volumetric-style orb mist, orbiting sparkle trails, and their
   run-through trigger/despawn burst detection.

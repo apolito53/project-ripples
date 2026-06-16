@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5183 --strictPort",
+    "debug:logs": "node scripts/debug-log-server.mjs",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4183 --strictPort",
     "typecheck": "tsc --noEmit",

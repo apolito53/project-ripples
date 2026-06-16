@@ -17,6 +17,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Windows start: `.\start.ps1`
 - Linux/Ubuntu start: `chmod +x ./start.sh && ./start.sh`
 - Dev server: `npm.cmd run dev`
+- Debug log receiver: `npm.cmd run debug:logs` on `127.0.0.1:5184`
 - Type check: `npm.cmd run typecheck`
 - Production build: `npm.cmd run build`
 - Standard validation: `npm.cmd run validate`
@@ -43,6 +44,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Runtime settings shape/defaults: `src/labSettings.ts`
 - Wave-medium settings and derived propagation speed: `src/waveMedium.ts`
 - Local diagnostic log buffer and console profiler hooks: `src/debugLog.ts`
+- Tiny local debug receiver and JSONL writer: `scripts/debug-log-server.mjs`
 - Procedural field height sampler: `src/terrain.ts`
 - Prioritized concrete follow-up work: `TODO.md`
 - Loose visual, interaction, and engine ideas: `SPITBALL_IDEAS.md`
@@ -102,6 +104,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Echo detonation logging defaults on for local hosts and writes a retained
   ring buffer to `window.__rippleDebugLog`; use `window.__rippleDebugDump()` in
   DevTools after a freeze to inspect the last collection and frame timings.
+  Console lines include inline JSON because Chrome automation collapses object
+  arguments. When `npm.cmd run debug:logs` is listening, the browser also
+  batches records to `127.0.0.1:5184` and appends JSONL under `logs/`.
 - `Meltdown` is intentionally rude to weak GPUs. Keep it available, but do not
   tune the normal experience around it.
 - Pointer-lock behavior should be browser-tested in Chrome, not trusted from a

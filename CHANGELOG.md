@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added a tiny local Ripple debug-log receiver on `127.0.0.1:5184` with JSONL
+  writes under `logs/`, plus readable `/tail`, `/events`, and `/health` views.
 - Added local Echo detonation debug logging with a retained
   `window.__rippleDebugDump()` buffer, particle burst timings, visual burst
   timings, and short post-collection frame timing samples.
@@ -15,6 +17,8 @@
 
 ### Changed
 
+- Changed Ripple debug console output to include inline JSON payloads so Chrome
+  automation sees timing numbers instead of collapsed `Object` arguments.
 - Replaced the old global wave-speed slider with a medium-depth control that
   derives base propagation speed from `sqrt(g * depth)`, and added per-source
   speed, width, damping, and direction metadata for manual, Echo-triggered, and

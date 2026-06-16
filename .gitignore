@@ -3,3 +3,4 @@ dist/
 .vite/
 *.log
 *.local
+logs/**/*.jsonl
