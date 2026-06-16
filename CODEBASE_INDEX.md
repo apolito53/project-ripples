@@ -107,6 +107,10 @@ Purpose: compact map for the standalone ripple-field visual lab.
   Console lines include inline JSON because Chrome automation collapses object
   arguments. When `npm.cmd run debug:logs` is listening, the browser also
   batches records to `127.0.0.1:5184` and appends JSONL under `logs/`.
+- `ParticleVeil` keeps active motes packed into the leading buffer range and
+  sets Three.js draw/update ranges from `activeCount`; preserve that shape when
+  changing particle lifetimes or replacement behavior, or dead budget slots will
+  quietly become render cost again.
 - `Meltdown` is intentionally rude to weak GPUs. Keep it available, but do not
   tune the normal experience around it.
 - Pointer-lock behavior should be browser-tested in Chrome, not trusted from a

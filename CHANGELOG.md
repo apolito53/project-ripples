@@ -17,6 +17,9 @@
 
 ### Changed
 
+- Packed live particles into a contiguous draw/update range so Three.js stops
+  pushing the entire particle budget through the renderer when fewer motes are
+  alive during Echo detonation fallout.
 - Changed Ripple debug console output to include inline JSON payloads so Chrome
   automation sees timing numbers instead of collapsed `Object` arguments.
 - Replaced the old global wave-speed slider with a medium-depth control that

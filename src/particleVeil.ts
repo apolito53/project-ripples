@@ -21,14 +21,21 @@ export class ParticleVeil {
   private readonly lifetimes: Float32Array;
   private readonly baseSizes: Float32Array;
   private readonly baseAlphas: Float32Array;
-  private readonly activeIndices: Int32Array;
-  private readonly activeSlots: Int32Array;
+  private readonly positionAttribute: THREE.BufferAttribute;
+  private readonly colorAttribute: THREE.BufferAttribute;
+  private readonly alphaAttribute: THREE.BufferAttribute;
+  private readonly sizeAttribute: THREE.BufferAttribute;
+  private readonly twinkleAttribute: THREE.BufferAttribute;
   private activeCount = 0;
+  private readonly capacity: number;
+  // Live particles stay packed into [0, activeCount). When the buffer is full,
+  // cursor rotates through that packed range and replaces older motes.
   private cursor = 0;
   private elapsedSeconds = 0;
   private auraAccumulator = 0;
 
   constructor(scene: THREE.Scene, budget: number, pixelRatio: number) {
+    this.capacity = budget;
     this.positions = new Float32Array(budget * 3);
     this.velocities = new Float32Array(budget * 3);
     this.colors = new Float32Array(budget * 3);
@@ -39,16 +46,19 @@ export class ParticleVeil {
     this.lifetimes = new Float32Array(budget);
     this.baseSizes = new Float32Array(budget);
     this.baseAlphas = new Float32Array(budget);
-    this.activeIndices = new Int32Array(budget);
-    this.activeSlots = new Int32Array(budget);
-    this.activeSlots.fill(-1);
 
     this.geometry = new THREE.BufferGeometry();
-    this.geometry.setAttribute("position", createDynamicAttribute(this.positions, 3));
-    this.geometry.setAttribute("color", createDynamicAttribute(this.colors, 3));
-    this.geometry.setAttribute("aAlpha", createDynamicAttribute(this.alphas, 1));
-    this.geometry.setAttribute("aSize", createDynamicAttribute(this.sizes, 1));
-    this.geometry.setAttribute("aTwinkle", createDynamicAttribute(this.twinkles, 1));
+    this.positionAttribute = createDynamicAttribute(this.positions, 3);
+    this.colorAttribute = createDynamicAttribute(this.colors, 3);
+    this.alphaAttribute = createDynamicAttribute(this.alphas, 1);
+    this.sizeAttribute = createDynamicAttribute(this.sizes, 1);
+    this.twinkleAttribute = createDynamicAttribute(this.twinkles, 1);
+    this.geometry.setAttribute("position", this.positionAttribute);
+    this.geometry.setAttribute("color", this.colorAttribute);
+    this.geometry.setAttribute("aAlpha", this.alphaAttribute);
+    this.geometry.setAttribute("aSize", this.sizeAttribute);
+    this.geometry.setAttribute("aTwinkle", this.twinkleAttribute);
+    this.geometry.setDrawRange(0, 0);
 
     this.material = new THREE.ShaderMaterial({
       transparent: true,
@@ -124,7 +134,7 @@ export class ParticleVeil {
       this.emitCloudParticle(center, strength, 1, 1, 0.9);
     }
 
-    this.markDirty();
+    this.markDirty(true);
   }
 
   spawnDiscBurst(center: THREE.Vector3, count: number, strength: number, radius: number): void {
@@ -132,7 +142,7 @@ export class ParticleVeil {
       this.emitDiscParticle(center, strength, radius);
     }
 
-    this.markDirty();
+    this.markDirty(true);
   }
 
   spawnAura(center: THREE.Vector3, delta: number, movementStrength: number): void {
@@ -149,7 +159,7 @@ export class ParticleVeil {
       this.emitCloudParticle(center, 0.12 + movementStrength * 0.16, 0.7, 0.92, 0.05);
     }
 
-    this.markDirty();
+    this.markDirty(true);
   }
 
   spawnWake(center: THREE.Vector3, movementStrength: number): void {
@@ -160,15 +170,15 @@ export class ParticleVeil {
   update(delta: number): void {
     this.elapsedSeconds += delta;
     this.material.uniforms.uTime.value = this.elapsedSeconds;
+    let compactedParticleData = false;
 
-    for (let activeSlot = this.activeCount - 1; activeSlot >= 0; activeSlot -= 1) {
-      const index = this.activeIndices[activeSlot];
+    for (let index = this.activeCount - 1; index >= 0; index -= 1) {
       const age = this.ages[index] + delta;
       this.ages[index] = age;
 
       if (age >= this.lifetimes[index]) {
-        this.seedDormantParticle(index);
-        this.deactivateParticle(activeSlot);
+        this.deactivateParticle(index);
+        compactedParticleData = true;
         continue;
       }
 
@@ -188,7 +198,7 @@ export class ParticleVeil {
       this.sizes[index] = this.baseSizes[index] * (0.92 + Math.sin(normalizedAge * Math.PI) * 0.08);
     }
 
-    this.markDirty();
+    this.markDirty(compactedParticleData);
   }
 
   dispose(): void {
@@ -217,9 +227,7 @@ export class ParticleVeil {
     alphaScale: number,
     verticalLift: number
   ): void {
-    const index = this.cursor;
-    this.cursor = (this.cursor + 1) % this.alphas.length;
-    this.activateParticle(index);
+    const index = this.allocateParticleSlot();
 
     const angle = Math.random() * Math.PI * 2;
     // Keep bursts cloud-like: many tiny motes suspended near the source,
@@ -254,9 +262,7 @@ export class ParticleVeil {
   }
 
   private emitDiscParticle(center: THREE.Vector3, strength: number, discRadius: number): void {
-    const index = this.cursor;
-    this.cursor = (this.cursor + 1) % this.alphas.length;
-    this.activateParticle(index);
+    const index = this.allocateParticleSlot();
 
     const angle = Math.random() * Math.PI * 2;
     // Echo detonations should read like a flat pressure disc racing across the
@@ -288,30 +294,52 @@ export class ParticleVeil {
     this.twinkles[index] = Math.random();
   }
 
-  private markDirty(): void {
-    this.geometry.attributes.position.needsUpdate = true;
-    this.geometry.attributes.color.needsUpdate = true;
-    this.geometry.attributes.aAlpha.needsUpdate = true;
-    this.geometry.attributes.aSize.needsUpdate = true;
-    this.geometry.attributes.aTwinkle.needsUpdate = true;
+  private markDirty(includeStaticParticleData: boolean): void {
+    this.geometry.setDrawRange(0, this.activeCount);
+    markAttributeRange(this.positionAttribute, this.activeCount * 3);
+    markAttributeRange(this.alphaAttribute, this.activeCount);
+    markAttributeRange(this.sizeAttribute, this.activeCount);
+
+    if (!includeStaticParticleData) return;
+    markAttributeRange(this.colorAttribute, this.activeCount * 3);
+    markAttributeRange(this.twinkleAttribute, this.activeCount);
   }
 
-  private activateParticle(index: number): void {
-    if (this.activeSlots[index] !== -1) return;
-    this.activeSlots[index] = this.activeCount;
-    this.activeIndices[this.activeCount] = index;
-    this.activeCount += 1;
+  private allocateParticleSlot(): number {
+    if (this.activeCount < this.capacity) {
+      const index = this.activeCount;
+      this.activeCount += 1;
+      return index;
+    }
+
+    const index = this.cursor;
+    this.cursor = (this.cursor + 1) % Math.max(1, this.activeCount);
+    return index;
   }
 
-  private deactivateParticle(activeSlot: number): void {
-    const index = this.activeIndices[activeSlot];
+  private deactivateParticle(index: number): void {
+    const lastIndex = this.activeCount - 1;
+    if (index !== lastIndex) {
+      this.copyParticleSlot(lastIndex, index);
+    }
+
+    this.seedDormantParticle(lastIndex);
     this.activeCount -= 1;
-    const movedIndex = this.activeIndices[this.activeCount];
-    this.activeSlots[index] = -1;
+    this.cursor = this.activeCount > 0 ? this.cursor % this.activeCount : 0;
+    this.geometry.setDrawRange(0, this.activeCount);
+  }
 
-    if (activeSlot >= this.activeCount) return;
-    this.activeIndices[activeSlot] = movedIndex;
-    this.activeSlots[movedIndex] = activeSlot;
+  private copyParticleSlot(fromIndex: number, toIndex: number): void {
+    copyVec3(this.positions, fromIndex, toIndex);
+    copyVec3(this.velocities, fromIndex, toIndex);
+    copyVec3(this.colors, fromIndex, toIndex);
+    this.alphas[toIndex] = this.alphas[fromIndex];
+    this.sizes[toIndex] = this.sizes[fromIndex];
+    this.twinkles[toIndex] = this.twinkles[fromIndex];
+    this.ages[toIndex] = this.ages[fromIndex];
+    this.lifetimes[toIndex] = this.lifetimes[fromIndex];
+    this.baseSizes[toIndex] = this.baseSizes[fromIndex];
+    this.baseAlphas[toIndex] = this.baseAlphas[fromIndex];
   }
 }
 
@@ -324,4 +352,19 @@ function createDynamicAttribute(array: Float32Array, itemSize: number): THREE.Bu
   // Higher particle caps keep the GPU vertex budget high, while this hint tells
   // Three these buffers are expected to be rewritten as particles move.
   return new THREE.BufferAttribute(array, itemSize).setUsage(THREE.DynamicDrawUsage);
+}
+
+function markAttributeRange(attribute: THREE.BufferAttribute, componentCount: number): void {
+  attribute.clearUpdateRanges();
+  if (componentCount <= 0) return;
+  attribute.addUpdateRange(0, componentCount);
+  attribute.needsUpdate = true;
+}
+
+function copyVec3(array: Float32Array, fromIndex: number, toIndex: number): void {
+  const fromOffset = fromIndex * 3;
+  const toOffset = toIndex * 3;
+  array[toOffset] = array[fromOffset];
+  array[toOffset + 1] = array[fromOffset + 1];
+  array[toOffset + 2] = array[fromOffset + 2];
 }
