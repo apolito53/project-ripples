@@ -33,7 +33,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
   wake deformation: `src/rippleField.ts`
 - Lifetime-pruned pulse/wake source list and shader uniform writer:
   `src/rippleSources.ts`
-- Persistent collectible Echo-zone markers and run-through trigger detection:
+- Persistent collectible Echo-column markers and run-through trigger detection:
   `src/echoZones.ts`
 - Player sparkle aura, additive particle bursts, and wake trails:
   `src/particleVeil.ts`
@@ -73,7 +73,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Tune visual density or GPU pressure: `src/qualityPresets.ts`
 - Change ripple math, cube shape, directional water-like movement response,
   tint, or glow: `src/rippleField.ts`
-- Change Echo-zone spawn count, trigger radius, marker visuals, or collection
+- Change Echo-zone spawn count, trigger radius, column visuals, or collection
   behavior: `src/echoZones.ts` and `src/main.ts`
 - Change particles, wake behavior, or burst count: `src/particleVeil.ts` and
   `src/main.ts`
@@ -93,9 +93,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
   cooldown rather than a tiny gameplay cap. Dense movement wakes intentionally
   fade faster than manual pulses so the newest-first upload order does not
   churn through old rings during normal movement.
-- Echo zones are CPU-side gameplay markers. They should not become shader
-  sources until collected, otherwise they turn back into ambient pulses with
-  extra jewelry.
+- Echo zones are CPU-side gameplay markers with hovering column visuals. They
+  should not become shader sources until collected, otherwise they turn back
+  into ambient pulses with extra jewelry.
 - `Meltdown` is intentionally rude to weak GPUs. Keep it available, but do not
   tune the normal experience around it.
 - Pointer-lock behavior should be browser-tested in Chrome, not trusted from a

@@ -16,6 +16,9 @@
   derives base propagation speed from `sqrt(g * depth)`, and added per-source
   speed, width, damping, and direction metadata for manual, Echo-triggered, and
   wake ripples, with a HUD readout for source count and newest ring radius.
+- Replaced the Echo floor-circle marker with a hovering sparkle column so the
+  collectible reads as part of the luminous field instead of a UI target, and no
+  longer clips through displaced cubes.
 - Renamed the medium-depth control to `Depth / Speed` and added a live derived
   `m/s` readout beside the slider so its effect is visible while tuning.
 - Increased sparkle alpha and shader color energy so particle clouds read

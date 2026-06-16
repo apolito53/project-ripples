@@ -38,7 +38,7 @@ Open `http://127.0.0.1:5183`.
 The avatar is clamped inside the circular arena edge.
 Manual pulses have a short shared cooldown so held keys or rapid clicks do not
 flood the field.
-Glowing Echo zones spawn around the arena and wait until the avatar runs
+Sparkling Echo columns spawn around the arena and wait until the avatar runs
 through them, then detonate into a wider pulse and flat disc burst of sparks.
 Movement behaves like a small body pushing through water: the shader forms a
 pressed fabric depression, local bow/wake displacement, and small raised rim
@@ -89,7 +89,7 @@ Project planning:
 - `src/rippleSources.ts` keeps the lifetime-pruned pulse and movement-wake list
   sent to the GPU, including per-source speed, width, damping, lifetime, and
   optional direction metadata.
-- `src/echoZones.ts` owns persistent collectible Echo-zone markers and their
+- `src/echoZones.ts` owns persistent collectible Echo-column markers and their
   run-through trigger detection.
 - `src/waveMedium.ts` defines the medium settings and derived propagation speed.
 - `src/particleVeil.ts` owns the player sparkle aura, additive glitter-cloud
