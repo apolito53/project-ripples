@@ -21,11 +21,9 @@ type EchoZoneVisual = EchoZoneOptions & {
   readonly phase: number;
   readonly columnRadius: number;
   readonly object: THREE.Group;
-  readonly lowerRing: THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>;
-  readonly upperRing: THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>;
   readonly core: THREE.Mesh<THREE.IcosahedronGeometry, THREE.MeshBasicMaterial>;
-  readonly orbShell: THREE.Mesh<THREE.IcosahedronGeometry, THREE.MeshBasicMaterial>;
-  readonly orbMist: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>;
+  readonly orbShell: THREE.Mesh<THREE.OctahedronGeometry, THREE.MeshBasicMaterial>;
+  readonly orbMist: THREE.Mesh<THREE.OctahedronGeometry, THREE.ShaderMaterial>;
   readonly columnLights: readonly THREE.PointLight[];
   readonly sparkles: EchoOrbitSparkles;
 };
@@ -95,6 +93,7 @@ export class EchoZoneField {
   private readonly scene: THREE.Scene;
   private readonly ringGeometry = new THREE.TorusGeometry(1, 0.018, 8, 112);
   private readonly coreGeometry = new THREE.IcosahedronGeometry(0.42, 2);
+  private readonly diamondGeometry = new THREE.OctahedronGeometry(1, 1);
   private readonly mistGeometry = new THREE.SphereGeometry(1, 32, 20);
   private readonly zones: EchoZoneVisual[] = [];
   private readonly collectBursts: EchoCollectBurst[] = [];
@@ -110,38 +109,6 @@ export class EchoZoneField {
     object.name = `Echo zone ${this.nextId}`;
     object.position.copy(position);
     const columnRadius = Math.max(0.85, options.radius * 0.34);
-
-    const lowerRing = new THREE.Mesh(
-      this.ringGeometry,
-      new THREE.MeshBasicMaterial({
-        color: RING_COLOR,
-        transparent: true,
-        opacity: 0.58,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending
-      })
-    );
-    lowerRing.name = "Echo floating lower halo";
-    lowerRing.position.y = COLUMN_BASE_LIFT;
-    lowerRing.rotation.x = -Math.PI / 2;
-    lowerRing.scale.setScalar(columnRadius);
-    object.add(lowerRing);
-
-    const upperRing = new THREE.Mesh(
-      this.ringGeometry,
-      new THREE.MeshBasicMaterial({
-        color: BEAM_LIGHT_COLOR,
-        transparent: true,
-        opacity: 0.3,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending
-      })
-    );
-    upperRing.name = "Echo floating upper halo";
-    upperRing.position.y = COLUMN_BASE_LIFT + COLUMN_HEIGHT;
-    upperRing.rotation.x = -Math.PI / 2;
-    upperRing.scale.setScalar(columnRadius * 0.58);
-    object.add(upperRing);
 
     const core = new THREE.Mesh(
       this.coreGeometry,
@@ -159,31 +126,31 @@ export class EchoZoneField {
     object.add(core);
 
     const orbShell = new THREE.Mesh(
-      this.coreGeometry,
+      this.diamondGeometry,
       new THREE.MeshBasicMaterial({
         color: ORB_SHELL_COLOR,
         transparent: true,
-        opacity: 0.34,
+        opacity: 0.28,
         depthWrite: false,
         blending: THREE.AdditiveBlending
       })
     );
-    orbShell.name = "Echo warm orb glow shell";
+    orbShell.name = "Echo elongated diamond glow shell";
     orbShell.position.y = core.position.y;
-    // The shell is still geometry, not a billboard, so the orb keeps a solid
-    // center while reading brighter from oblique camera angles.
-    orbShell.scale.setScalar(1.42);
+    // The old horizontal halo read like a UI target. This faceted, stretched
+    // shell keeps the collectible obvious while pushing the silhouette toward
+    // a floating diamond of light around the core.
+    orbShell.scale.set(columnRadius * 0.62, columnRadius * 2.95, columnRadius * 0.62);
     orbShell.renderOrder = 4;
     object.add(orbShell);
 
-    const orbMist = new THREE.Mesh(this.mistGeometry, createOrbMistMaterial());
-    orbMist.name = "Echo volumetric orb mist";
+    const orbMist = new THREE.Mesh(this.diamondGeometry, createOrbMistMaterial());
+    orbMist.name = "Echo vertical diamond mist";
     orbMist.position.y = core.position.y;
     orbMist.renderOrder = 2;
-    // This is a fake volume: one soft shader shell stretched around the orb.
-    // It gives the light a cloud to live inside without the cost and sorting
-    // fuss of real volumetric raymarching.
-    orbMist.scale.set(columnRadius * 1.7, columnRadius * 1.1, columnRadius * 1.7);
+    // Still a fake volume, just a taller faceted one: a single additive shell
+    // gives the orb a cloud of light without expensive volumetric raymarching.
+    orbMist.scale.set(columnRadius * 0.95, columnRadius * 3.75, columnRadius * 0.95);
     object.add(orbMist);
 
     const columnLights = createColumnLights();
@@ -205,8 +172,6 @@ export class EchoZoneField {
       phase: Math.random() * Math.PI * 2,
       columnRadius,
       object,
-      lowerRing,
-      upperRing,
       core,
       orbShell,
       orbMist,
@@ -221,33 +186,32 @@ export class EchoZoneField {
       const age = time - zone.spawnTime;
       const pulse = Math.sin(age * 2.4 + zone.phase) * 0.5 + 0.5;
       const slowSpin = age * 0.45 + zone.phase;
-      const radiusPulse = 1 + pulse * 0.08;
 
-      // The old marker was a translucent cylinder pretending to be a light
-      // column. These rings/shells are just readable accents now; the actual
-      // column and orb glow comes from the point lights below.
+      // The marker is now light-first instead of ring-first: the actual column
+      // glow comes from point lights and the faceted diamond shell, with no
+      // horizontal target circles fighting the aesthetic.
       zone.object.position.y = zone.position.y + Math.sin(age * 3 + zone.phase) * 0.045;
       zone.object.rotation.y = slowSpin * 0.2;
-      zone.lowerRing.rotation.z = slowSpin * 0.9;
-      zone.upperRing.rotation.z = -slowSpin * 1.25;
-      zone.lowerRing.scale.setScalar(zone.columnRadius * radiusPulse);
-      zone.upperRing.scale.setScalar(zone.columnRadius * (0.55 + pulse * 0.1));
       zone.core.scale.setScalar(0.86 + pulse * 0.34);
-      zone.orbShell.scale.setScalar(1.2 + pulse * 0.5);
-      zone.orbMist.rotation.y = -slowSpin * 0.35;
+      zone.orbShell.rotation.y = -slowSpin * 0.55;
+      zone.orbShell.rotation.z = Math.sin(age * 0.9 + zone.phase) * 0.08;
+      zone.orbShell.scale.set(
+        zone.columnRadius * (0.54 + pulse * 0.18),
+        zone.columnRadius * (2.75 + pulse * 0.7),
+        zone.columnRadius * (0.54 + pulse * 0.18)
+      );
+      zone.orbMist.rotation.y = -slowSpin * 0.42;
       zone.orbMist.rotation.x = Math.sin(age * 0.55 + zone.phase) * 0.07;
       zone.orbMist.scale.set(
-        zone.columnRadius * (1.55 + pulse * 0.28),
-        zone.columnRadius * (1.02 + pulse * 0.18),
-        zone.columnRadius * (1.55 + pulse * 0.28)
+        zone.columnRadius * (0.9 + pulse * 0.22),
+        zone.columnRadius * (3.45 + pulse * 0.78),
+        zone.columnRadius * (0.9 + pulse * 0.22)
       );
-      zone.lowerRing.material.opacity = 0.38 + pulse * 0.28;
-      zone.upperRing.material.opacity = 0.2 + pulse * 0.18;
       zone.core.material.opacity = 0.78 + pulse * 0.2;
-      zone.orbShell.material.opacity = 0.18 + pulse * 0.28;
+      zone.orbShell.material.opacity = 0.13 + pulse * 0.24;
       zone.orbMist.material.uniforms.uTime.value = age + zone.phase;
       zone.orbMist.material.uniforms.uPulse.value = pulse;
-      zone.orbMist.material.uniforms.uOpacity.value = 0.34 + pulse * 0.24;
+      zone.orbMist.material.uniforms.uOpacity.value = 0.28 + pulse * 0.22;
 
       updateColumnLights(zone.columnLights, pulse);
       updateOrbitSparkles(zone.sparkles, age, pulse);
@@ -310,6 +274,7 @@ export class EchoZoneField {
     }
     this.ringGeometry.dispose();
     this.coreGeometry.dispose();
+    this.diamondGeometry.dispose();
     this.mistGeometry.dispose();
   }
 
@@ -471,8 +436,6 @@ export class EchoZoneField {
   private removeAt(index: number): void {
     const [zone] = this.zones.splice(index, 1);
     zone.object.removeFromParent();
-    zone.lowerRing.material.dispose();
-    zone.upperRing.material.dispose();
     zone.core.material.dispose();
     zone.orbShell.material.dispose();
     zone.orbMist.material.dispose();

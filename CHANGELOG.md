@@ -17,6 +17,8 @@
 
 ### Changed
 
+- Removed the circular live Echo halo rings and stretched the orb glow/mist
+  into a taller faceted diamond silhouette around the core.
 - Packed live particles into a contiguous draw/update range so Three.js stops
   pushing the entire particle budget through the renderer when fewer motes are
   alive during Echo detonation fallout.
