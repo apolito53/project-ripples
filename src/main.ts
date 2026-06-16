@@ -34,6 +34,10 @@ const MOVEMENT_RIPPLE_MIN_DISTANCE = 0.9;
 const MOVEMENT_RIPPLE_INTERVAL_SECONDS = 0.22;
 const MOVEMENT_RIPPLE_MIN_STRENGTH = 0.05;
 const MOVEMENT_RIPPLE_MAX_STRENGTH = 0.12;
+// Movement wakes are emitted frequently, so they fade sooner than manual
+// pulses. That keeps normal motion below the fixed shader upload budget and
+// prevents old rings from swapping in and out as newer wake stamps appear.
+const MOVEMENT_RIPPLE_LIFETIME_SECONDS = 2.8;
 const MOVEMENT_RIPPLE_STERN_OFFSET = 0.9;
 const MOVEMENT_RIPPLE_SHOULDER_OFFSET = 1.15;
 const MOVEMENT_RIPPLE_SHOULDER_BACKSET = 1.95;
@@ -229,7 +233,8 @@ function addMovementWakeSource(position: THREE.Vector3, time: number, strength: 
     kind: "wake",
     speedMultiplier: settings.waveMedium.wakeSpeedMultiplier,
     widthMultiplier: 1.45,
-    dampingMultiplier: 0.72
+    dampingMultiplier: 0.72,
+    lifetimeSeconds: MOVEMENT_RIPPLE_LIFETIME_SECONDS
   });
 }
 

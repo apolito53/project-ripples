@@ -27,6 +27,9 @@
   minimum camera pitch for flatter field-level views.
 - Fixed movement wake sources so lingering wake ripples stay stamped into the
   field instead of rotating behind the player like a live velocity cone.
+- Smoothed propagating movement wakes by giving dense wake stamps shorter
+  per-source lifetimes and uploading shader sources newest-first, so old rings
+  do not flicker in and out of the fixed WebGL uniform budget.
 - Replaced the 8-ripple gameplay cap with lifetime-based ripple retention and a
   short manual pulse cooldown, so older rings age out naturally instead of
   disappearing as soon as new pulses are spammed.

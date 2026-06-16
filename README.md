@@ -41,7 +41,9 @@ flood the field.
 Movement behaves like a small body pushing through water: the shader forms a
 pressed fabric depression, local bow/wake displacement, and small raised rim
 around the avatar, while stamped wake ripples remain in the field and propagate
-outward after the avatar moves on.
+outward after the avatar moves on. Dense movement wake stamps use a shorter
+per-source lifetime than manual pulses so they can trail smoothly without
+forcing older rings to flicker through the shader's fixed upload budget.
 
 The tuning panel changes quality, ripple height/radius, Depth / Speed, particle
 density, and bloom strength while the scene is running. Depth / Speed changes
@@ -82,8 +84,8 @@ Project planning:
 - `src/rippleField.ts` owns the circular shader-displaced instanced cube field,
   including the directional bow/wake deformation around the moving avatar.
 - `src/rippleSources.ts` keeps the lifetime-pruned pulse and movement-wake list
-  sent to the GPU, including per-source speed, width, damping, and optional
-  direction metadata.
+  sent to the GPU, including per-source speed, width, damping, lifetime, and
+  optional direction metadata.
 - `src/waveMedium.ts` defines the medium settings and derived propagation speed.
 - `src/particleVeil.ts` owns the player sparkle aura, additive glitter-cloud
   bursts, and wake trails.
@@ -92,6 +94,7 @@ Project planning:
   pointer-lock behavior.
 
 The CPU decides where the player, manual pulses, ambient pulses, and movement
-wakes are. Manual pulse input is cooldown-gated, sources age out by lifetime,
-and propagation speed comes from the current wave medium. The GPU handles cube
-lift, stretch, tint, and emissive glow from the current source uniforms.
+wakes are. Manual pulse input is cooldown-gated, sources age out by per-source
+lifetime, and propagation speed comes from the current wave medium. The GPU
+handles cube lift, stretch, tint, and emissive glow from the current source
+uniforms.

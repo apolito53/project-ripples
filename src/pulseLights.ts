@@ -40,7 +40,10 @@ export class PulseLightRig {
       }
 
       const age = time - source.startTime;
-      const fade = Math.max(0, 1 - age / RIPPLE_LIFETIME_SECONDS);
+      const lifetime = Number.isFinite(source.lifetimeSeconds)
+        ? source.lifetimeSeconds
+        : RIPPLE_LIFETIME_SECONDS;
+      const fade = Math.max(0, 1 - age / lifetime);
       const pulse = Math.sin(age * 9) * 0.5 + 0.5;
       const speedMultiplier = Number.isFinite(source.speedMultiplier) ? source.speedMultiplier : 1;
       light.color.copy(LIGHT_COLORS[index % LIGHT_COLORS.length]);

@@ -54,8 +54,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 4. Cooldown-gated clicks, `Space`, denser movement wake spacing, and ambient
    timers add ripple sources.
 5. `RippleField` builds cube instances inside the circular arena and sends
-   active source/metadata uniforms plus wave-medium values to the shader; cube
-   matrices stay static while the GPU animates lift/stretch/glow.
+   active source/metadata/lifetime uniforms plus wave-medium values to the
+   shader; cube matrices stay static while the GPU animates lift/stretch/glow.
 6. `ParticleVeil` animates the player sparkle aura, burst clouds, and wake motes.
 7. `PulseLightRig` assigns recent pulses to point lights.
 8. The HUD reports FPS, instance counts, base propagation speed, active source
@@ -81,8 +81,10 @@ Purpose: compact map for the standalone ripple-field visual lab.
   loading here unless the project deliberately changes shape.
 - Keep the CPU/GPU contract small: pulse uniforms, player position, and settings
   go in; shader animation comes out. The shader still has a fixed upload budget,
-  but ripple retention should be governed by lifetime and input cooldown rather
-  than a tiny gameplay cap.
+  but ripple retention should be governed by per-source lifetime and input
+  cooldown rather than a tiny gameplay cap. Dense movement wakes intentionally
+  fade faster than manual pulses so the newest-first upload order does not
+  churn through old rings during normal movement.
 - `Meltdown` is intentionally rude to weak GPUs. Keep it available, but do not
   tune the normal experience around it.
 - Pointer-lock behavior should be browser-tested in Chrome, not trusted from a

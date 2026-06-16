@@ -8,7 +8,6 @@ import { getBasePropagationSpeedMetersPerSecond } from "./waveMedium";
 const CUBE_FOOTPRINT = 0.68;
 const BASE_CUBE_HEIGHT = 0.08;
 const RIPPLE_WIDTH = 1.45;
-const RIPPLE_LIFETIME = 7.5;
 
 type Uniform<T> = {
   value: T;
@@ -28,6 +27,7 @@ type RippleShaderUniforms = {
   readonly uRippleCount: Uniform<number>;
   readonly uRipples: Uniform<THREE.Vector4[]>;
   readonly uRippleMetadata: Uniform<THREE.Vector4[]>;
+  readonly uRippleLifetimes: Uniform<Float32Array>;
 };
 
 type RippleShader = {
@@ -46,6 +46,7 @@ export class RippleField {
     { length: MAX_SHADER_RIPPLE_SOURCES },
     () => new THREE.Vector4(1, 1, 1, -99)
   );
+  private readonly rippleLifetimeUniforms = new Float32Array(MAX_SHADER_RIPPLE_SOURCES);
   private mesh: THREE.InstancedMesh | null = null;
   private material: THREE.MeshStandardMaterial | null = null;
   private geometry: THREE.BoxGeometry | null = null;
@@ -139,7 +140,12 @@ export class RippleField {
     if (!this.shader) return;
 
     const basePropagationSpeed = getBasePropagationSpeedMetersPerSecond(settings.waveMedium);
-    const activeCount = sources.writeUniforms(this.rippleUniforms, this.rippleMetadataUniforms, time);
+    const activeCount = sources.writeUniforms(
+      this.rippleUniforms,
+      this.rippleMetadataUniforms,
+      this.rippleLifetimeUniforms,
+      time
+    );
     this.shader.uniforms.uTime.value = time;
     this.shader.uniforms.uPlayerPosition.value.copy(playerPosition);
     this.shader.uniforms.uPlayerVelocity.value.set(playerVelocity.x, playerVelocity.z);
@@ -187,6 +193,7 @@ export class RippleField {
       shader.uniforms.uRippleCount = { value: 0 };
       shader.uniforms.uRipples = { value: this.rippleUniforms };
       shader.uniforms.uRippleMetadata = { value: this.rippleMetadataUniforms };
+      shader.uniforms.uRippleLifetimes = { value: this.rippleLifetimeUniforms };
 
       rippleShader.vertexShader = shader.vertexShader
         .replace(
@@ -205,24 +212,26 @@ export class RippleField {
           uniform int uRippleCount;
           uniform vec4 uRipples[${MAX_SHADER_RIPPLE_SOURCES}];
           uniform vec4 uRippleMetadata[${MAX_SHADER_RIPPLE_SOURCES}];
+          uniform float uRippleLifetimes[${MAX_SHADER_RIPPLE_SOURCES}];
           attribute vec3 instanceFieldPosition;
           attribute float instancePhase;
           attribute vec3 instanceTint;
           varying float vRippleGlow;
           varying vec3 vRippleTint;
 
-          float rippleRing(vec4 ripple, vec4 metadata, vec2 cellPosition) {
+          float rippleRing(vec4 ripple, vec4 metadata, float lifetime, vec2 cellPosition) {
             vec2 origin = ripple.xy;
             float startTime = ripple.z;
             float strength = ripple.w;
             float age = max(0.0, uTime - startTime);
+            float fadeLifetime = max(0.2, lifetime);
             float propagationSpeed = uBasePropagationSpeed * max(0.05, metadata.x);
             float distanceToCell = distance(origin, cellPosition);
             float front = age * propagationSpeed;
             float width = ${RIPPLE_WIDTH.toFixed(2)} * max(0.2, metadata.y) +
               age * uMediumDispersion * 0.16;
             float ring = exp(-pow((distanceToCell - front) / max(0.12, width), 2.0));
-            float fade = max(0.0, 1.0 - age / ${RIPPLE_LIFETIME.toFixed(2)});
+            float fade = max(0.0, 1.0 - age / fadeLifetime);
             float damping = exp(-age * uMediumDamping * max(0.05, metadata.z)) *
               exp(-distanceToCell * uMediumDamping * max(0.05, metadata.z) * 0.018);
             float directionalSource = step(-10.0, metadata.w);
@@ -289,7 +298,8 @@ export class RippleField {
             }
             vec4 ripple = uRipples[index];
             vec4 metadata = uRippleMetadata[index];
-            sourceWave += rippleRing(ripple, metadata, cellPosition);
+            float lifetime = uRippleLifetimes[index];
+            sourceWave += rippleRing(ripple, metadata, lifetime, cellPosition);
           }
 
           // The player presses into the field now. The center becomes a trough,
@@ -329,7 +339,7 @@ export class RippleField {
         );
     };
 
-    material.customProgramCacheKey = () => "ripple-field-shader-v5";
+    material.customProgramCacheKey = () => "ripple-field-shader-v6";
     return material;
   }
 
