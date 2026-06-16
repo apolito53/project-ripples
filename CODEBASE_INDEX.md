@@ -34,7 +34,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Lifetime-pruned pulse/wake source list and shader uniform writer:
   `src/rippleSources.ts`
 - Persistent collectible Echo-column lights, bright orb lights, volumetric-style
-  orb mist, orbiting sparkle trails, and run-through trigger detection:
+  orb mist, orbiting sparkle trails, and run-through collection bursts:
   `src/echoZones.ts`
 - Player sparkle aura, additive particle bursts, and wake trails:
   `src/particleVeil.ts`
@@ -95,9 +95,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
   fade faster than manual pulses so the newest-first upload order does not
   churn through old rings during normal movement.
 - Echo zones are CPU-side gameplay markers with stacked point lights, bright
-  orb lights, volumetric-style orb mist, and orbiting sparkle trails. They
-  should not become shader sources until collected, otherwise they turn back
-  into ambient pulses with extra jewelry.
+  orb lights, volumetric-style orb mist, orbiting sparkle trails, and short
+  collection bursts. They should not become shader sources until collected,
+  otherwise they turn back into ambient pulses with extra jewelry.
 - `Meltdown` is intentionally rude to weak GPUs. Keep it available, but do not
   tune the normal experience around it.
 - Pointer-lock behavior should be browser-tested in Chrome, not trusted from a

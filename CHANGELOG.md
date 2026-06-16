@@ -26,6 +26,9 @@
   light so collected zones cast warmer light onto nearby cubes.
 - Added a soft volumetric-style mist shell around Echo orbs so their light reads
   like a glowing cloud instead of only a solid lantern.
+- Added a short Echo collection burst with a core flash, expanding rings,
+  mist shock, light pop, and shard motes so collected zones detonate instead of
+  simply disappearing.
 - Renamed the medium-depth control to `Depth / Speed` and added a live derived
   `m/s` readout beside the slider so its effect is visible while tuning.
 - Increased sparkle alpha and shader color energy so particle clouds read

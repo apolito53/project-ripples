@@ -339,7 +339,7 @@ function createEchoZonePosition(): THREE.Vector3 | null {
 }
 
 function collectEchoZones(time: number): void {
-  const triggeredZones = echoZones.collectAt(player.position);
+  const triggeredZones = echoZones.collectAt(player.position, time);
   for (const echo of triggeredZones) {
     triggerEchoZone(echo, time);
   }

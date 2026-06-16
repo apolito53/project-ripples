@@ -41,7 +41,8 @@ flood the field.
 Sparkling Echo columns spawn around the arena as real local light sources with
 a bright inner orb, a soft volumetric-style glow cloud, orbiting motes, and
 subtle trails. They wait until the avatar runs through them, then detonate into
-a wider pulse and flat disc burst of sparks.
+a wider pulse, a flat disc burst of sparks, and a short local orb-shatter
+effect.
 Movement behaves like a small body pushing through water: the shader forms a
 pressed fabric depression, local bow/wake displacement, and small raised rim
 around the avatar, while stamped wake ripples remain in the field and propagate
@@ -93,7 +94,7 @@ Project planning:
   optional direction metadata.
 - `src/echoZones.ts` owns persistent collectible Echo-column lights, bright orb
   lights, volumetric-style orb mist, orbiting sparkle trails, and their
-  run-through trigger detection.
+  run-through trigger/despawn burst detection.
 - `src/waveMedium.ts` defines the medium settings and derived propagation speed.
 - `src/particleVeil.ts` owns the player sparkle aura, additive glitter-cloud
   bursts, flat Echo disc bursts, and wake trails.
