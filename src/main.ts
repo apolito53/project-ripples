@@ -44,6 +44,9 @@ const ECHO_ZONE_DISC_BURST_RADIUS = 8.6;
 const ECHO_DETONATION_FRAME_LOG_SECONDS = 2;
 const ECHO_DEBUG_FRAME_SAMPLE_SECONDS = 0.22;
 const ECHO_DEBUG_SLOW_FRAME_MS = 24;
+const GLOBAL_FRAME_HITCH_MS = 45;
+const GLOBAL_FRAME_HITCH_LOG_INTERVAL_SECONDS = 0.75;
+const GLOBAL_FRAME_HITCH_WARMUP_SECONDS = 1;
 const MOVEMENT_RIPPLE_MIN_SPEED = 2.2;
 const MOVEMENT_RIPPLE_MIN_DISTANCE = 0.9;
 const MOVEMENT_RIPPLE_INTERVAL_SECONDS = 0.22;
@@ -94,6 +97,7 @@ let lastMovementRippleAt = -Infinity;
 let movementWakeSide = 1;
 let echoDebugFrameWatchUntil = -Infinity;
 let echoDebugLastFrameLogAt = -Infinity;
+let lastGlobalFrameHitchLogAt = -Infinity;
 const lastMovementRipplePosition = new THREE.Vector3(Infinity, 0, Infinity);
 const movementDirection = new THREE.Vector3();
 const movementShoulder = new THREE.Vector3();
@@ -155,7 +159,8 @@ seedEchoZones(clock.elapsedTime);
 renderer.setAnimationLoop(animate);
 
 function animate(): void {
-  const delta = Math.min(clock.getDelta(), 1 / 24);
+  const rawDelta = clock.getDelta();
+  const delta = Math.min(rawDelta, 1 / 24);
   const time = clock.elapsedTime;
   const frameStartedAt = performance.now();
   player.update(delta);
@@ -183,6 +188,7 @@ function animate(): void {
   } else {
     renderer.render(scene, camera);
   }
+  logGlobalFrameHitch(time, delta, rawDelta, frameStartedAt);
   logEchoDetonationFrame(time, delta, frameStartedAt);
 }
 
@@ -745,6 +751,41 @@ function logEchoDetonationFrame(time: number, delta: number, frameStartedAt: num
     quality: preset.id,
     bloomStrength: roundMetric(settings.bloomStrength)
   }, isSlow ? "warn" : "debug");
+}
+
+function logGlobalFrameHitch(time: number, delta: number, rawDelta: number, frameStartedAt: number): void {
+  if (time < GLOBAL_FRAME_HITCH_WARMUP_SECONDS) return;
+  if (document.visibilityState !== "visible") return;
+
+  const frameMs = performance.now() - frameStartedAt;
+  const rawClockDeltaMs = rawDelta * 1000;
+  const isSlowFrame = frameMs >= GLOBAL_FRAME_HITCH_MS || rawClockDeltaMs >= GLOBAL_FRAME_HITCH_MS;
+  if (!isSlowFrame) return;
+
+  // Echo detonation logging only watches a short post-collection window. This
+  // broader breadcrumb catches stalls from render pressure, shader compilation,
+  // or any other visible-tab hitch that lands outside that narrow window.
+  if (time - lastGlobalFrameHitchLogAt < GLOBAL_FRAME_HITCH_LOG_INTERVAL_SECONDS) return;
+
+  lastGlobalFrameHitchLogAt = time;
+  const activeSources = rippleSources.getActiveSources(time);
+  debugEvent("frame.hitch", "Global frame hitch", {
+    time: roundMetric(time),
+    frameMs: roundMetric(frameMs),
+    rawClockDeltaMs: roundMetric(rawClockDeltaMs),
+    cappedClockDeltaMs: roundMetric(delta * 1000),
+    echoWatchActive: time <= echoDebugFrameWatchUntil,
+    activeEchoes: echoZones.getActiveCount(),
+    activeVisualBursts: echoZones.getCollectBurstCount(),
+    activeParticles: particles.getActiveCount(),
+    particleBudget: preset.particleBudget,
+    activeRippleSources: activeSources.length,
+    quality: preset.id,
+    bloomStrength: roundMetric(settings.bloomStrength),
+    particleDensity: roundMetric(settings.particleDensity),
+    rendererPixelRatio: roundMetric(getPixelRatio()),
+    visibilityState: document.visibilityState
+  }, "warn");
 }
 
 function resize(): void {

@@ -75,11 +75,13 @@ npm.cmd run build
 npm.cmd run validate
 ```
 
-Local runs emit focused debug logs for Echo detonations, including particle
-burst counts and frame timings around collection. Console lines include inline
-JSON so Chrome automation can read the numbers instead of collapsed `Object`
-payloads. In DevTools, call `window.__rippleDebugDump()` to inspect the retained
-in-page log.
+Local runs emit debug logs for Echo detonations, including particle burst counts
+and frame timings around collection. They also report broader `frame.hitch`
+warnings when a frame stalls outside the Echo watch window, with both raw clock
+delta and capped simulation delta so render pauses do not hide behind physics
+smoothing. Console lines include inline JSON so Chrome automation can read the
+numbers instead of collapsed `Object` payloads. In DevTools, call
+`window.__rippleDebugDump()` to inspect the retained in-page log.
 
 For file-backed local logging, run `npm.cmd run debug:logs` in a second terminal.
 The browser batches debug events to

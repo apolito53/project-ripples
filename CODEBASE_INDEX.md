@@ -101,12 +101,13 @@ Purpose: compact map for the standalone ripple-field visual lab.
   orb lights, vertical diamond-style orb mist, orbiting sparkle trails, and
   short collection bursts. They should not become shader sources until
   collected, otherwise they turn back into ambient pulses with extra jewelry.
-- Echo detonation logging defaults on for local hosts and writes a retained
-  ring buffer to `window.__rippleDebugLog`; use `window.__rippleDebugDump()` in
-  DevTools after a freeze to inspect the last collection and frame timings.
-  Console lines include inline JSON because Chrome automation collapses object
-  arguments. When `npm.cmd run debug:logs` is listening, the browser also
-  batches records to `127.0.0.1:5184` and appends JSONL under `logs/`.
+- Echo detonation and global frame-hitch logging defaults on for local hosts
+  and writes a retained ring buffer to `window.__rippleDebugLog`; use
+  `window.__rippleDebugDump()` in DevTools after a freeze to inspect the last
+  collection, slow frames, raw clock gaps, and frame timings. Console lines
+  include inline JSON because Chrome automation collapses object arguments.
+  When `npm.cmd run debug:logs` is listening, the browser also batches records
+  to `127.0.0.1:5184` and appends JSONL under `logs/`.
 - `ParticleVeil` keeps active motes packed into the leading buffer range and
   sets Three.js draw/update ranges from `activeCount`; preserve that shape when
   changing particle lifetimes or replacement behavior, or dead budget slots will

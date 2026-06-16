@@ -9,6 +9,9 @@
 - Added local Echo detonation debug logging with a retained
   `window.__rippleDebugDump()` buffer, particle burst timings, visual burst
   timings, and short post-collection frame timing samples.
+- Added broader `frame.hitch` logging so freezes outside Echo detonation
+  windows still record raw clock gaps, capped simulation delta, quality,
+  particle pressure, and active ripple-source counts.
 - Added TODO and spitball-ideas docs to separate concrete near-term work from
   loose visual, interaction, and engine experiments.
 - Added persistent collectible Echo zones that spawn around the arena, stay
