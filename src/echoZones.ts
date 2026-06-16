@@ -24,6 +24,7 @@ type EchoZoneVisual = EchoZoneOptions & {
   readonly upperRing: THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>;
   readonly core: THREE.Mesh<THREE.IcosahedronGeometry, THREE.MeshBasicMaterial>;
   readonly orbShell: THREE.Mesh<THREE.IcosahedronGeometry, THREE.MeshBasicMaterial>;
+  readonly orbMist: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>;
   readonly columnLights: readonly THREE.PointLight[];
   readonly sparkles: EchoOrbitSparkles;
 };
@@ -62,6 +63,7 @@ export class EchoZoneField {
   private readonly scene: THREE.Scene;
   private readonly ringGeometry = new THREE.TorusGeometry(1, 0.018, 8, 112);
   private readonly coreGeometry = new THREE.IcosahedronGeometry(0.42, 2);
+  private readonly mistGeometry = new THREE.SphereGeometry(1, 32, 20);
   private readonly zones: EchoZoneVisual[] = [];
   private nextId = 1;
 
@@ -119,6 +121,7 @@ export class EchoZoneField {
     );
     core.name = "Echo bright inner orb";
     core.position.y = COLUMN_BASE_LIFT + COLUMN_HEIGHT * 0.5;
+    core.renderOrder = 3;
     object.add(core);
 
     const orbShell = new THREE.Mesh(
@@ -136,7 +139,18 @@ export class EchoZoneField {
     // The shell is still geometry, not a billboard, so the orb keeps a solid
     // center while reading brighter from oblique camera angles.
     orbShell.scale.setScalar(1.42);
+    orbShell.renderOrder = 4;
     object.add(orbShell);
+
+    const orbMist = new THREE.Mesh(this.mistGeometry, createOrbMistMaterial());
+    orbMist.name = "Echo volumetric orb mist";
+    orbMist.position.y = core.position.y;
+    orbMist.renderOrder = 2;
+    // This is a fake volume: one soft shader shell stretched around the orb.
+    // It gives the light a cloud to live inside without the cost and sorting
+    // fuss of real volumetric raymarching.
+    orbMist.scale.set(columnRadius * 1.7, columnRadius * 1.1, columnRadius * 1.7);
+    object.add(orbMist);
 
     const columnLights = createColumnLights();
     for (const light of columnLights) {
@@ -161,6 +175,7 @@ export class EchoZoneField {
       upperRing,
       core,
       orbShell,
+      orbMist,
       columnLights,
       sparkles
     });
@@ -185,10 +200,20 @@ export class EchoZoneField {
       zone.upperRing.scale.setScalar(zone.columnRadius * (0.55 + pulse * 0.1));
       zone.core.scale.setScalar(0.86 + pulse * 0.34);
       zone.orbShell.scale.setScalar(1.2 + pulse * 0.5);
+      zone.orbMist.rotation.y = -slowSpin * 0.35;
+      zone.orbMist.rotation.x = Math.sin(age * 0.55 + zone.phase) * 0.07;
+      zone.orbMist.scale.set(
+        zone.columnRadius * (1.55 + pulse * 0.28),
+        zone.columnRadius * (1.02 + pulse * 0.18),
+        zone.columnRadius * (1.55 + pulse * 0.28)
+      );
       zone.lowerRing.material.opacity = 0.38 + pulse * 0.28;
       zone.upperRing.material.opacity = 0.2 + pulse * 0.18;
       zone.core.material.opacity = 0.78 + pulse * 0.2;
       zone.orbShell.material.opacity = 0.18 + pulse * 0.28;
+      zone.orbMist.material.uniforms.uTime.value = age + zone.phase;
+      zone.orbMist.material.uniforms.uPulse.value = pulse;
+      zone.orbMist.material.uniforms.uOpacity.value = 0.34 + pulse * 0.24;
 
       updateColumnLights(zone.columnLights, pulse);
       updateOrbitSparkles(zone.sparkles, age, pulse);
@@ -231,6 +256,7 @@ export class EchoZoneField {
     }
     this.ringGeometry.dispose();
     this.coreGeometry.dispose();
+    this.mistGeometry.dispose();
   }
 
   private removeAt(index: number): void {
@@ -240,6 +266,7 @@ export class EchoZoneField {
     zone.upperRing.material.dispose();
     zone.core.material.dispose();
     zone.orbShell.material.dispose();
+    zone.orbMist.material.dispose();
     for (const light of zone.columnLights) {
       light.dispose();
     }
@@ -278,6 +305,97 @@ function updateColumnLights(lights: readonly THREE.PointLight[], pulse: number):
   coreLight.distance = 16 + pulse * 5.5;
   upperLight.intensity = 0.68 + pulse * 0.7;
   upperLight.distance = 10 + pulse * 3;
+}
+
+function createOrbMistMaterial(): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthTest: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    uniforms: {
+      uTime: { value: 0 },
+      uPulse: { value: 0.5 },
+      uOpacity: { value: 0.42 },
+      uCoreColor: { value: new THREE.Color(ORB_SHELL_COLOR) },
+      uEdgeColor: { value: new THREE.Color(BEAM_LIGHT_COLOR) }
+    },
+    vertexShader: `
+      varying vec3 vLocalPosition;
+      varying vec3 vViewNormal;
+      varying vec3 vViewPosition;
+
+      void main() {
+        vLocalPosition = position;
+        vViewNormal = normalize(normalMatrix * normal);
+        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+        vViewPosition = mvPosition.xyz;
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform float uPulse;
+      uniform float uOpacity;
+      uniform vec3 uCoreColor;
+      uniform vec3 uEdgeColor;
+      varying vec3 vLocalPosition;
+      varying vec3 vViewNormal;
+      varying vec3 vViewPosition;
+
+      float hash(vec3 value) {
+        value = fract(value * 0.3183099 + vec3(0.11, 0.17, 0.23));
+        value *= 17.0;
+        return fract(value.x * value.y * value.z * (value.x + value.y + value.z));
+      }
+
+      float valueNoise(vec3 value) {
+        vec3 cell = floor(value);
+        vec3 local = fract(value);
+        local = local * local * (3.0 - 2.0 * local);
+
+        float c000 = hash(cell + vec3(0.0, 0.0, 0.0));
+        float c100 = hash(cell + vec3(1.0, 0.0, 0.0));
+        float c010 = hash(cell + vec3(0.0, 1.0, 0.0));
+        float c110 = hash(cell + vec3(1.0, 1.0, 0.0));
+        float c001 = hash(cell + vec3(0.0, 0.0, 1.0));
+        float c101 = hash(cell + vec3(1.0, 0.0, 1.0));
+        float c011 = hash(cell + vec3(0.0, 1.0, 1.0));
+        float c111 = hash(cell + vec3(1.0, 1.0, 1.0));
+
+        float x00 = mix(c000, c100, local.x);
+        float x10 = mix(c010, c110, local.x);
+        float x01 = mix(c001, c101, local.x);
+        float x11 = mix(c011, c111, local.x);
+        float y0 = mix(x00, x10, local.y);
+        float y1 = mix(x01, x11, local.y);
+        return mix(y0, y1, local.z);
+      }
+
+      void main() {
+        vec3 viewDir = normalize(-vViewPosition);
+        float facing = clamp(dot(normalize(vViewNormal), viewDir), 0.0, 1.0);
+
+        // The mesh is only a shell, so the shader sells the volume: high alpha
+        // near the view-facing center, broken up by animated value noise so the
+        // glow reads like drifting mist instead of a perfect glass bubble.
+        float softBody = pow(facing, 1.85);
+        float softRim = pow(1.0 - facing, 3.0) * 0.22;
+        float verticalFade = smoothstep(1.0, 0.05, abs(vLocalPosition.y));
+        float slowWisp = valueNoise(vLocalPosition * 3.2 + vec3(0.0, uTime * 0.16, 0.0));
+        float fineWisp = valueNoise(vLocalPosition * 7.4 + vec3(uTime * 0.07, -uTime * 0.11, uTime * 0.05));
+        float wisps = smoothstep(0.2, 0.9, slowWisp * 0.68 + fineWisp * 0.32);
+        float pulseGlow = 0.82 + uPulse * 0.42;
+        float alpha = (softBody * (0.28 + wisps * 0.72) + softRim * wisps) *
+          verticalFade * uOpacity * pulseGlow;
+
+        if (alpha < 0.006) discard;
+
+        vec3 color = mix(uEdgeColor, uCoreColor, clamp(softBody + wisps * 0.24, 0.0, 1.0));
+        gl_FragColor = vec4(color * (1.1 + softBody * 1.6 + wisps * 0.6), alpha);
+      }
+    `
+  });
 }
 
 function createOrbitSparkles(radius: number, height: number, baseLift: number): EchoOrbitSparkles {
