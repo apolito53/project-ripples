@@ -4,6 +4,7 @@ import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { PlayerRig } from "./controls";
+import { debugEvent, debugMeasure, roundMetric, vectorPayload } from "./debugLog";
 import { EchoZoneField, type TriggeredEchoZone } from "./echoZones";
 import { cloneDefaultSettings, getQualityPreset } from "./labSettings";
 import { ParticleVeil } from "./particleVeil";
@@ -40,6 +41,9 @@ const ECHO_ZONE_MIN_PLAYER_DISTANCE = 11;
 const ECHO_ZONE_MIN_ZONE_DISTANCE = 12;
 const ECHO_ZONE_BURST_STRENGTH = 0.76;
 const ECHO_ZONE_DISC_BURST_RADIUS = 8.6;
+const ECHO_DETONATION_FRAME_LOG_SECONDS = 2;
+const ECHO_DEBUG_FRAME_SAMPLE_SECONDS = 0.22;
+const ECHO_DEBUG_SLOW_FRAME_MS = 24;
 const MOVEMENT_RIPPLE_MIN_SPEED = 2.2;
 const MOVEMENT_RIPPLE_MIN_DISTANCE = 0.9;
 const MOVEMENT_RIPPLE_INTERVAL_SECONDS = 0.22;
@@ -88,6 +92,8 @@ let measuredFps = 60;
 let nextEchoZoneAt = 0.8;
 let lastMovementRippleAt = -Infinity;
 let movementWakeSide = 1;
+let echoDebugFrameWatchUntil = -Infinity;
+let echoDebugLastFrameLogAt = -Infinity;
 const lastMovementRipplePosition = new THREE.Vector3(Infinity, 0, Infinity);
 const movementDirection = new THREE.Vector3();
 const movementShoulder = new THREE.Vector3();
@@ -151,6 +157,7 @@ renderer.setAnimationLoop(animate);
 function animate(): void {
   const delta = Math.min(clock.getDelta(), 1 / 24);
   const time = clock.elapsedTime;
+  const frameStartedAt = performance.now();
   player.update(delta);
   const playerSpeed = player.getSpeed();
   avatar.update(delta, player.position, playerSpeed);
@@ -176,6 +183,7 @@ function animate(): void {
   } else {
     renderer.render(scene, camera);
   }
+  logEchoDetonationFrame(time, delta, frameStartedAt);
 }
 
 function spawnPulse(
@@ -340,23 +348,69 @@ function createEchoZonePosition(): THREE.Vector3 | null {
 
 function collectEchoZones(time: number): void {
   const triggeredZones = echoZones.collectAt(player.position, time);
+  if (triggeredZones.length > 0) {
+    echoDebugFrameWatchUntil = Math.max(echoDebugFrameWatchUntil, time + ECHO_DETONATION_FRAME_LOG_SECONDS);
+    debugEvent("echo.collect", "Collected Echo zones this frame", {
+      time: roundMetric(time),
+      triggeredCount: triggeredZones.length,
+      playerPosition: vectorPayload(player.position),
+      activeEchoesAfterCollect: echoZones.getActiveCount(),
+      activeVisualBursts: echoZones.getCollectBurstCount(),
+      particleActiveBeforeGameBurst: particles.getActiveCount(),
+      quality: preset.id,
+      particleBudget: preset.particleBudget,
+      particleDensity: roundMetric(settings.particleDensity)
+    });
+  }
+
   for (const echo of triggeredZones) {
     triggerEchoZone(echo, time);
   }
 }
 
 function triggerEchoZone(echo: TriggeredEchoZone, time: number): void {
+  const detonationStartedAt = performance.now();
   const position = echo.position.clone();
   position.y = sampleFieldHeight(position.x, position.z) + 0.45;
 
   // Echoes are map pickups, but once collected they become ordinary pulse
   // sources so the shader, lights, and HUD can reuse the existing wave path.
-  rippleSources.add(position, time, echo.burstStrength, ECHO_BURST_OPTIONS);
+  debugMeasure(
+    "echo.collect",
+    "Added Echo ripple source",
+    () => rippleSources.add(position, time, echo.burstStrength, ECHO_BURST_OPTIONS),
+    {
+      time: roundMetric(time),
+      strength: echo.burstStrength,
+      position: vectorPayload(position)
+    },
+    2
+  );
 
   const particleCount = Math.max(0, Math.floor(
     preset.burstParticleCount * settings.particleDensity * (0.58 + echo.burstStrength * 0.45)
   ));
-  particles.spawnDiscBurst(position, particleCount, echo.burstStrength, echo.discBurstRadius);
+  const activeBeforeParticles = particles.getActiveCount();
+  debugMeasure(
+    "echo.collect",
+    "Spawned Echo disc burst particles",
+    () => particles.spawnDiscBurst(position, particleCount, echo.burstStrength, echo.discBurstRadius),
+    {
+      requestedParticleCount: particleCount,
+      activeParticlesBefore: activeBeforeParticles,
+      particleBudget: preset.particleBudget,
+      quality: preset.id,
+      particleDensity: roundMetric(settings.particleDensity),
+      discBurstRadius: echo.discBurstRadius
+    },
+    10
+  );
+  debugEvent("echo.collect", "Finished Echo detonation gameplay burst", {
+    totalMs: roundMetric(performance.now() - detonationStartedAt),
+    activeParticlesAfter: particles.getActiveCount(),
+    activeVisualBursts: echoZones.getCollectBurstCount(),
+    activeRippleSources: rippleSources.getActiveSources(time).length
+  });
 }
 
 function wireControls(): void {
@@ -669,6 +723,28 @@ function updateStats(delta: number, time: number): void {
   fpsAccumulatorSeconds = 0;
   statsLine.textContent = `${Math.round(measuredFps)} fps | ${rippleField.getInstanceCount().toLocaleString()} cubes | ${preset.particleBudget.toLocaleString()} particles`;
   mediumLine.textContent = `${basePropagationSpeed.toFixed(1)} m/s | ${settings.waveMedium.effectiveDepth.toFixed(1)}m depth | ${echoZones.getActiveCount()} echoes | ${activeSources.length} waves | newest ${newestRingRadius.toFixed(1)}m`;
+}
+
+function logEchoDetonationFrame(time: number, delta: number, frameStartedAt: number): void {
+  if (time > echoDebugFrameWatchUntil) return;
+
+  const frameMs = performance.now() - frameStartedAt;
+  const shouldSample = time - echoDebugLastFrameLogAt >= ECHO_DEBUG_FRAME_SAMPLE_SECONDS;
+  const isSlow = frameMs >= ECHO_DEBUG_SLOW_FRAME_MS;
+  if (!shouldSample && !isSlow) return;
+
+  echoDebugLastFrameLogAt = time;
+  debugEvent("echo.frame", "Frame timing during Echo detonation window", {
+    time: roundMetric(time),
+    frameMs: roundMetric(frameMs),
+    clockDeltaMs: roundMetric(delta * 1000),
+    activeEchoes: echoZones.getActiveCount(),
+    activeVisualBursts: echoZones.getCollectBurstCount(),
+    activeParticles: particles.getActiveCount(),
+    activeRippleSources: rippleSources.getActiveSources(time).length,
+    quality: preset.id,
+    bloomStrength: roundMetric(settings.bloomStrength)
+  }, isSlow ? "warn" : "debug");
 }
 
 function resize(): void {

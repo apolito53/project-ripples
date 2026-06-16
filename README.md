@@ -74,6 +74,12 @@ npm.cmd run build
 npm.cmd run validate
 ```
 
+Local runs emit focused debug logs for Echo detonations, including particle
+burst counts and frame timings around collection. In DevTools, call
+`window.__rippleDebugDump()` to inspect the retained log. Set
+`localStorage.rippleDebug = "0"` or open `?debug=0` to silence it; use
+`?debug=1` to force it back on.
+
 Dedicated ports:
 
 - Dev server: `5183`
@@ -92,6 +98,8 @@ Project planning:
 - `src/rippleSources.ts` keeps the lifetime-pruned pulse and movement-wake list
   sent to the GPU, including per-source speed, width, damping, lifetime, and
   optional direction metadata.
+- `src/debugLog.ts` owns the local diagnostic log buffer and console logging
+  used to profile Echo detonations and frame spikes.
 - `src/echoZones.ts` owns persistent collectible Echo-column lights, bright orb
   lights, volumetric-style orb mist, orbiting sparkle trails, and their
   run-through trigger/despawn burst detection.

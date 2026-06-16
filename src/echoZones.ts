@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { debugEvent, debugMeasure, roundMetric, vectorPayload } from "./debugLog";
 
 export type EchoZoneOptions = {
   readonly radius: number;
@@ -97,6 +98,7 @@ export class EchoZoneField {
   private readonly mistGeometry = new THREE.SphereGeometry(1, 32, 20);
   private readonly zones: EchoZoneVisual[] = [];
   private readonly collectBursts: EchoCollectBurst[] = [];
+  private lastBurstSlowFrameLogAt = -Infinity;
   private nextId = 1;
 
   constructor(scene: THREE.Scene) {
@@ -262,6 +264,16 @@ export class EchoZoneField {
       const distance = Math.hypot(playerPosition.x - zone.position.x, playerPosition.z - zone.position.z);
       if (distance > zone.triggerRadius) continue;
 
+      debugEvent("echo.collect", "Echo zone entered trigger radius", {
+        id: zone.id,
+        time: roundMetric(time),
+        distance: roundMetric(distance),
+        triggerRadius: zone.triggerRadius,
+        activeZonesBefore: this.zones.length,
+        activeBurstsBefore: this.collectBursts.length,
+        position: vectorPayload(zone.position)
+      });
+
       triggered.push({
         position: zone.position.clone(),
         burstStrength: zone.burstStrength,
@@ -276,6 +288,10 @@ export class EchoZoneField {
 
   getActiveCount(): number {
     return this.zones.length;
+  }
+
+  getCollectBurstCount(): number {
+    return this.collectBursts.length;
   }
 
   isPositionClear(position: THREE.Vector3, clearance: number): boolean {
@@ -298,6 +314,7 @@ export class EchoZoneField {
   }
 
   private spawnCollectBurst(zone: EchoZoneVisual, time: number): void {
+    const spawnStartedAt = performance.now();
     const object = new THREE.Group();
     object.name = `Echo collect burst ${zone.id}`;
     object.position.copy(zone.position);
@@ -340,7 +357,16 @@ export class EchoZoneField {
     crownRing.renderOrder = 8;
     object.add(crownRing);
 
-    const shardCloud = createCollectBurstShards(zone.columnRadius, orbHeight);
+    const shardCloud = debugMeasure(
+      "echo.collect",
+      "Created Echo collection shard buffers",
+      () => createCollectBurstShards(zone.columnRadius, orbHeight),
+      {
+        id: zone.id,
+        shardCount: COLLECT_BURST_MOTE_COUNT
+      },
+      4
+    );
     object.add(shardCloud.points);
 
     const burstLight = new THREE.PointLight(ORB_LIGHT_COLOR, 8, 22, 1.35);
@@ -367,9 +393,20 @@ export class EchoZoneField {
       shardBaseSizes: shardCloud.baseSizes,
       burstLight
     });
+
+    debugEvent("echo.collect", "Spawned Echo collection visual burst", {
+      id: zone.id,
+      spawnMs: roundMetric(performance.now() - spawnStartedAt),
+      activeBurstsAfter: this.collectBursts.length,
+      shardCount: COLLECT_BURST_MOTE_COUNT,
+      columnRadius: roundMetric(zone.columnRadius),
+      position: vectorPayload(zone.position)
+    });
   }
 
   private updateCollectBursts(time: number): void {
+    const updateStartedAt = this.collectBursts.length > 0 ? performance.now() : 0;
+
     for (let index = this.collectBursts.length - 1; index >= 0; index -= 1) {
       const burst = this.collectBursts[index];
       const age = time - burst.spawnTime;
@@ -416,6 +453,19 @@ export class EchoZoneField {
       burst.burstLight.distance = 10 + easeOut * 18;
       updateCollectBurstShards(burst, age, progress);
     }
+
+    if (this.collectBursts.length <= 0) return;
+
+    const updateMs = performance.now() - updateStartedAt;
+    if (updateMs >= 6 && time - this.lastBurstSlowFrameLogAt > 0.25) {
+      this.lastBurstSlowFrameLogAt = time;
+      debugEvent("echo.collect", "Slow Echo collection burst update", {
+        time: roundMetric(time),
+        updateMs: roundMetric(updateMs),
+        activeBursts: this.collectBursts.length,
+        shardCountPerBurst: COLLECT_BURST_MOTE_COUNT
+      }, "warn");
+    }
   }
 
   private removeAt(index: number): void {
@@ -445,6 +495,10 @@ export class EchoZoneField {
     burst.shards.geometry.dispose();
     burst.shards.material.dispose();
     burst.burstLight.dispose();
+    debugEvent("echo.collect", "Disposed Echo collection burst", {
+      activeBurstsAfter: this.collectBursts.length,
+      shardCount: COLLECT_BURST_MOTE_COUNT
+    });
   }
 }
 

@@ -115,6 +115,10 @@ export class ParticleVeil {
     this.material.uniforms.uPixelRatio.value = pixelRatio;
   }
 
+  getActiveCount(): number {
+    return this.activeCount;
+  }
+
   spawnBurst(center: THREE.Vector3, count: number, strength: number): void {
     for (let burstIndex = 0; burstIndex < count; burstIndex += 1) {
       this.emitCloudParticle(center, strength, 1, 1, 0.9);

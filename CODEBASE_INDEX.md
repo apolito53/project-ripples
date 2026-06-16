@@ -42,6 +42,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Quality preset budgets and labels: `src/qualityPresets.ts`
 - Runtime settings shape/defaults: `src/labSettings.ts`
 - Wave-medium settings and derived propagation speed: `src/waveMedium.ts`
+- Local diagnostic log buffer and console profiler hooks: `src/debugLog.ts`
 - Procedural field height sampler: `src/terrain.ts`
 - Prioritized concrete follow-up work: `TODO.md`
 - Loose visual, interaction, and engine ideas: `SPITBALL_IDEAS.md`
@@ -98,6 +99,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
   orb lights, volumetric-style orb mist, orbiting sparkle trails, and short
   collection bursts. They should not become shader sources until collected,
   otherwise they turn back into ambient pulses with extra jewelry.
+- Echo detonation logging defaults on for local hosts and writes a retained
+  ring buffer to `window.__rippleDebugLog`; use `window.__rippleDebugDump()` in
+  DevTools after a freeze to inspect the last collection and frame timings.
 - `Meltdown` is intentionally rude to weak GPUs. Keep it available, but do not
   tune the normal experience around it.
 - Pointer-lock behavior should be browser-tested in Chrome, not trusted from a
