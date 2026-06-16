@@ -25,6 +25,8 @@
   response from a lifting hill into a depressed fabric trough with a small rim.
 - Added follow-camera zoom with mouse wheel and keyboard controls, plus a lower
   minimum camera pitch for flatter field-level views.
+- Fixed movement wake sources so lingering wake ripples stay stamped into the
+  field instead of rotating behind the player like a live velocity cone.
 - Replaced the 8-ripple gameplay cap with lifetime-based ripple retention and a
   short manual pulse cooldown, so older rings age out naturally instead of
   disappearing as soon as new pulses are spammed.

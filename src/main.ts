@@ -222,13 +222,14 @@ function addMovementWakeSource(position: THREE.Vector3, time: number, strength: 
 
   // Movement wakes feed the terrain shader only. No burst particles, no point
   // lights: just lingering displacement, like water remembering the body that
-  // passed through it.
+  // passed through it. These sources intentionally do not carry direction now:
+  // once a wake is stamped into the field, it should stay put instead of aiming
+  // around like a flashlight beam as the player changes direction.
   rippleSources.add(position, time, strength, {
     kind: "wake",
     speedMultiplier: settings.waveMedium.wakeSpeedMultiplier,
     widthMultiplier: 1.45,
-    dampingMultiplier: 0.72,
-    direction: movementDirection
+    dampingMultiplier: 0.72
   });
 }
 

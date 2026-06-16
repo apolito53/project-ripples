@@ -253,20 +253,20 @@ export class RippleField {
             float ahead = dot(radial, direction);
             float sideways = abs(radial.x * direction.y - radial.y * direction.x);
 
-            // Treat the avatar like a small hull: a compact bow ridge in front,
-            // then a wider V-shaped wake and foamy centerline behind it. This is
-            // the immediate displacement field; emitted wake sources keep waves
-            // traveling after the player stops moving.
-            float bowBand = exp(-pow((distanceToPlayer - 2.0) / 1.55, 2.0));
+            // Treat the avatar like a small hull, but keep this response local.
+            // Lingering wake belongs to emitted source stamps; if the immediate
+            // field stretches too far, it rotates with velocity and reads like a
+            // flashlight beam instead of water/fabric that was disturbed.
+            float bowBand = exp(-pow((distanceToPlayer - 1.75) / 1.05, 2.0));
             float bow = smoothstep(0.12, 0.94, ahead) * bowBand;
             float behind = smoothstep(0.08, 0.92, -ahead);
-            float centerTrail = exp(-pow(sideways * 2.75, 2.0)) *
-              exp(-distanceToPlayer / max(3.0, uRippleRadius * 0.75));
+            float localStern = exp(-pow(distanceToPlayer / 2.65, 2.0)) *
+              exp(-pow(sideways * 2.45, 2.0));
             float shoulderWake = exp(-pow((sideways - 0.54) / 0.16, 2.0)) *
-              exp(-distanceToPlayer / max(4.0, uRippleRadius * 1.2));
+              exp(-pow((distanceToPlayer - 2.0) / 1.25, 2.0));
             float texture = 0.62 + 0.38 * sin(uTime * 7.1 - distanceToPlayer * 3.2 + phase);
 
-            return moving * (bow * 0.44 + behind * texture * (centerTrail * 0.2 + shoulderWake * 0.36));
+            return moving * (bow * 0.34 + behind * texture * (localStern * 0.18 + shoulderWake * 0.28));
           }`
         )
         .replace(
@@ -298,9 +298,9 @@ export class RippleField {
           float pressureDepression = bodyPressure * (0.82 + shimmer * 0.22 + movementPush * 0.28);
           float rimLift = pressureRim * (0.16 + shimmer * 0.14 + movementPush * 0.1);
           float shelteredSourceWave = sourceWave * (1.0 - bodyPressure * 0.5);
-          float lift = (-pressureDepression + rimLift + shelteredSourceWave * 0.92 + flowWave * 0.82) * uRippleHeight;
-          float glow = clamp(proximity * (0.04 + shimmer * 0.08) + pressureRim * 0.08 + shelteredSourceWave * 0.18 + flowWave * 0.14, 0.0, 0.4);
-          float cubeHeight = max(0.045, ${BASE_CUBE_HEIGHT.toFixed(2)} + pressureRim * 0.16 + shelteredSourceWave * 0.44 + flowWave * 0.34 - bodyPressure * 0.025);
+          float lift = (-pressureDepression + rimLift + shelteredSourceWave * 0.92 + flowWave * 0.58) * uRippleHeight;
+          float glow = clamp(proximity * (0.04 + shimmer * 0.08) + pressureRim * 0.08 + shelteredSourceWave * 0.18 + flowWave * 0.1, 0.0, 0.4);
+          float cubeHeight = max(0.045, ${BASE_CUBE_HEIGHT.toFixed(2)} + pressureRim * 0.16 + shelteredSourceWave * 0.44 + flowWave * 0.22 - bodyPressure * 0.025);
           float footprint = ${CUBE_FOOTPRINT.toFixed(2)} + glow * 0.05;
 
           transformed.xz *= footprint;
@@ -329,7 +329,7 @@ export class RippleField {
         );
     };
 
-    material.customProgramCacheKey = () => "ripple-field-shader-v4";
+    material.customProgramCacheKey = () => "ripple-field-shader-v5";
     return material;
   }
 
