@@ -35,12 +35,15 @@ type EchoOrbitSparkles = {
   readonly alphas: Float32Array;
   readonly sizes: Float32Array;
   readonly trailPositions: Float32Array;
+  readonly trailColors: Float32Array;
+  readonly baseColors: Float32Array;
   readonly baseAngles: Float32Array;
   readonly radii: Float32Array;
   readonly heights: Float32Array;
   readonly speeds: Float32Array;
   readonly phases: Float32Array;
-  readonly verticalSpeeds: Float32Array;
+  readonly verticalRadii: Float32Array;
+  readonly tilts: Float32Array;
 };
 
 type EchoCollectBurst = {
@@ -78,10 +81,11 @@ const ORB_SHELL_COLOR = 0xfff2c6;
 const MOTE_COLOR = 0x7dffd8;
 const COLUMN_HEIGHT = 7.4;
 const COLUMN_BASE_LIFT = 1.45;
-const SPARK_MOTE_COUNT = 168;
+const ECHO_ORBIT_MOTE_COUNT = 44;
+const ECHO_ORBIT_TRAIL_SEGMENTS = 5;
+const ECHO_ORBIT_TRAIL_SECONDS = 0.42;
 const COLLECT_BURST_MOTE_COUNT = 220;
 const COLLECT_BURST_DURATION = 0.88;
-const TRAIL_BACKSTEP_SECONDS = 0.46;
 const TEMP_COLOR = new THREE.Color();
 const TURQUOISE = new THREE.Color(MOTE_COLOR);
 const VIOLET = new THREE.Color(VIOLET_COLOR);
@@ -641,47 +645,48 @@ function createOrbMistMaterial(): THREE.ShaderMaterial {
 }
 
 function createOrbitSparkles(radius: number, height: number, baseLift: number): EchoOrbitSparkles {
-  const positions = new Float32Array(SPARK_MOTE_COUNT * 3);
-  const colors = new Float32Array(SPARK_MOTE_COUNT * 3);
-  const alphas = new Float32Array(SPARK_MOTE_COUNT);
-  const sizes = new Float32Array(SPARK_MOTE_COUNT);
-  const twinkles = new Float32Array(SPARK_MOTE_COUNT);
-  const trailPositions = new Float32Array(SPARK_MOTE_COUNT * 2 * 3);
-  const trailColors = new Float32Array(SPARK_MOTE_COUNT * 2 * 3);
-  const baseAngles = new Float32Array(SPARK_MOTE_COUNT);
-  const radii = new Float32Array(SPARK_MOTE_COUNT);
-  const heights = new Float32Array(SPARK_MOTE_COUNT);
-  const speeds = new Float32Array(SPARK_MOTE_COUNT);
-  const phases = new Float32Array(SPARK_MOTE_COUNT);
-  const verticalSpeeds = new Float32Array(SPARK_MOTE_COUNT);
+  const positions = new Float32Array(ECHO_ORBIT_MOTE_COUNT * 3);
+  const colors = new Float32Array(ECHO_ORBIT_MOTE_COUNT * 3);
+  const alphas = new Float32Array(ECHO_ORBIT_MOTE_COUNT);
+  const sizes = new Float32Array(ECHO_ORBIT_MOTE_COUNT);
+  const twinkles = new Float32Array(ECHO_ORBIT_MOTE_COUNT);
+  const trailVertexCount = ECHO_ORBIT_MOTE_COUNT * ECHO_ORBIT_TRAIL_SEGMENTS * 2;
+  const trailPositions = new Float32Array(trailVertexCount * 3);
+  const trailColors = new Float32Array(trailVertexCount * 3);
+  const baseColors = new Float32Array(ECHO_ORBIT_MOTE_COUNT * 3);
+  const baseAngles = new Float32Array(ECHO_ORBIT_MOTE_COUNT);
+  const radii = new Float32Array(ECHO_ORBIT_MOTE_COUNT);
+  const heights = new Float32Array(ECHO_ORBIT_MOTE_COUNT);
+  const speeds = new Float32Array(ECHO_ORBIT_MOTE_COUNT);
+  const phases = new Float32Array(ECHO_ORBIT_MOTE_COUNT);
+  const verticalRadii = new Float32Array(ECHO_ORBIT_MOTE_COUNT);
+  const tilts = new Float32Array(ECHO_ORBIT_MOTE_COUNT);
+  const coreHeight = baseLift + height * 0.5;
 
-  for (let index = 0; index < SPARK_MOTE_COUNT; index += 1) {
+  for (let index = 0; index < ECHO_ORBIT_MOTE_COUNT; index += 1) {
     const positionOffset = index * 3;
-    const trailOffset = index * 6;
-    const color = pickSparkleColor(Math.random());
+    const color = pickSparkleColor(index / Math.max(1, ECHO_ORBIT_MOTE_COUNT - 1));
 
-    baseAngles[index] = index * 2.399963 + Math.random() * 0.75;
-    radii[index] = radius * (0.28 + Math.random() * 0.92);
-    heights[index] = baseLift + Math.random() * height;
-    speeds[index] = (Math.random() < 0.5 ? -1 : 1) * (1.45 + Math.random() * 2.25);
+    // Keep the crystal effect in the same visual family as the avatar. The
+    // diamond shell already supplies the tall silhouette; these motes stay close
+    // to the core so the crystal gets deliberate energy arcs instead of bristles.
+    baseAngles[index] = index * 2.399963 + Math.random() * 0.6;
+    radii[index] = radius * (0.72 + Math.random() * 0.9);
+    heights[index] = coreHeight + (Math.random() - 0.5) * radius * 0.4;
+    speeds[index] = (index % 2 === 0 ? 1 : -1) * (2.25 + Math.random() * 2.35);
     phases[index] = Math.random() * Math.PI * 2;
-    verticalSpeeds[index] = 1.1 + Math.random() * 2.3;
-    alphas[index] = 0.42 + Math.random() * 0.38;
-    sizes[index] = 0.62 + Math.random() * 0.92;
+    verticalRadii[index] = radius * (0.18 + Math.random() * 0.42);
+    tilts[index] = -0.72 + Math.random() * 1.44;
+    alphas[index] = 0.36 + Math.random() * 0.3;
+    sizes[index] = 0.56 + Math.random() * 0.5;
     twinkles[index] = Math.random();
 
     colors[positionOffset] = color.r;
     colors[positionOffset + 1] = color.g;
     colors[positionOffset + 2] = color.b;
-
-    // Both trail vertices use the same color; opacity is intentionally handled
-    // by the material so the trails stay subtle instead of becoming neon wire.
-    trailColors[trailOffset] = color.r;
-    trailColors[trailOffset + 1] = color.g;
-    trailColors[trailOffset + 2] = color.b;
-    trailColors[trailOffset + 3] = color.r;
-    trailColors[trailOffset + 4] = color.g;
-    trailColors[trailOffset + 5] = color.b;
+    baseColors[positionOffset] = color.r;
+    baseColors[positionOffset + 1] = color.g;
+    baseColors[positionOffset + 2] = color.b;
   }
 
   const pointGeometry = new THREE.BufferGeometry();
@@ -693,7 +698,7 @@ function createOrbitSparkles(radius: number, height: number, baseLift: number): 
 
   const trailGeometry = new THREE.BufferGeometry();
   trailGeometry.setAttribute("position", createDynamicAttribute(trailPositions, 3));
-  trailGeometry.setAttribute("color", new THREE.BufferAttribute(trailColors, 3));
+  trailGeometry.setAttribute("color", createDynamicAttribute(trailColors, 3));
 
   const points = new THREE.Points(pointGeometry, createSparkleMaterial());
   points.name = "Echo orbiting sparkle motes";
@@ -710,7 +715,7 @@ function createOrbitSparkles(radius: number, height: number, baseLift: number): 
       blending: THREE.AdditiveBlending
     })
   );
-  trails.name = "Echo subtle orbit trails";
+  trails.name = "Echo segmented crystal orbit trails";
   trails.frustumCulled = false;
 
   return {
@@ -720,39 +725,49 @@ function createOrbitSparkles(radius: number, height: number, baseLift: number): 
     alphas,
     sizes,
     trailPositions,
+    trailColors,
+    baseColors,
     baseAngles,
     radii,
     heights,
     speeds,
     phases,
-    verticalSpeeds
+    verticalRadii,
+    tilts
   };
 }
 
 function updateOrbitSparkles(sparkles: EchoOrbitSparkles, time: number, pulse: number): void {
   sparkles.points.material.uniforms.uTime.value = time;
-  sparkles.trails.material.opacity = 0.11 + pulse * 0.14;
+  sparkles.trails.material.opacity = 0.13 + pulse * 0.09;
+  const trailStepSeconds = ECHO_ORBIT_TRAIL_SECONDS / ECHO_ORBIT_TRAIL_SEGMENTS;
 
-  for (let index = 0; index < SPARK_MOTE_COUNT; index += 1) {
+  for (let index = 0; index < ECHO_ORBIT_MOTE_COUNT; index += 1) {
     const positionOffset = index * 3;
-    const trailOffset = index * 6;
 
-    // Write both the current sparkle point and the trailing segment directly
-    // into typed arrays. This avoids a stream of per-frame Vector3 allocations
-    // while several Echo columns are alive.
-    writeOrbitPosition(sparkles.trailPositions, trailOffset, sparkles, index, time - TRAIL_BACKSTEP_SECONDS);
+    // Multi-segment trails are more intentional than one long line: they imply
+    // speed, fade naturally, and avoid the screenshot's sparse "hairy crystal"
+    // look while keeping all writes allocation-free.
     writeOrbitPosition(sparkles.positions, positionOffset, sparkles, index, time);
-    sparkles.trailPositions[trailOffset + 3] = sparkles.positions[positionOffset];
-    sparkles.trailPositions[trailOffset + 4] = sparkles.positions[positionOffset + 1];
-    sparkles.trailPositions[trailOffset + 5] = sparkles.positions[positionOffset + 2];
-    sparkles.alphas[index] = 0.32 + pulse * 0.18 + Math.sin(time * 6.2 + sparkles.phases[index]) * 0.1;
-    sparkles.sizes[index] = 0.62 + pulse * 0.26 + Math.sin(time * 4.1 + sparkles.phases[index]) * 0.08;
+    sparkles.alphas[index] = 0.28 + pulse * 0.18 + Math.sin(time * 7.2 + sparkles.phases[index]) * 0.08;
+    sparkles.sizes[index] = 0.52 + pulse * 0.2 + Math.sin(time * 5.1 + sparkles.phases[index]) * 0.06;
+
+    for (let segment = 0; segment < ECHO_ORBIT_TRAIL_SEGMENTS; segment += 1) {
+      const segmentOffset = (index * ECHO_ORBIT_TRAIL_SEGMENTS + segment) * 6;
+      const olderTime = time - (segment + 1) * trailStepSeconds;
+      const newerTime = time - segment * trailStepSeconds;
+      writeOrbitPosition(sparkles.trailPositions, segmentOffset, sparkles, index, olderTime);
+      writeOrbitPosition(sparkles.trailPositions, segmentOffset + 3, sparkles, index, newerTime);
+      writeOrbitTrailColor(sparkles, index, segmentOffset, segment, false);
+      writeOrbitTrailColor(sparkles, index, segmentOffset + 3, segment, true);
+    }
   }
 
   sparkles.points.geometry.attributes.position.needsUpdate = true;
   sparkles.points.geometry.attributes.aAlpha.needsUpdate = true;
   sparkles.points.geometry.attributes.aSize.needsUpdate = true;
   sparkles.trails.geometry.attributes.position.needsUpdate = true;
+  sparkles.trails.geometry.attributes.color.needsUpdate = true;
 }
 
 function writeOrbitPosition(
@@ -762,14 +777,36 @@ function writeOrbitPosition(
   index: number,
   time: number
 ): void {
-  const orbitWobble = 1 + Math.sin(time * 1.7 + sparkles.phases[index]) * 0.12;
   const angle = sparkles.baseAngles[index] + time * sparkles.speeds[index] +
-    Math.sin(time * 0.8 + sparkles.phases[index]) * 0.2;
-  const radius = sparkles.radii[index] * orbitWobble;
-  const y = sparkles.heights[index] + Math.sin(time * sparkles.verticalSpeeds[index] + sparkles.phases[index]) * 0.32;
-  target[offset] = Math.cos(angle) * radius;
-  target[offset + 1] = y;
-  target[offset + 2] = Math.sin(angle) * radius;
+    Math.sin(time * 1.35 + sparkles.phases[index]) * 0.18;
+  const radius = sparkles.radii[index] * (1 + Math.sin(time * 1.9 + sparkles.phases[index]) * 0.08);
+  const flatX = Math.cos(angle) * radius;
+  const flatZ = Math.sin(angle) * radius * 0.72;
+  const verticalArc = Math.sin(angle * 1.55 + sparkles.phases[index]) * sparkles.verticalRadii[index] +
+    Math.sin(time * 2.7 + sparkles.phases[index]) * 0.08;
+  const tilt = sparkles.tilts[index];
+  const tiltedY = verticalArc * Math.cos(tilt) - flatZ * Math.sin(tilt);
+  const tiltedZ = verticalArc * Math.sin(tilt) + flatZ * Math.cos(tilt);
+
+  target[offset] = flatX;
+  target[offset + 1] = sparkles.heights[index] + tiltedY;
+  target[offset + 2] = tiltedZ;
+}
+
+function writeOrbitTrailColor(
+  sparkles: EchoOrbitSparkles,
+  index: number,
+  offset: number,
+  segment: number,
+  isNewerVertex: boolean
+): void {
+  const colorOffset = index * 3;
+  const age01 = (segment + (isNewerVertex ? 0 : 1)) / (ECHO_ORBIT_TRAIL_SEGMENTS + 1);
+  const intensity = Math.pow(1 - age01, 1.4);
+
+  sparkles.trailColors[offset] = sparkles.baseColors[colorOffset] * intensity;
+  sparkles.trailColors[offset + 1] = sparkles.baseColors[colorOffset + 1] * intensity;
+  sparkles.trailColors[offset + 2] = sparkles.baseColors[colorOffset + 2] * intensity;
 }
 
 function createSparkleMaterial(): THREE.ShaderMaterial {

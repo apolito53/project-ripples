@@ -9,7 +9,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Vite + strict TypeScript browser app.
 - Three.js renderer, postprocessing composer, Unreal bloom pass, shader-customized
   `InstancedMesh`, additive `Points`, and dynamic lights.
-- Current alpha baseline: `v0.1.4-ALPHA`; keep release tags in alpha prerelease
+- Current alpha baseline: `v0.1.5-ALPHA`; keep release tags in alpha prerelease
   territory until the lab graduates from prototype status.
 - Dedicated dev port `5183`; preview port `4183`.
 
@@ -40,7 +40,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Lifetime-pruned pulse/wake source list and shader uniform writer:
   `src/rippleSources.ts`
 - Persistent collectible Echo-column lights, bright orb lights, vertical
-  diamond-style orb mist, fast orbiting sparkle trails, and run-through collection bursts:
+  diamond-style orb mist, avatar-style segmented crystal orbit trails, and
+  run-through collection bursts:
   `src/echoZones.ts`
 - Player sparkle aura, additive particle bursts, and wake trails:
   `src/particleVeil.ts`
@@ -116,7 +117,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
   fade faster than manual pulses so the newest-first upload order does not
   churn through old rings during normal movement.
 - Echo zones are CPU-side gameplay markers with stacked point lights, bright
-  orb lights, vertical diamond-style orb mist, orbiting sparkle trails, and
+  orb lights, vertical diamond-style orb mist, segmented crystal-local orbiting
+  sparkle trails, and
   short collection bursts. They should not become shader sources until
   collected, otherwise they turn back into ambient pulses with extra jewelry.
 - Echo detonation and global frame-hitch logging defaults on for local hosts

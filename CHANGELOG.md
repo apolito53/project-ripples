@@ -4,6 +4,14 @@
 
 - No changes yet.
 
+## 0.1.5-ALPHA - 2026-06-17
+
+### Changed
+
+- Reworked Echo crystal sparkles from a sparse full-height line spray into
+  avatar-style segmented orbit trails clustered around the bright core, so the
+  crystal reads as intentionally energized instead of hairy.
+
 ## 0.1.4-ALPHA - 2026-06-17
 
 ### Changed

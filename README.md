@@ -7,7 +7,7 @@ This is intentionally separate from `voxel-sandbox-engine`. The goal is to make
 a polished visual lab first, then borrow patterns or ideas later if they deserve
 to graduate into the main voxel engine.
 
-Current version: `v0.1.4-ALPHA`.
+Current version: `v0.1.5-ALPHA`.
 
 ## Quick Start
 
@@ -50,9 +50,9 @@ The avatar itself uses fast orbiting energy motes with long additive trails
 instead of flat rings, so it reads as a moving glow cloud rather than a UI target.
 Sparkling Echo columns spawn around the arena as real local light sources with
 a bright inner orb, a vertically stretched diamond-shaped glow cloud, faster
-orbiting motes, and longer trails. They wait until the avatar runs through them,
-then detonate into a wider pulse, a flat disc burst of sparks, and a short
-local orb-shatter effect without geometric ring markers.
+core-local orbiting motes, and segmented fading trails. They wait until the
+avatar runs through them, then detonate into a wider pulse, a flat disc burst of
+sparks, and a short local orb-shatter effect without geometric ring markers.
 Movement behaves like a small body pushing through water: the shader forms a
 pressed fabric depression, local bow/wake displacement, and small raised rim
 around the avatar, while stamped wake ripples remain in the field and propagate
@@ -120,7 +120,7 @@ Project planning:
 Versioning:
 
 - While the project is still experimental, release tags use alpha prerelease
-  labels. The current baseline is `v0.1.4-ALPHA`.
+  labels. The current baseline is `v0.1.5-ALPHA`.
 
 ## Design Notes
 
@@ -140,8 +140,8 @@ Versioning:
   logging, and optional batching to the `5184` debug receiver used to profile
   Echo detonations and frame spikes.
 - `src/echoZones.ts` owns persistent collectible Echo-column lights, bright orb
-  lights, vertical diamond-style orb mist, fast orbiting sparkle trails, and
-  their run-through trigger/despawn burst detection.
+  lights, vertical diamond-style orb mist, avatar-style segmented crystal orbit
+  trails, and their run-through trigger/despawn burst detection.
 - `src/waveMedium.ts` defines the medium settings and derived propagation speed.
 - `src/labSettings.ts` maps UI meters onto the original scene-unit art scale,
   including voxel-size density scaling and the 200m-to-400m arena radius range.
