@@ -166,6 +166,8 @@ updateTuningReadouts();
 applyQualityPreset(preset, true);
 resize();
 window.addEventListener("resize", resize);
+window.visualViewport?.addEventListener("resize", resize);
+window.visualViewport?.addEventListener("scroll", resize);
 
 // Seed a few pulses so the first rendered second already has motion and bloom.
 spawnPulse(new THREE.Vector3(0, sampleFieldHeight(0, 0) + 0.45, 0), 0.28);
@@ -911,8 +913,8 @@ function formatVoxelSize(sizeMeters: number): string {
 }
 
 function resize(): void {
-  const width = window.innerWidth;
-  const height = window.innerHeight;
+  const { width, height } = getViewportSize();
+  document.documentElement.style.setProperty("--app-height", `${height}px`);
   const pixelRatio = getPixelRatio();
   renderer.setPixelRatio(pixelRatio);
   renderer.setSize(width, height, false);
@@ -922,6 +924,14 @@ function resize(): void {
   particles.setPixelRatio(pixelRatio);
   camera.aspect = width / Math.max(1, height);
   camera.updateProjectionMatrix();
+}
+
+function getViewportSize(): { width: number; height: number } {
+  const visualViewport = window.visualViewport;
+  return {
+    width: Math.round(visualViewport?.width ?? window.innerWidth),
+    height: Math.round(visualViewport?.height ?? window.innerHeight)
+  };
 }
 
 function getPixelRatio(): number {
