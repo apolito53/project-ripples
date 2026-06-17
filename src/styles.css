@@ -12,10 +12,24 @@ body,
     sans-serif;
 }
 
+html,
+body {
+  overscroll-behavior: none;
+  position: fixed;
+  inset: 0;
+}
+
+#app {
+  min-height: 100svh;
+  min-height: 100dvh;
+  height: var(--app-height, 100dvh);
+  touch-action: none;
+}
+
 canvas {
   display: block;
   width: 100%;
-  height: 100%;
+  height: var(--app-height, 100dvh);
 }
 
 #hud,
@@ -28,8 +42,8 @@ canvas {
 }
 
 #hud {
-  top: 18px;
-  left: 20px;
+  top: max(18px, calc(env(safe-area-inset-top) + 18px));
+  left: max(20px, calc(env(safe-area-inset-left) + 20px));
   display: grid;
   gap: 6px;
 }
@@ -68,8 +82,8 @@ canvas {
 }
 
 #panel {
-  top: 16px;
-  right: 74px;
+  top: max(16px, calc(env(safe-area-inset-top) + 16px));
+  right: max(74px, calc(env(safe-area-inset-right) + 74px));
   bottom: auto;
   display: grid;
   width: min(320px, calc(100vw - 36px));
@@ -162,8 +176,8 @@ input[type="range"] {
 
 .menu-toggle {
   position: fixed;
-  top: 16px;
-  right: 18px;
+  top: max(16px, calc(env(safe-area-inset-top) + 16px));
+  right: max(18px, calc(env(safe-area-inset-right) + 18px));
   z-index: 4;
   display: grid;
   width: 44px;
@@ -201,7 +215,7 @@ input[type="range"] {
 
 .mobile-controls {
   position: fixed;
-  inset: auto 0 18px;
+  inset: auto 0 max(18px, calc(env(safe-area-inset-bottom) + 18px));
   z-index: 3;
   display: flex;
   align-items: flex-end;
@@ -272,13 +286,13 @@ input[type="range"] {
 
 @media (max-width: 680px) {
   .menu-toggle {
-    top: 10px;
-    right: 12px;
+    top: max(10px, calc(env(safe-area-inset-top) + 10px));
+    right: max(12px, calc(env(safe-area-inset-right) + 12px));
   }
 
   .mobile-controls {
-    bottom: 14px;
-    padding: 0 14px;
+    bottom: max(14px, calc(env(safe-area-inset-bottom) + 14px));
+    padding: 0 max(14px, calc(env(safe-area-inset-right) + 14px)) 0 max(14px, calc(env(safe-area-inset-left) + 14px));
   }
 
   .touch-stick {
@@ -294,5 +308,68 @@ input[type="range"] {
   .pulse-button {
     min-width: 74px;
     min-height: 74px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  #hud {
+    top: max(8px, calc(env(safe-area-inset-top) + 8px));
+    left: max(10px, calc(env(safe-area-inset-left) + 10px));
+  }
+
+  .title {
+    font-size: 15px;
+  }
+
+  .stats-line,
+  .medium-line {
+    font-size: 11px;
+  }
+
+  #panel {
+    top: max(8px, calc(env(safe-area-inset-top) + 8px));
+    right: max(62px, calc(env(safe-area-inset-right) + 62px));
+    max-height: calc(var(--app-height, 100dvh) - max(16px, calc(env(safe-area-inset-top) + 16px)) - max(12px, calc(env(safe-area-inset-bottom) + 12px)));
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding: 10px;
+    gap: 7px;
+  }
+
+  .control-row {
+    grid-template-columns: 92px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .menu-toggle {
+    top: max(8px, calc(env(safe-area-inset-top) + 8px));
+    right: max(10px, calc(env(safe-area-inset-right) + 10px));
+    width: 38px;
+    height: 38px;
+  }
+
+  .mobile-controls {
+    bottom: max(10px, calc(env(safe-area-inset-bottom) + 10px));
+    padding: 0 max(18px, calc(env(safe-area-inset-right) + 18px)) 0 max(18px, calc(env(safe-area-inset-left) + 18px));
+  }
+
+  .touch-stick {
+    width: 96px;
+    height: 96px;
+  }
+
+  .touch-stick__knob {
+    width: 40px;
+    height: 40px;
+  }
+
+  .touch-stick__label {
+    bottom: 12px;
+  }
+
+  .pulse-button {
+    min-width: 64px;
+    min-height: 64px;
+    font-size: 10px;
   }
 }
