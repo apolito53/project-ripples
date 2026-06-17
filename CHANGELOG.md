@@ -2,8 +2,20 @@
 
 ## Unreleased
 
+- No changes yet.
+
+## 0.1.0-ALPHA - 2026-06-17
+
 ### Added
 
+- Declared the first alpha baseline as `v0.1.0-ALPHA`, including package
+  metadata and release documentation.
+- Created the standalone Ripple Field Lab Vite/TypeScript/Three.js project.
+- Added shader-displaced instanced cube field with player proximity waves and
+  expanding pulse sources.
+- Added additive spark particles, wake bursts, pulse point lights, bloom
+  postprocessing, a glow avatar, and live tuning controls.
+- Added dedicated startup scripts, README, and codebase index.
 - Added a tiny local Ripple debug-log receiver on `127.0.0.1:5184` with JSONL
   writes under `logs/`, plus readable `/tail`, `/events`, and `/health` views.
 - Added local Echo detonation debug logging with a retained
@@ -103,14 +115,3 @@
   x100 experiment proved too brute-force for the intended look.
 - Changed cube placement from a square grid patch into a circular arena fill,
   and clamped the player avatar inside that same circular boundary.
-
-## 0.1.0 - 2026-06-14
-
-### Added
-
-- Created the standalone Ripple Field Lab Vite/TypeScript/Three.js project.
-- Added shader-displaced instanced cube field with player proximity waves and
-  expanding pulse sources.
-- Added additive spark particles, wake bursts, pulse point lights, bloom
-  postprocessing, a glow avatar, and live tuning controls.
-- Added dedicated startup scripts, README, and codebase index.

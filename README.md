@@ -7,6 +7,8 @@ This is intentionally separate from `voxel-sandbox-engine`. The goal is to make
 a polished visual lab first, then borrow patterns or ideas later if they deserve
 to graduate into the main voxel engine.
 
+Current version: `v0.1.0-ALPHA`.
+
 ## Quick Start
 
 Windows:
@@ -106,6 +108,11 @@ Project planning:
 - `TODO.md` tracks concrete high-priority and medium-priority follow-up work.
 - `SPITBALL_IDEAS.md` keeps loose visual, interaction, and engine ideas separate
   from the committed roadmap.
+
+Versioning:
+
+- While the project is still experimental, release tags use alpha prerelease
+  labels. The current baseline is `v0.1.0-ALPHA`.
 
 ## Design Notes
 
