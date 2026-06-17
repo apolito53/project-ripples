@@ -50,13 +50,17 @@ outward after the avatar moves on. Dense movement wake stamps use a shorter
 per-source lifetime than manual pulses so they can trail smoothly without
 forcing older rings to flicker through the shader's fixed upload budget.
 
-The tuning panel changes quality, ripple height/radius, Depth / Speed, particle
-density, and bloom strength while the scene is running. Depth / Speed changes
-the medium's effective depth, then shows the derived propagation speed from the
-shallow-water-inspired `sqrt(g * depth)` model.
-The HUD shows that derived speed, active source count, and the newest ring's
-approximate radius, plus the number of live Echo zones, so propagation tuning
-has a quick visual sanity check.
+The tuning panel changes quality, voxel size, arena radius, ripple
+height/radius, Depth / Speed, particle density, and bloom strength while the
+scene is running. Voxel size treats the current block scale as `1m`, ranges from
+`25cm` to `2m`, and rebuilds the instanced field after a short debounce so slider
+drags do not spam geometry work. Arena radius is expressed in lab meters:
+`200m` preserves the original scene radius, while `400m` doubles it. Depth /
+Speed changes the medium's effective depth, then shows the derived propagation
+speed from the shallow-water-inspired `sqrt(g * depth)` model.
+The HUD shows that derived speed, voxel size, arena radius, active source count,
+and the newest ring's approximate radius, plus the number of live Echo zones, so
+propagation and scale tuning have a quick visual sanity check.
 
 ## Quality Modes
 
@@ -106,7 +110,8 @@ Project planning:
 ## Design Notes
 
 - `src/rippleField.ts` owns the circular shader-displaced instanced cube field,
-  including the directional bow/wake deformation around the moving avatar.
+  including the directional bow/wake deformation around the moving avatar and
+  shader-side voxel footprint/height scaling.
 - `src/rippleSources.ts` keeps the lifetime-pruned pulse and movement-wake list
   sent to the GPU, including per-source speed, width, damping, lifetime, and
   optional direction metadata.
@@ -117,6 +122,8 @@ Project planning:
   lights, vertical diamond-style orb mist, orbiting sparkle trails, and their
   run-through trigger/despawn burst detection.
 - `src/waveMedium.ts` defines the medium settings and derived propagation speed.
+- `src/labSettings.ts` maps UI meters onto the original scene-unit art scale,
+  including voxel-size density scaling and the 200m-to-400m arena radius range.
 - `src/particleVeil.ts` owns the player sparkle aura, additive glitter-cloud
   bursts, flat Echo disc bursts, and wake trails.
 - `src/pulseLights.ts` maps recent pulses onto a small pool of point lights.
@@ -127,4 +134,5 @@ The CPU decides where the player, manual pulses, persistent Echo zones, and
 movement wakes are. Manual pulse input is cooldown-gated, Echo zones only become
 wave sources after collection, sources age out by per-source lifetime, and
 propagation speed comes from the current wave medium. The GPU handles cube lift,
-stretch, tint, and emissive glow from the current source uniforms.
+stretch, tint, emissive glow, and voxel footprint/height from the current source
+and scale uniforms.

@@ -13,7 +13,16 @@ export type QualityPreset = {
   readonly fogDensity: number;
 };
 
+// Internal scene units are kept on the original art scale, while the UI now
+// speaks in meters. At the default 200m arena radius, the scene is visually
+// identical to the pre-slider field; 400m is exactly twice that internal limit.
 export const ARENA_RADIUS = 92;
+export const DEFAULT_ARENA_RADIUS_METERS = 200;
+export const ARENA_RADIUS_MIN_METERS = 200;
+export const ARENA_RADIUS_MAX_METERS = DEFAULT_ARENA_RADIUS_METERS * 2;
+export const DEFAULT_VOXEL_SIZE_METERS = 1;
+export const VOXEL_SIZE_MIN_METERS = 0.25;
+export const VOXEL_SIZE_MAX_METERS = 2;
 
 // Meltdown carries the intentionally rude particle ceiling. Lower presets stay
 // under that cap so the normal lab experience does not inherit stress-test

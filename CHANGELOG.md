@@ -12,6 +12,10 @@
 - Added broader `frame.hitch` logging so freezes outside Echo detonation
   windows still record raw clock gaps, capped simulation delta, quality,
   particle pressure, and active ripple-source counts.
+- Added live Voxel Size and Arena Radius controls, with `1m`/`200m` preserving
+  the old scale, `25cm` to `2m` voxel sizing, and a `200m` to `400m` arena range.
+- Added `field.rebuild` debug events so risky scale changes report rebuild time,
+  cube count, effective spacing, voxel size, and arena radius.
 - Added TODO and spitball-ideas docs to separate concrete near-term work from
   loose visual, interaction, and engine experiments.
 - Added persistent collectible Echo zones that spawn around the arena, stay
@@ -25,6 +29,8 @@
 - Packed live particles into a contiguous draw/update range so Three.js stops
   pushing the entire particle budget through the renderer when fewer motes are
   alive during Echo detonation fallout.
+- Scaled voxel spacing, footprint, height, floor radius, player boundary, Echo
+  spawn area, and directional shadow bounds from the active scale controls.
 - Changed Ripple debug console output to include inline JSON payloads so Chrome
   automation sees timing numbers instead of collapsed `Object` arguments.
 - Replaced the old global wave-speed slider with a medium-depth control that

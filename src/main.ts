@@ -9,7 +9,14 @@ import { EchoZoneField, type TriggeredEchoZone } from "./echoZones";
 import { cloneDefaultSettings, getQualityPreset } from "./labSettings";
 import { ParticleVeil } from "./particleVeil";
 import { PulseLightRig } from "./pulseLights";
-import { ARENA_RADIUS, isQualityId, type QualityPreset } from "./qualityPresets";
+import {
+  ARENA_RADIUS_MAX_METERS,
+  ARENA_RADIUS_MIN_METERS,
+  VOXEL_SIZE_MAX_METERS,
+  VOXEL_SIZE_MIN_METERS,
+  isQualityId,
+  type QualityPreset
+} from "./qualityPresets";
 import { RippleField } from "./rippleField";
 import { RippleSourceStore, type RippleSourceOptions } from "./rippleSources";
 import "./styles.css";
@@ -21,6 +28,10 @@ const statsLine = requireElement<HTMLElement>("#stats-line");
 const mediumLine = requireElement<HTMLElement>("#medium-line");
 const qualityBadge = requireElement<HTMLElement>("#quality-badge");
 const qualitySelect = requireElement<HTMLSelectElement>("#quality-select");
+const voxelSizeSlider = requireElement<HTMLInputElement>("#voxel-size-slider");
+const voxelSizeValue = requireElement<HTMLOutputElement>("#voxel-size-value");
+const arenaRadiusSlider = requireElement<HTMLInputElement>("#arena-radius-slider");
+const arenaRadiusValue = requireElement<HTMLOutputElement>("#arena-radius-value");
 const heightSlider = requireElement<HTMLInputElement>("#height-slider");
 const radiusSlider = requireElement<HTMLInputElement>("#radius-slider");
 const depthSlider = requireElement<HTMLInputElement>("#depth-slider");
@@ -47,6 +58,7 @@ const ECHO_DEBUG_SLOW_FRAME_MS = 24;
 const GLOBAL_FRAME_HITCH_MS = 45;
 const GLOBAL_FRAME_HITCH_LOG_INTERVAL_SECONDS = 0.75;
 const GLOBAL_FRAME_HITCH_WARMUP_SECONDS = 1;
+const FIELD_REBUILD_DEBOUNCE_MS = 180;
 const MOVEMENT_RIPPLE_MIN_SPEED = 2.2;
 const MOVEMENT_RIPPLE_MIN_DISTANCE = 0.9;
 const MOVEMENT_RIPPLE_INTERVAL_SECONDS = 0.22;
@@ -98,6 +110,7 @@ let movementWakeSide = 1;
 let echoDebugFrameWatchUntil = -Infinity;
 let echoDebugLastFrameLogAt = -Infinity;
 let lastGlobalFrameHitchLogAt = -Infinity;
+let fieldRebuildTimeoutId = 0;
 const lastMovementRipplePosition = new THREE.Vector3(Infinity, 0, Infinity);
 const movementDirection = new THREE.Vector3();
 const movementShoulder = new THREE.Vector3();
@@ -144,9 +157,10 @@ const player = new PlayerRig({
 });
 
 createLighting();
-createStageFloor();
+const stageFloor = createStageFloor();
+syncControlValues();
 wireControls();
-updateDepthSpeedValue();
+updateTuningReadouts();
 applyQualityPreset(preset, true);
 resize();
 window.addEventListener("resize", resize);
@@ -435,6 +449,7 @@ function wireControls(): void {
 
   qualitySelect.addEventListener("change", () => {
     if (!isQualityId(qualitySelect.value)) return;
+    cancelScheduledFieldRebuild();
     settings.qualityId = qualitySelect.value;
     preset = getQualityPreset(settings);
     settings.bloomStrength = preset.bloomStrength;
@@ -442,6 +457,18 @@ function wireControls(): void {
     applyQualityPreset(preset, false);
   });
 
+  voxelSizeSlider.addEventListener("input", () => {
+    settings.voxelSizeMeters = Number(voxelSizeSlider.value);
+    preset = getQualityPreset(settings);
+    updateVoxelSizeValue();
+    scheduleFieldRebuild();
+  });
+  arenaRadiusSlider.addEventListener("input", () => {
+    settings.arenaRadiusMeters = Number(arenaRadiusSlider.value);
+    preset = getQualityPreset(settings);
+    updateArenaRadiusValue();
+    scheduleFieldRebuild();
+  });
   heightSlider.addEventListener("input", () => {
     settings.rippleHeight = Number(heightSlider.value);
   });
@@ -458,6 +485,23 @@ function wireControls(): void {
   bloomSlider.addEventListener("input", () => {
     settings.bloomStrength = THREE.MathUtils.clamp(Number(bloomSlider.value), 0, 0.38);
   });
+}
+
+function syncControlValues(): void {
+  qualitySelect.value = settings.qualityId;
+  voxelSizeSlider.min = String(VOXEL_SIZE_MIN_METERS);
+  voxelSizeSlider.max = String(VOXEL_SIZE_MAX_METERS);
+  voxelSizeSlider.step = "0.05";
+  voxelSizeSlider.value = String(settings.voxelSizeMeters);
+  arenaRadiusSlider.min = String(ARENA_RADIUS_MIN_METERS);
+  arenaRadiusSlider.max = String(ARENA_RADIUS_MAX_METERS);
+  arenaRadiusSlider.step = "5";
+  arenaRadiusSlider.value = String(settings.arenaRadiusMeters);
+  heightSlider.value = String(settings.rippleHeight);
+  radiusSlider.value = String(settings.rippleRadius);
+  depthSlider.value = String(settings.waveMedium.effectiveDepth);
+  particleSlider.value = String(settings.particleDensity);
+  bloomSlider.value = String(settings.bloomStrength);
 }
 
 function setMenuVisible(visible: boolean): void {
@@ -542,6 +586,61 @@ function updateDepthSpeedValue(): void {
   depthSpeedValue.textContent = `${getBasePropagationSpeedMetersPerSecond(settings.waveMedium).toFixed(1)} m/s`;
 }
 
+function updateTuningReadouts(): void {
+  updateDepthSpeedValue();
+  updateVoxelSizeValue();
+  updateArenaRadiusValue();
+}
+
+function updateVoxelSizeValue(): void {
+  // Below one meter, centimeters are easier to scan than decimals. At or above
+  // one meter, keep the decimal form so the baseline still reads as exactly 1m.
+  voxelSizeValue.textContent = settings.voxelSizeMeters < 1
+    ? `${Math.round(settings.voxelSizeMeters * 100)} cm`
+    : `${settings.voxelSizeMeters.toFixed(2)} m`;
+}
+
+function updateArenaRadiusValue(): void {
+  arenaRadiusValue.textContent = `${Math.round(settings.arenaRadiusMeters)} m`;
+}
+
+function scheduleFieldRebuild(): void {
+  cancelScheduledFieldRebuild();
+
+  // Rebuilding the InstancedMesh can be expensive at small voxel sizes and
+  // large arenas. Debouncing keeps slider drags playable while still making the
+  // final setting feel responsive once the user pauses for a breath.
+  fieldRebuildTimeoutId = window.setTimeout(() => {
+    fieldRebuildTimeoutId = 0;
+    rebuildFieldGeometry(preset);
+  }, FIELD_REBUILD_DEBOUNCE_MS);
+}
+
+function cancelScheduledFieldRebuild(): void {
+  if (fieldRebuildTimeoutId === 0) return;
+  window.clearTimeout(fieldRebuildTimeoutId);
+  fieldRebuildTimeoutId = 0;
+}
+
+function rebuildFieldGeometry(nextPreset: QualityPreset): void {
+  const rebuildStartedAt = performance.now();
+  rippleField.rebuild(nextPreset);
+  updateStageFloor(nextPreset);
+  updateShadowResolution(nextPreset.shadowMapSize, nextPreset.fieldRadius);
+  resize();
+
+  const durationMs = performance.now() - rebuildStartedAt;
+  debugEvent("field.rebuild", "Rebuilt voxel field geometry", {
+    durationMs: roundMetric(durationMs),
+    quality: nextPreset.id,
+    cubeCount: rippleField.getInstanceCount(),
+    voxelSizeMeters: roundMetric(settings.voxelSizeMeters),
+    arenaRadiusMeters: roundMetric(settings.arenaRadiusMeters),
+    sceneRadius: roundMetric(nextPreset.fieldRadius),
+    cubeSpacing: roundMetric(nextPreset.cubeSpacing)
+  }, durationMs > GLOBAL_FRAME_HITCH_MS ? "warn" : "info");
+}
+
 function applyQualityPreset(nextPreset: QualityPreset, initial: boolean): void {
   qualityBadge.textContent = nextPreset.label;
   renderer.shadowMap.enabled = nextPreset.shadowMapSize > 0;
@@ -550,23 +649,24 @@ function applyQualityPreset(nextPreset: QualityPreset, initial: boolean): void {
   bloomPass.strength = settings.bloomStrength;
 
   if (!initial) {
-    rippleField.rebuild(nextPreset);
+    rebuildFieldGeometry(nextPreset);
     particles = particles.resizeBudget(scene, nextPreset.particleBudget, getPixelRatio());
     pulseLights = pulseLights.resize(scene, nextPreset.pulseLightCount);
   }
 
-  updateShadowResolution(nextPreset.shadowMapSize);
+  updateStageFloor(nextPreset);
+  updateShadowResolution(nextPreset.shadowMapSize, nextPreset.fieldRadius);
   resize();
 }
 
-function updateShadowResolution(size: number): void {
-  const shadowBounds = ARENA_RADIUS + 8;
+function updateShadowResolution(size: number, fieldRadius: number): void {
+  const shadowBounds = fieldRadius + 8;
   for (const child of scene.children) {
     if (!(child instanceof THREE.DirectionalLight)) continue;
     child.castShadow = size > 0;
     child.shadow.mapSize.set(Math.max(1, size), Math.max(1, size));
     child.shadow.camera.near = 1;
-    child.shadow.camera.far = 180;
+    child.shadow.camera.far = Math.max(180, fieldRadius * 2.4);
     child.shadow.camera.left = -shadowBounds;
     child.shadow.camera.right = shadowBounds;
     child.shadow.camera.top = shadowBounds;
@@ -590,8 +690,8 @@ function createLighting(): void {
   scene.add(rim);
 }
 
-function createStageFloor(): void {
-  const geometry = new THREE.CircleGeometry(ARENA_RADIUS, 192);
+function createStageFloor(): THREE.Mesh {
+  const geometry = new THREE.CircleGeometry(1, 192);
   const material = new THREE.MeshStandardMaterial({
     color: 0x06101b,
     metalness: 0.38,
@@ -605,6 +705,14 @@ function createStageFloor(): void {
   floor.position.y = -3.2;
   floor.receiveShadow = true;
   scene.add(floor);
+  return floor;
+}
+
+function updateStageFloor(nextPreset: QualityPreset): void {
+  // The floor is a unit circle scaled to the active arena. Reusing one mesh is
+  // much cheaper than throwing away geometry every time the arena slider moves.
+  const floorRadius = nextPreset.fieldRadius + nextPreset.cubeSpacing * 0.5;
+  stageFloor.scale.set(floorRadius, floorRadius, 1);
 }
 
 function createAvatar(): {
@@ -728,7 +836,7 @@ function updateStats(delta: number, time: number): void {
   frameCount = 0;
   fpsAccumulatorSeconds = 0;
   statsLine.textContent = `${Math.round(measuredFps)} fps | ${rippleField.getInstanceCount().toLocaleString()} cubes | ${preset.particleBudget.toLocaleString()} particles`;
-  mediumLine.textContent = `${basePropagationSpeed.toFixed(1)} m/s | ${settings.waveMedium.effectiveDepth.toFixed(1)}m depth | ${echoZones.getActiveCount()} echoes | ${activeSources.length} waves | newest ${newestRingRadius.toFixed(1)}m`;
+  mediumLine.textContent = `${basePropagationSpeed.toFixed(1)} m/s | ${settings.waveMedium.effectiveDepth.toFixed(1)}m depth | ${formatVoxelSize(settings.voxelSizeMeters)} voxels | ${settings.arenaRadiusMeters.toFixed(0)}m arena | ${echoZones.getActiveCount()} echoes | ${activeSources.length} waves | newest ${newestRingRadius.toFixed(1)}m`;
 }
 
 function logEchoDetonationFrame(time: number, delta: number, frameStartedAt: number): void {
@@ -749,6 +857,8 @@ function logEchoDetonationFrame(time: number, delta: number, frameStartedAt: num
     activeParticles: particles.getActiveCount(),
     activeRippleSources: rippleSources.getActiveSources(time).length,
     quality: preset.id,
+    voxelSizeMeters: roundMetric(settings.voxelSizeMeters),
+    arenaRadiusMeters: roundMetric(settings.arenaRadiusMeters),
     bloomStrength: roundMetric(settings.bloomStrength)
   }, isSlow ? "warn" : "debug");
 }
@@ -781,11 +891,19 @@ function logGlobalFrameHitch(time: number, delta: number, rawDelta: number, fram
     particleBudget: preset.particleBudget,
     activeRippleSources: activeSources.length,
     quality: preset.id,
+    voxelSizeMeters: roundMetric(settings.voxelSizeMeters),
+    arenaRadiusMeters: roundMetric(settings.arenaRadiusMeters),
     bloomStrength: roundMetric(settings.bloomStrength),
     particleDensity: roundMetric(settings.particleDensity),
     rendererPixelRatio: roundMetric(getPixelRatio()),
     visibilityState: document.visibilityState
   }, "warn");
+}
+
+function formatVoxelSize(sizeMeters: number): string {
+  return sizeMeters < 1
+    ? `${Math.round(sizeMeters * 100)}cm`
+    : `${sizeMeters.toFixed(2)}m`;
 }
 
 function resize(): void {

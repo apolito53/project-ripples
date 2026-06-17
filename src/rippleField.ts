@@ -20,6 +20,7 @@ type RippleShaderUniforms = {
   readonly uPlayerSpeed: Uniform<number>;
   readonly uRippleHeight: Uniform<number>;
   readonly uRippleRadius: Uniform<number>;
+  readonly uVoxelSize: Uniform<number>;
   readonly uBasePropagationSpeed: Uniform<number>;
   readonly uMediumDamping: Uniform<number>;
   readonly uMediumDispersion: Uniform<number>;
@@ -152,6 +153,7 @@ export class RippleField {
     this.shader.uniforms.uPlayerSpeed.value = playerSpeed;
     this.shader.uniforms.uRippleHeight.value = settings.rippleHeight;
     this.shader.uniforms.uRippleRadius.value = settings.rippleRadius;
+    this.shader.uniforms.uVoxelSize.value = settings.voxelSizeMeters;
     this.shader.uniforms.uBasePropagationSpeed.value = basePropagationSpeed;
     this.shader.uniforms.uMediumDamping.value = settings.waveMedium.damping;
     this.shader.uniforms.uMediumDispersion.value = settings.waveMedium.dispersion;
@@ -186,6 +188,7 @@ export class RippleField {
       shader.uniforms.uPlayerSpeed = { value: 0 };
       shader.uniforms.uRippleHeight = { value: 1.25 };
       shader.uniforms.uRippleRadius = { value: 9 };
+      shader.uniforms.uVoxelSize = { value: 1 };
       shader.uniforms.uBasePropagationSpeed = { value: 9 };
       shader.uniforms.uMediumDamping = { value: 0.16 };
       shader.uniforms.uMediumDispersion = { value: 0.22 };
@@ -205,6 +208,7 @@ export class RippleField {
           uniform float uPlayerSpeed;
           uniform float uRippleHeight;
           uniform float uRippleRadius;
+          uniform float uVoxelSize;
           uniform float uBasePropagationSpeed;
           uniform float uMediumDamping;
           uniform float uMediumDispersion;
@@ -310,8 +314,9 @@ export class RippleField {
           float shelteredSourceWave = sourceWave * (1.0 - bodyPressure * 0.5);
           float lift = (-pressureDepression + rimLift + shelteredSourceWave * 0.92 + flowWave * 0.58) * uRippleHeight;
           float glow = clamp(proximity * (0.04 + shimmer * 0.08) + pressureRim * 0.08 + shelteredSourceWave * 0.18 + flowWave * 0.1, 0.0, 0.4);
-          float cubeHeight = max(0.045, ${BASE_CUBE_HEIGHT.toFixed(2)} + pressureRim * 0.16 + shelteredSourceWave * 0.44 + flowWave * 0.22 - bodyPressure * 0.025);
-          float footprint = ${CUBE_FOOTPRINT.toFixed(2)} + glow * 0.05;
+          float voxelScale = clamp(uVoxelSize, 0.25, 2.0);
+          float cubeHeight = max(0.02, (${BASE_CUBE_HEIGHT.toFixed(2)} + pressureRim * 0.16 + shelteredSourceWave * 0.44 + flowWave * 0.22 - bodyPressure * 0.025) * voxelScale);
+          float footprint = (${CUBE_FOOTPRINT.toFixed(2)} + glow * 0.05) * voxelScale;
 
           transformed.xz *= footprint;
           transformed.y = transformed.y * cubeHeight + cubeHeight * 0.5 + lift;
@@ -339,7 +344,7 @@ export class RippleField {
         );
     };
 
-    material.customProgramCacheKey = () => "ripple-field-shader-v6";
+    material.customProgramCacheKey = () => "ripple-field-shader-v7";
     return material;
   }
 

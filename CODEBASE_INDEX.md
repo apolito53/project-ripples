@@ -1,6 +1,6 @@
 # Codebase Index
 
-Last reviewed: 2026-06-16
+Last reviewed: 2026-06-17
 
 Purpose: compact map for the standalone ripple-field visual lab.
 
@@ -41,7 +41,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `src/particleVeil.ts`
 - Recent-pulse point light pool: `src/pulseLights.ts`
 - Quality preset budgets and labels: `src/qualityPresets.ts`
-- Runtime settings shape/defaults: `src/labSettings.ts`
+- Runtime settings shape/defaults and lab-meter-to-scene-unit scale mapping:
+  `src/labSettings.ts`
 - Wave-medium settings and derived propagation speed: `src/waveMedium.ts`
 - Local diagnostic log buffer and console profiler hooks: `src/debugLog.ts`
 - Tiny local debug receiver and JSONL writer: `scripts/debug-log-server.mjs`
@@ -60,21 +61,24 @@ Purpose: compact map for the standalone ripple-field visual lab.
 4. Cooldown-gated clicks, `Space`, and denser movement wake spacing add ripple
    sources; Echo-zone timers add persistent collectible markers instead of
    immediate ambient waves.
-5. `RippleField` builds cube instances inside the circular arena and sends
-   active source/metadata/lifetime uniforms plus wave-medium values to the
-   shader; cube matrices stay static while the GPU animates lift/stretch/glow.
+5. `RippleField` builds cube instances inside the circular arena using the
+   active quality, voxel-size, and arena-radius settings, then sends active
+   source/metadata/lifetime uniforms plus wave-medium and voxel-scale values to
+   the shader; cube matrices stay static while the GPU animates
+   lift/stretch/glow.
 6. `EchoZoneField` animates live Echo markers and reports run-through triggers.
 7. `ParticleVeil` animates the player sparkle aura, burst clouds, flat Echo
    disc bursts, and wake motes.
 8. `PulseLightRig` assigns recent pulses and collected Echo detonations to
    point lights.
-9. The HUD reports FPS, instance counts, base propagation speed, live Echo
-   count, active source count, and the newest ring radius.
+9. The HUD reports FPS, instance counts, base propagation speed, voxel size,
+   arena radius, live Echo count, active source count, and newest ring radius.
 10. The scene renders through bloom when bloom strength is above zero.
 
 ## Common Change Targets
 
-- Tune visual density or GPU pressure: `src/qualityPresets.ts`
+- Tune visual density, voxel-size ranges, arena-radius ranges, or GPU pressure:
+  `src/qualityPresets.ts`, `src/labSettings.ts`, and `src/main.ts`
 - Change ripple math, cube shape, directional water-like movement response,
   tint, or glow: `src/rippleField.ts`
 - Change Echo-zone spawn count, trigger radius, column visuals, or collection
@@ -112,6 +116,10 @@ Purpose: compact map for the standalone ripple-field visual lab.
   sets Three.js draw/update ranges from `activeCount`; preserve that shape when
   changing particle lifetimes or replacement behavior, or dead budget slots will
   quietly become render cost again.
+- The voxel-size and arena-radius sliders rebuild the InstancedMesh after a
+  short debounce. Extreme combinations such as tiny voxels plus a 400m arena can
+  create very large instance counts, so check the HUD cube count and
+  `field.rebuild` debug events before assuming a visual hitch comes from waves.
 - `Meltdown` is intentionally rude to weak GPUs. Keep it available, but do not
   tune the normal experience around it.
 - Pointer-lock behavior should be browser-tested in Chrome, not trusted from a

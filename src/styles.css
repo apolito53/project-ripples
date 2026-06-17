@@ -123,7 +123,7 @@ input[type="range"] {
 
 .range-with-value {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 58px;
+  grid-template-columns: minmax(0, 1fr) 66px;
   gap: 10px;
   align-items: center;
   min-width: 0;
@@ -156,7 +156,7 @@ input[type="range"] {
   }
 
   .range-with-value {
-    grid-template-columns: minmax(0, 1fr) 62px;
+    grid-template-columns: minmax(0, 1fr) 68px;
   }
 }
 
