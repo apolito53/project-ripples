@@ -23,6 +23,11 @@ fun shelf where shiny concepts can sit until one of them starts looking useful.
 - A mode where the avatar conducts waves, turning movement into continuous
   ripple ribbons.
 - Click-and-drag pulse painting for choreographing wave patterns.
+- Mobile-first launch flow: a clean "tap to enter" screen that can request
+  fullscreen, orient the player, and avoid dumping them straight into tiny HUD
+  chaos.
+- An installed-PWA mode with a more console-like feel: no browser chrome,
+  landscape-biased layout, and a compact mobile HUD tuned for thumbs.
 
 ## Engine Experiments
 

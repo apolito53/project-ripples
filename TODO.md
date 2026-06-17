@@ -26,6 +26,15 @@ concrete follow-ups that we actually intend to revisit.
 
 ## Medium Priority
 
+- Add a mobile browser presentation pass.
+  Include a user-triggered fullscreen button for Android/compatible browsers,
+  PWA manifest support for installed-app mode, iOS home-screen metadata, and
+  `100dvh`/safe-area CSS so normal browser tabs use as much screen as the
+  platform allows.
+- Make mobile fullscreen state visible and honest.
+  If `requestFullscreen()` is available, expose a clear tap target. If the
+  browser cannot enter fullscreen, show a small non-intrusive hint that
+  installing/adding to the home screen is the better path.
 - Add browser-test hooks for pointer lock, camera orbit, and arena boundary
   behavior.
 - Clean up quality presets after the fixed-radius arena change so each mode has
