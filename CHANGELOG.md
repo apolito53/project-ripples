@@ -4,6 +4,18 @@
 
 - No changes yet.
 
+## 0.1.1-ALPHA - 2026-06-17
+
+### Added
+
+- Added a glowing volumetric arena-edge barrier that follows the live arena
+  radius slider and gives the circular map boundary a visible in-world edge.
+
+### Changed
+
+- Changed voxel tinting to respond to animated cube height, with raised cubes
+  shifting toward white and lower cubes staying darker and colder.
+
 ## 0.1.0-ALPHA - 2026-06-17
 
 ### Added

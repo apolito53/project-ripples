@@ -3,6 +3,7 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { ArenaBarrier } from "./arenaBarrier";
 import { PlayerRig } from "./controls";
 import { debugEvent, debugMeasure, roundMetric, vectorPayload } from "./debugLog";
 import { EchoZoneField, type TriggeredEchoZone } from "./echoZones";
@@ -158,6 +159,7 @@ const player = new PlayerRig({
 
 createLighting();
 const stageFloor = createStageFloor();
+const arenaBarrier = new ArenaBarrier(scene);
 syncControlValues();
 wireControls();
 updateTuningReadouts();
@@ -183,6 +185,7 @@ function animate(): void {
   particles.spawnAura(player.position, delta, playerSpeed / 18);
   particles.spawnWake(player.position, playerSpeed / 18);
   maybeSpawnMovementRipple(time, playerSpeed);
+  arenaBarrier.update(time);
   echoZones.update(time);
   collectEchoZones(time);
   maybeSpawnEchoZone(time);
@@ -713,6 +716,7 @@ function updateStageFloor(nextPreset: QualityPreset): void {
   // much cheaper than throwing away geometry every time the arena slider moves.
   const floorRadius = nextPreset.fieldRadius + nextPreset.cubeSpacing * 0.5;
   stageFloor.scale.set(floorRadius, floorRadius, 1);
+  arenaBarrier.setRadius(floorRadius);
 }
 
 function createAvatar(): {

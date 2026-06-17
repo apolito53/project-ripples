@@ -9,7 +9,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Vite + strict TypeScript browser app.
 - Three.js renderer, postprocessing composer, Unreal bloom pass, shader-customized
   `InstancedMesh`, additive `Points`, and dynamic lights.
-- Current alpha baseline: `v0.1.0-ALPHA`; keep release tags in alpha prerelease
+- Current alpha baseline: `v0.1.1-ALPHA`; keep release tags in alpha prerelease
   territory until the lab graduates from prototype status.
 - Dedicated dev port `5183`; preview port `4183`.
 
@@ -33,7 +33,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Avatar movement, circular arena clamp, pointer lock, and camera follow behavior:
   `src/controls.ts`
 - Circular shader-displaced instanced cube field and directional movement
-  wake deformation: `src/rippleField.ts`
+  wake deformation, including animated-height voxel tinting:
+  `src/rippleField.ts`
+- Visual-only glowing arena-edge barrier: `src/arenaBarrier.ts`
 - Lifetime-pruned pulse/wake source list and shader uniform writer:
   `src/rippleSources.ts`
 - Persistent collectible Echo-column lights, bright orb lights, vertical
@@ -67,22 +69,26 @@ Purpose: compact map for the standalone ripple-field visual lab.
    active quality, voxel-size, and arena-radius settings, then sends active
    source/metadata/lifetime uniforms plus wave-medium and voxel-scale values to
    the shader; cube matrices stay static while the GPU animates
-   lift/stretch/glow.
-6. `EchoZoneField` animates live Echo markers and reports run-through triggers.
-7. `ParticleVeil` animates the player sparkle aura, burst clouds, flat Echo
+   lift/stretch/glow and height-based tinting.
+6. `ArenaBarrier` draws a visual-only glowing curtain and rings at the arena
+   radius so the map edge is visible without changing collision logic.
+7. `EchoZoneField` animates live Echo markers and reports run-through triggers.
+8. `ParticleVeil` animates the player sparkle aura, burst clouds, flat Echo
    disc bursts, and wake motes.
-8. `PulseLightRig` assigns recent pulses and collected Echo detonations to
+9. `PulseLightRig` assigns recent pulses and collected Echo detonations to
    point lights.
-9. The HUD reports FPS, instance counts, base propagation speed, voxel size,
+10. The HUD reports FPS, instance counts, base propagation speed, voxel size,
    arena radius, live Echo count, active source count, and newest ring radius.
-10. The scene renders through bloom when bloom strength is above zero.
+11. The scene renders through bloom when bloom strength is above zero.
 
 ## Common Change Targets
 
 - Tune visual density, voxel-size ranges, arena-radius ranges, or GPU pressure:
   `src/qualityPresets.ts`, `src/labSettings.ts`, and `src/main.ts`
+- Change the visible map-edge barrier color, height, or shimmer:
+  `src/arenaBarrier.ts`
 - Change ripple math, cube shape, directional water-like movement response,
-  tint, or glow: `src/rippleField.ts`
+  animated-height tint, or glow: `src/rippleField.ts`
 - Change Echo-zone spawn count, trigger radius, column visuals, or collection
   behavior: `src/echoZones.ts` and `src/main.ts`
 - Change particles, wake behavior, or burst count: `src/particleVeil.ts` and

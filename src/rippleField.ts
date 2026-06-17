@@ -221,6 +221,7 @@ export class RippleField {
           attribute float instancePhase;
           attribute vec3 instanceTint;
           varying float vRippleGlow;
+          varying float vHeightWhiteness;
           varying vec3 vRippleTint;
 
           float rippleRing(vec4 ripple, vec4 metadata, float lifetime, vec2 cellPosition) {
@@ -317,11 +318,24 @@ export class RippleField {
           float voxelScale = clamp(uVoxelSize, 0.25, 2.0);
           float cubeHeight = max(0.02, (${BASE_CUBE_HEIGHT.toFixed(2)} + pressureRim * 0.16 + shelteredSourceWave * 0.44 + flowWave * 0.22 - bodyPressure * 0.025) * voxelScale);
           float footprint = (${CUBE_FOOTPRINT.toFixed(2)} + glow * 0.05) * voxelScale;
+          float visualHeight = instanceFieldPosition.y + lift + cubeHeight;
+          float heightWhiteness = smoothstep(-0.75, 3.05, visualHeight);
 
           transformed.xz *= footprint;
           transformed.y = transformed.y * cubeHeight + cubeHeight * 0.5 + lift;
           vRippleGlow = glow;
-          vRippleTint = mix(instanceTint, vec3(0.18, 0.82, 0.74), clamp(glow * 0.46, 0.0, 0.7));`
+          vHeightWhiteness = heightWhiteness;
+
+          // Height color is driven from the animated shader height, not only the
+          // baked terrain height. Ripples and the player rim can therefore flash
+          // toward white as they rise, while troughs stay darker and colder.
+          vec3 rippleTint = mix(instanceTint, vec3(0.18, 0.82, 0.74), clamp(glow * 0.46, 0.0, 0.7));
+          vec3 shadedLowTint = rippleTint * (0.58 + heightWhiteness * 0.34);
+          vRippleTint = mix(
+            shadedLowTint,
+            vec3(0.94, 0.985, 1.0),
+            clamp(heightWhiteness * (0.34 + glow * 0.32), 0.0, 0.76)
+          );`
         );
 
       rippleShader.fragmentShader = shader.fragmentShader
@@ -330,12 +344,13 @@ export class RippleField {
           `#include <common>
           uniform float uBloomMood;
           varying float vRippleGlow;
+          varying float vHeightWhiteness;
           varying vec3 vRippleTint;`
         )
         .replace(
           "#include <color_fragment>",
           `#include <color_fragment>
-          diffuseColor.rgb *= vRippleTint * (0.64 + vRippleGlow * 0.05);`
+          diffuseColor.rgb *= vRippleTint * (0.62 + vRippleGlow * 0.05 + vHeightWhiteness * 0.07);`
         )
         .replace(
           "#include <emissivemap_fragment>",
@@ -344,7 +359,7 @@ export class RippleField {
         );
     };
 
-    material.customProgramCacheKey = () => "ripple-field-shader-v7";
+    material.customProgramCacheKey = () => "ripple-field-shader-v8";
     return material;
   }
 
@@ -367,9 +382,22 @@ function createTerrainTint(x: number, y: number, z: number): THREE.Color {
   const cool = new THREE.Color(0x143a55);
   const warm = new THREE.Color(0x2a5a6a);
   const accent = new THREE.Color(0x3958a7);
+  const high = new THREE.Color(0xd8fbff);
   const mix = pseudoRandom(x * 0.3 + y, z * 0.7);
-  color.copy(cool).lerp(warm, 0.35 + mix * 0.35).lerp(accent, Math.max(0, y) * 0.035);
+  const terrainWhiteness = smoothstep(-1.35, 1.95, y) * 0.24;
+
+  // The shader handles animated height whitening every frame. This baked tint
+  // gives the still terrain the same language before any waves pass through it.
+  color.copy(cool)
+    .lerp(warm, 0.35 + mix * 0.35)
+    .lerp(accent, Math.max(0, y) * 0.035)
+    .lerp(high, terrainWhiteness);
   return color;
+}
+
+function smoothstep(edge0: number, edge1: number, value: number): number {
+  const x = Math.min(1, Math.max(0, (value - edge0) / (edge1 - edge0)));
+  return x * x * (3 - 2 * x);
 }
 
 function pseudoRandom(x: number, z: number): number {
