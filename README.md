@@ -7,7 +7,7 @@ This is intentionally separate from `voxel-sandbox-engine`. The goal is to make
 a polished visual lab first, then borrow patterns or ideas later if they deserve
 to graduate into the main voxel engine.
 
-Current version: `v0.1.3-ALPHA`.
+Current version: `v0.1.4-ALPHA`.
 
 ## Quick Start
 
@@ -38,19 +38,21 @@ Open `http://127.0.0.1:5183`.
 - `Esc` releases pointer lock.
 
 The avatar is clamped inside the circular arena edge.
-The arena edge is rendered as a glowing volumetric barrier so the playable
-boundary is visible in-world instead of only being implied by movement clamping.
+The arena edge is rendered as a smooth glowing gradient barrier so the playable
+boundary is visible in-world without looking like a tiled wall texture.
 The voxel field is drawn as lit animated caps with same-width column shafts
 sinking into the stage below them, so the field reads as depth instead of
 floating platform tiles. Raised wave crests carry an extra bounded glow signal,
 so ripple fronts bloom brighter without washing out the whole field.
 Manual pulses have a short shared cooldown so held keys or rapid clicks do not
 flood the field.
+The avatar itself uses fast orbiting energy motes with long additive trails
+instead of flat rings, so it reads as a moving glow cloud rather than a UI target.
 Sparkling Echo columns spawn around the arena as real local light sources with
-a bright inner orb, a vertically stretched diamond-shaped glow cloud, orbiting
-motes, and subtle trails. They wait until the avatar runs through them, then
-detonate into a wider pulse, a flat disc burst of sparks, and a short local
-orb-shatter effect.
+a bright inner orb, a vertically stretched diamond-shaped glow cloud, faster
+orbiting motes, and longer trails. They wait until the avatar runs through them,
+then detonate into a wider pulse, a flat disc burst of sparks, and a short
+local orb-shatter effect without geometric ring markers.
 Movement behaves like a small body pushing through water: the shader forms a
 pressed fabric depression, local bow/wake displacement, and small raised rim
 around the avatar, while stamped wake ripples remain in the field and propagate
@@ -118,7 +120,7 @@ Project planning:
 Versioning:
 
 - While the project is still experimental, release tags use alpha prerelease
-  labels. The current baseline is `v0.1.3-ALPHA`.
+  labels. The current baseline is `v0.1.4-ALPHA`.
 
 ## Design Notes
 
@@ -129,7 +131,7 @@ Versioning:
   raised cubes push toward white while lower shaft bases keep the cap hue and
   fade darker. Wave crests have their own glow varying so peak brightness can be
   tuned separately from generic player-proximity glow.
-- `src/arenaBarrier.ts` owns the visual-only glowing arena-edge barrier that
+- `src/arenaBarrier.ts` owns the visual-only glowing arena-edge gradient that
   follows the live arena radius without changing collision behavior.
 - `src/rippleSources.ts` keeps the lifetime-pruned pulse and movement-wake list
   sent to the GPU, including per-source speed, width, damping, lifetime, and
@@ -138,8 +140,8 @@ Versioning:
   logging, and optional batching to the `5184` debug receiver used to profile
   Echo detonations and frame spikes.
 - `src/echoZones.ts` owns persistent collectible Echo-column lights, bright orb
-  lights, vertical diamond-style orb mist, orbiting sparkle trails, and their
-  run-through trigger/despawn burst detection.
+  lights, vertical diamond-style orb mist, fast orbiting sparkle trails, and
+  their run-through trigger/despawn burst detection.
 - `src/waveMedium.ts` defines the medium settings and derived propagation speed.
 - `src/labSettings.ts` maps UI meters onto the original scene-unit art scale,
   including voxel-size density scaling and the 200m-to-400m arena radius range.
@@ -147,7 +149,8 @@ Versioning:
   bursts, flat Echo disc bursts, and wake trails.
 - `src/pulseLights.ts` maps recent pulses onto a small pool of point lights.
 - `src/controls.ts` owns avatar movement, circular arena clamping, and camera
-  pointer-lock behavior.
+  pointer-lock behavior. The avatar visuals in `src/main.ts` use orbiting motes
+  and segmented additive trails instead of torus rings.
 
 The CPU decides where the player, manual pulses, persistent Echo zones, and
 movement wakes are. Manual pulse input is cooldown-gated, Echo zones only become

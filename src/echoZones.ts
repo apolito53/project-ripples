@@ -50,8 +50,6 @@ type EchoCollectBurst = {
   readonly object: THREE.Group;
   readonly flare: THREE.Mesh<THREE.IcosahedronGeometry, THREE.MeshBasicMaterial>;
   readonly mist: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>;
-  readonly shockRing: THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>;
-  readonly crownRing: THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>;
   readonly shards: THREE.Points<THREE.BufferGeometry, THREE.ShaderMaterial>;
   readonly shardPositions: Float32Array;
   readonly shardVelocities: Float32Array;
@@ -73,25 +71,24 @@ type EchoCollectBurstShards = {
 };
 
 const BEAM_LIGHT_COLOR = 0x67ffe0;
-const RING_COLOR = 0x95a7ff;
+const VIOLET_COLOR = 0x95a7ff;
 const CORE_COLOR = 0xffd36a;
 const ORB_LIGHT_COLOR = 0xffe08a;
 const ORB_SHELL_COLOR = 0xfff2c6;
 const MOTE_COLOR = 0x7dffd8;
 const COLUMN_HEIGHT = 7.4;
 const COLUMN_BASE_LIFT = 1.45;
-const SPARK_MOTE_COUNT = 128;
+const SPARK_MOTE_COUNT = 168;
 const COLLECT_BURST_MOTE_COUNT = 220;
 const COLLECT_BURST_DURATION = 0.88;
-const TRAIL_BACKSTEP_SECONDS = 0.18;
+const TRAIL_BACKSTEP_SECONDS = 0.46;
 const TEMP_COLOR = new THREE.Color();
 const TURQUOISE = new THREE.Color(MOTE_COLOR);
-const VIOLET = new THREE.Color(RING_COLOR);
+const VIOLET = new THREE.Color(VIOLET_COLOR);
 const GOLD = new THREE.Color(CORE_COLOR);
 
 export class EchoZoneField {
   private readonly scene: THREE.Scene;
-  private readonly ringGeometry = new THREE.TorusGeometry(1, 0.018, 8, 112);
   private readonly coreGeometry = new THREE.IcosahedronGeometry(0.42, 2);
   private readonly diamondGeometry = new THREE.OctahedronGeometry(1, 1);
   private readonly mistGeometry = new THREE.SphereGeometry(1, 32, 20);
@@ -272,7 +269,6 @@ export class EchoZoneField {
     for (let index = this.collectBursts.length - 1; index >= 0; index -= 1) {
       this.removeCollectBurstAt(index);
     }
-    this.ringGeometry.dispose();
     this.coreGeometry.dispose();
     this.diamondGeometry.dispose();
     this.mistGeometry.dispose();
@@ -308,20 +304,6 @@ export class EchoZoneField {
     mist.scale.set(zone.columnRadius * 1.1, zone.columnRadius * 0.82, zone.columnRadius * 1.1);
     object.add(mist);
 
-    const shockRing = new THREE.Mesh(this.ringGeometry, createBurstRingMaterial(BEAM_LIGHT_COLOR, 0.84));
-    shockRing.name = "Echo collect horizontal shock ring";
-    shockRing.position.y = orbHeight;
-    shockRing.rotation.x = -Math.PI / 2;
-    shockRing.renderOrder = 8;
-    object.add(shockRing);
-
-    const crownRing = new THREE.Mesh(this.ringGeometry, createBurstRingMaterial(ORB_LIGHT_COLOR, 0.72));
-    crownRing.name = "Echo collect vertical crown ring";
-    crownRing.position.y = orbHeight;
-    crownRing.rotation.y = Math.PI / 2;
-    crownRing.renderOrder = 8;
-    object.add(crownRing);
-
     const shardCloud = debugMeasure(
       "echo.collect",
       "Created Echo collection shard buffers",
@@ -347,8 +329,6 @@ export class EchoZoneField {
       object,
       flare,
       mist,
-      shockRing,
-      crownRing,
       shards: shardCloud.points,
       shardPositions: shardCloud.positions,
       shardVelocities: shardCloud.velocities,
@@ -386,9 +366,9 @@ export class EchoZoneField {
       const flash = fade * fade;
       const orbHeight = COLUMN_BASE_LIFT + COLUMN_HEIGHT * 0.5;
 
-      // The burst has a few layered reads: core flash, expanding rings, mist,
-      // motes, and a real light flash. Each fades on the same short lifetime so
-      // collection feels decisive without leaving old pickup clutter behind.
+      // The burst is now light-and-particle led instead of torus-led. The mist,
+      // flare, shards, and real point light keep the detonation readable without
+      // drawing graphic rings that clash with the rest of the field.
       burst.object.rotation.y = burst.baseRotation + age * 2.15 + progress * 0.55;
       burst.flare.position.y = orbHeight + easeOut * 0.35;
       burst.flare.scale.setScalar(0.9 + easeOut * 4.2);
@@ -403,16 +383,6 @@ export class EchoZoneField {
       burst.mist.material.uniforms.uTime.value = age * 1.9;
       burst.mist.material.uniforms.uPulse.value = 1;
       burst.mist.material.uniforms.uOpacity.value = 0.66 * fade;
-
-      burst.shockRing.position.y = orbHeight - easeOut * 1.4;
-      burst.shockRing.rotation.z = age * 3.4;
-      burst.shockRing.scale.setScalar(burst.columnRadius * (0.7 + easeOut * 5.8));
-      burst.shockRing.material.opacity = 0.76 * Math.pow(fade, 1.35);
-
-      burst.crownRing.rotation.x = age * 2.2;
-      burst.crownRing.rotation.z = age * -1.4;
-      burst.crownRing.scale.setScalar(burst.columnRadius * (0.55 + easeOut * 3.1));
-      burst.crownRing.material.opacity = 0.62 * Math.pow(fade, 1.2);
 
       burst.burstLight.intensity = 7.8 * flash;
       burst.burstLight.distance = 10 + easeOut * 18;
@@ -453,8 +423,6 @@ export class EchoZoneField {
     burst.object.removeFromParent();
     burst.flare.material.dispose();
     burst.mist.material.dispose();
-    burst.shockRing.material.dispose();
-    burst.crownRing.material.dispose();
     burst.shards.geometry.dispose();
     burst.shards.material.dispose();
     burst.burstLight.dispose();
@@ -478,7 +446,7 @@ function createColumnLights(): readonly THREE.PointLight[] {
   coreLight.name = "Echo bright orb light";
   coreLight.position.y = COLUMN_BASE_LIFT + COLUMN_HEIGHT * 0.5;
 
-  const upperLight = new THREE.PointLight(RING_COLOR, 0.95, 12, 1.8);
+  const upperLight = new THREE.PointLight(VIOLET_COLOR, 0.95, 12, 1.8);
   upperLight.name = "Echo upper violet light";
   upperLight.position.y = COLUMN_BASE_LIFT + COLUMN_HEIGHT - 0.7;
 
@@ -493,16 +461,6 @@ function updateColumnLights(lights: readonly THREE.PointLight[], pulse: number):
   coreLight.distance = 16 + pulse * 5.5;
   upperLight.intensity = 0.68 + pulse * 0.7;
   upperLight.distance = 10 + pulse * 3;
-}
-
-function createBurstRingMaterial(color: number, opacity: number): THREE.MeshBasicMaterial {
-  return new THREE.MeshBasicMaterial({
-    color,
-    transparent: true,
-    opacity,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending
-  });
 }
 
 function createCollectBurstShards(columnRadius: number, orbHeight: number): EchoCollectBurstShards {
@@ -705,7 +663,7 @@ function createOrbitSparkles(radius: number, height: number, baseLift: number): 
     baseAngles[index] = index * 2.399963 + Math.random() * 0.75;
     radii[index] = radius * (0.28 + Math.random() * 0.92);
     heights[index] = baseLift + Math.random() * height;
-    speeds[index] = (Math.random() < 0.5 ? -1 : 1) * (0.34 + Math.random() * 0.78);
+    speeds[index] = (Math.random() < 0.5 ? -1 : 1) * (1.45 + Math.random() * 2.25);
     phases[index] = Math.random() * Math.PI * 2;
     verticalSpeeds[index] = 1.1 + Math.random() * 2.3;
     alphas[index] = 0.42 + Math.random() * 0.38;
@@ -746,7 +704,7 @@ function createOrbitSparkles(radius: number, height: number, baseLift: number): 
     new THREE.LineBasicMaterial({
       vertexColors: true,
       transparent: true,
-      opacity: 0.11,
+      opacity: 0.18,
       depthTest: false,
       depthWrite: false,
       blending: THREE.AdditiveBlending
@@ -773,7 +731,7 @@ function createOrbitSparkles(radius: number, height: number, baseLift: number): 
 
 function updateOrbitSparkles(sparkles: EchoOrbitSparkles, time: number, pulse: number): void {
   sparkles.points.material.uniforms.uTime.value = time;
-  sparkles.trails.material.opacity = 0.055 + pulse * 0.075;
+  sparkles.trails.material.opacity = 0.11 + pulse * 0.14;
 
   for (let index = 0; index < SPARK_MOTE_COUNT; index += 1) {
     const positionOffset = index * 3;

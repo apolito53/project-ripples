@@ -4,6 +4,17 @@
 
 - No changes yet.
 
+## 0.1.4-ALPHA - 2026-06-17
+
+### Changed
+
+- Replaced the player's flat torus rings with fast orbiting energy motes and
+  long additive trails, keeping the avatar readable without UI-like circles.
+- Removed torus rings from Echo collection bursts and strengthened Echo orbit
+  mote speed/trail length so motion trails carry the circular energy effect.
+- Simplified the arena-edge wall into a smooth glowing color gradient, removing
+  the scan-line/wisp texture that created visible bands and seams.
+
 ## 0.1.3-ALPHA - 2026-06-17
 
 ### Changed

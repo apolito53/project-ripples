@@ -85,6 +85,26 @@ const ECHO_BURST_OPTIONS: RippleSourceOptions = {
   dampingMultiplier: 0.58,
   lifetimeSeconds: 8.6
 };
+const AVATAR_ORBIT_MOTE_COUNT = 36;
+const AVATAR_ORBIT_TRAIL_SEGMENTS = 6;
+const AVATAR_ORBIT_TRAIL_SECONDS = 0.54;
+
+type AvatarOrbitTrails = {
+  readonly points: THREE.Points<THREE.BufferGeometry, THREE.ShaderMaterial>;
+  readonly trails: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
+  readonly positions: Float32Array;
+  readonly alphas: Float32Array;
+  readonly sizes: Float32Array;
+  readonly trailPositions: Float32Array;
+  readonly trailColors: Float32Array;
+  readonly baseColors: Float32Array;
+  readonly baseAngles: Float32Array;
+  readonly radii: Float32Array;
+  readonly heights: Float32Array;
+  readonly speeds: Float32Array;
+  readonly phases: Float32Array;
+  readonly tilts: Float32Array;
+};
 
 const renderer = new THREE.WebGLRenderer({
   antialias: true,
@@ -757,31 +777,8 @@ function createAvatar(): {
   shell.name = "Player readable glass shell";
   object.add(shell);
 
-  const equatorRing = new THREE.Mesh(
-    new THREE.TorusGeometry(0.78, 0.012, 10, 96),
-    new THREE.MeshBasicMaterial({
-      color: 0x7dffd8,
-      transparent: true,
-      opacity: 0.54,
-      blending: THREE.AdditiveBlending
-    })
-  );
-  equatorRing.name = "Player equator ring";
-  equatorRing.rotation.x = Math.PI / 2;
-  object.add(equatorRing);
-
-  const tiltedRing = new THREE.Mesh(
-    new THREE.TorusGeometry(0.64, 0.01, 10, 96),
-    new THREE.MeshBasicMaterial({
-      color: 0x8ea2ff,
-      transparent: true,
-      opacity: 0.38,
-      blending: THREE.AdditiveBlending
-    })
-  );
-  tiltedRing.name = "Player tilted ring";
-  tiltedRing.rotation.set(Math.PI / 2.8, 0, Math.PI / 5);
-  object.add(tiltedRing);
+  const orbitTrails = createAvatarOrbitTrails();
+  object.add(orbitTrails.trails, orbitTrails.points);
 
   const coreLight = new THREE.PointLight(0x8fffe0, 4.4, 19, 1.65);
   coreLight.name = "Player bright local cube light";
@@ -801,10 +798,9 @@ function createAvatar(): {
       core.rotation.y += delta * 1.9;
       shell.rotation.x -= delta * 0.55;
       shell.rotation.y += delta * 0.7;
-      equatorRing.rotation.z += delta * 1.6;
-      tiltedRing.rotation.z -= delta * 1.15;
       const breathingGlow = Math.sin(clock.elapsedTime * 4) * 0.5 + 0.5;
       const movementGlow = THREE.MathUtils.clamp(movementSpeed / 18, 0, 1);
+      updateAvatarOrbitTrails(orbitTrails, clock.elapsedTime, movementGlow);
 
       // The player should now behave like an actual local light source for the
       // cube field. Keep shadows off for this moving light pair; point-light
@@ -815,6 +811,218 @@ function createAvatar(): {
       floorLight.distance = 12 + movementGlow * 4;
     }
   };
+}
+
+function createAvatarOrbitTrails(): AvatarOrbitTrails {
+  const positions = new Float32Array(AVATAR_ORBIT_MOTE_COUNT * 3);
+  const colors = new Float32Array(AVATAR_ORBIT_MOTE_COUNT * 3);
+  const alphas = new Float32Array(AVATAR_ORBIT_MOTE_COUNT);
+  const sizes = new Float32Array(AVATAR_ORBIT_MOTE_COUNT);
+  const twinkles = new Float32Array(AVATAR_ORBIT_MOTE_COUNT);
+  const trailVertexCount = AVATAR_ORBIT_MOTE_COUNT * AVATAR_ORBIT_TRAIL_SEGMENTS * 2;
+  const trailPositions = new Float32Array(trailVertexCount * 3);
+  const trailColors = new Float32Array(trailVertexCount * 3);
+  const baseColors = new Float32Array(AVATAR_ORBIT_MOTE_COUNT * 3);
+  const baseAngles = new Float32Array(AVATAR_ORBIT_MOTE_COUNT);
+  const radii = new Float32Array(AVATAR_ORBIT_MOTE_COUNT);
+  const heights = new Float32Array(AVATAR_ORBIT_MOTE_COUNT);
+  const speeds = new Float32Array(AVATAR_ORBIT_MOTE_COUNT);
+  const phases = new Float32Array(AVATAR_ORBIT_MOTE_COUNT);
+  const tilts = new Float32Array(AVATAR_ORBIT_MOTE_COUNT);
+
+  for (let index = 0; index < AVATAR_ORBIT_MOTE_COUNT; index += 1) {
+    const offset = index * 3;
+    const hueMix = index / Math.max(1, AVATAR_ORBIT_MOTE_COUNT - 1);
+    const color = new THREE.Color(0x7dffd8).lerp(new THREE.Color(0x8ea2ff), Math.sin(hueMix * Math.PI) * 0.55);
+
+    // These motes replace the old torus rings. They orbit fast enough to imply
+    // a circular path, while the trail geometry provides the visible arc.
+    baseAngles[index] = index * 2.399963 + Math.random() * 0.65;
+    radii[index] = 0.48 + Math.random() * 0.42;
+    heights[index] = -0.12 + Math.random() * 0.82;
+    speeds[index] = (index % 2 === 0 ? 1 : -1) * (3.2 + Math.random() * 2.7);
+    phases[index] = Math.random() * Math.PI * 2;
+    tilts[index] = -0.95 + Math.random() * 1.9;
+    alphas[index] = 0.42 + Math.random() * 0.34;
+    sizes[index] = 0.58 + Math.random() * 0.54;
+    twinkles[index] = Math.random();
+
+    colors[offset] = color.r;
+    colors[offset + 1] = color.g;
+    colors[offset + 2] = color.b;
+    baseColors[offset] = color.r;
+    baseColors[offset + 1] = color.g;
+    baseColors[offset + 2] = color.b;
+  }
+
+  const pointGeometry = new THREE.BufferGeometry();
+  pointGeometry.setAttribute("position", createAvatarDynamicAttribute(positions, 3));
+  pointGeometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  pointGeometry.setAttribute("aAlpha", createAvatarDynamicAttribute(alphas, 1));
+  pointGeometry.setAttribute("aSize", createAvatarDynamicAttribute(sizes, 1));
+  pointGeometry.setAttribute("aTwinkle", new THREE.BufferAttribute(twinkles, 1));
+
+  const trailGeometry = new THREE.BufferGeometry();
+  trailGeometry.setAttribute("position", createAvatarDynamicAttribute(trailPositions, 3));
+  trailGeometry.setAttribute("color", createAvatarDynamicAttribute(trailColors, 3));
+
+  const points = new THREE.Points(pointGeometry, createAvatarMoteMaterial());
+  points.name = "Player orbiting energy motes";
+  points.frustumCulled = false;
+  points.renderOrder = 6;
+
+  const trails = new THREE.LineSegments(
+    trailGeometry,
+    new THREE.LineBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.26,
+      depthTest: false,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    })
+  );
+  trails.name = "Player long energy mote trails";
+  trails.frustumCulled = false;
+  trails.renderOrder = 5;
+
+  return {
+    points,
+    trails,
+    positions,
+    alphas,
+    sizes,
+    trailPositions,
+    trailColors,
+    baseColors,
+    baseAngles,
+    radii,
+    heights,
+    speeds,
+    phases,
+    tilts
+  };
+}
+
+function updateAvatarOrbitTrails(orbitTrails: AvatarOrbitTrails, time: number, movementGlow: number): void {
+  orbitTrails.points.material.uniforms.uTime.value = time;
+  orbitTrails.trails.material.opacity = 0.22 + movementGlow * 0.11;
+  const trailStepSeconds = AVATAR_ORBIT_TRAIL_SECONDS / AVATAR_ORBIT_TRAIL_SEGMENTS;
+
+  for (let index = 0; index < AVATAR_ORBIT_MOTE_COUNT; index += 1) {
+    const pointOffset = index * 3;
+    writeAvatarOrbitPosition(orbitTrails.positions, pointOffset, orbitTrails, index, time);
+    orbitTrails.alphas[index] = 0.38 + movementGlow * 0.16 + Math.sin(time * 8.2 + orbitTrails.phases[index]) * 0.08;
+    orbitTrails.sizes[index] = 0.58 + movementGlow * 0.22 + Math.sin(time * 5.4 + orbitTrails.phases[index]) * 0.06;
+
+    for (let segment = 0; segment < AVATAR_ORBIT_TRAIL_SEGMENTS; segment += 1) {
+      const segmentOffset = (index * AVATAR_ORBIT_TRAIL_SEGMENTS + segment) * 6;
+      const olderTime = time - (segment + 1) * trailStepSeconds;
+      const newerTime = time - segment * trailStepSeconds;
+      writeAvatarOrbitPosition(orbitTrails.trailPositions, segmentOffset, orbitTrails, index, olderTime);
+      writeAvatarOrbitPosition(orbitTrails.trailPositions, segmentOffset + 3, orbitTrails, index, newerTime);
+      writeAvatarTrailColor(orbitTrails, index, segmentOffset, segment, false);
+      writeAvatarTrailColor(orbitTrails, index, segmentOffset + 3, segment, true);
+    }
+  }
+
+  orbitTrails.points.geometry.attributes.position.needsUpdate = true;
+  orbitTrails.points.geometry.attributes.aAlpha.needsUpdate = true;
+  orbitTrails.points.geometry.attributes.aSize.needsUpdate = true;
+  orbitTrails.trails.geometry.attributes.position.needsUpdate = true;
+  orbitTrails.trails.geometry.attributes.color.needsUpdate = true;
+}
+
+function writeAvatarOrbitPosition(
+  target: Float32Array,
+  offset: number,
+  orbitTrails: AvatarOrbitTrails,
+  index: number,
+  time: number
+): void {
+  const angle = orbitTrails.baseAngles[index] + time * orbitTrails.speeds[index] +
+    Math.sin(time * 1.8 + orbitTrails.phases[index]) * 0.22;
+  const radius = orbitTrails.radii[index] * (1 + Math.sin(time * 2.1 + orbitTrails.phases[index]) * 0.08);
+  const flatX = Math.cos(angle) * radius;
+  const flatZ = Math.sin(angle) * radius * 0.74;
+  const localY = orbitTrails.heights[index] +
+    Math.sin(angle * 1.7 + orbitTrails.phases[index]) * 0.2 +
+    Math.sin(time * 3.1 + orbitTrails.phases[index]) * 0.08;
+  const tilt = orbitTrails.tilts[index];
+  const tiltedY = localY * Math.cos(tilt) - flatZ * Math.sin(tilt);
+  const tiltedZ = localY * Math.sin(tilt) + flatZ * Math.cos(tilt);
+
+  target[offset] = flatX;
+  target[offset + 1] = tiltedY;
+  target[offset + 2] = tiltedZ;
+}
+
+function writeAvatarTrailColor(
+  orbitTrails: AvatarOrbitTrails,
+  index: number,
+  offset: number,
+  segment: number,
+  isNewerVertex: boolean
+): void {
+  const colorOffset = index * 3;
+  const age01 = (segment + (isNewerVertex ? 0 : 1)) / (AVATAR_ORBIT_TRAIL_SEGMENTS + 1);
+  const intensity = Math.pow(1 - age01, 1.45);
+
+  orbitTrails.trailColors[offset] = orbitTrails.baseColors[colorOffset] * intensity;
+  orbitTrails.trailColors[offset + 1] = orbitTrails.baseColors[colorOffset + 1] * intensity;
+  orbitTrails.trailColors[offset + 2] = orbitTrails.baseColors[colorOffset + 2] * intensity;
+}
+
+function createAvatarMoteMaterial(): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    vertexColors: true,
+    uniforms: {
+      uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2.5) },
+      uTime: { value: 0 }
+    },
+    vertexShader: `
+      uniform float uPixelRatio;
+      uniform float uTime;
+      attribute float aAlpha;
+      attribute float aSize;
+      attribute float aTwinkle;
+      varying vec3 vColor;
+      varying float vAlpha;
+      varying float vTwinkle;
+
+      void main() {
+        vColor = color;
+        vAlpha = aAlpha;
+        vTwinkle = 0.62 + 0.38 * sin(uTime * 11.0 + aTwinkle * 6.2831853);
+        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+        gl_Position = projectionMatrix * mvPosition;
+        gl_PointSize = aSize * uPixelRatio * (118.0 / max(8.0, -mvPosition.z));
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vColor;
+      varying float vAlpha;
+      varying float vTwinkle;
+
+      void main() {
+        vec2 center = gl_PointCoord - vec2(0.5);
+        float dist = length(center);
+        float pinCore = smoothstep(0.08, 0.0, dist);
+        float mote = smoothstep(0.3, 0.04, dist);
+        float alpha = (pinCore * 0.9 + mote * 0.1) * vAlpha * vTwinkle;
+        if (alpha < 0.004) discard;
+        gl_FragColor = vec4(vColor * (1.9 + pinCore * 3.8 + vTwinkle * 0.8), alpha);
+      }
+    `
+  });
+}
+
+function createAvatarDynamicAttribute(array: Float32Array, itemSize: number): THREE.BufferAttribute {
+  return new THREE.BufferAttribute(array, itemSize).setUsage(THREE.DynamicDrawUsage);
 }
 
 function updateStats(delta: number, time: number): void {
