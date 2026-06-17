@@ -8,6 +8,14 @@ import { getBasePropagationSpeedMetersPerSecond } from "./waveMedium";
 const CUBE_FOOTPRINT = 0.68;
 const BASE_CUBE_HEIGHT = 0.08;
 const RIPPLE_WIDTH = 1.45;
+const MIN_COLUMN_HEIGHT = 0.05;
+const MAX_COLUMN_DEPTH = 2.55;
+const COLUMN_FOOTPRINT_SCALE = 1;
+
+// The stage floor is still the visual darkness the columns sink toward. The
+// shafts are depth-limited for performance, then graded to black so their lower
+// ends do not read as weird hard cutoffs.
+export const FIELD_COLUMN_BASE_Y = -3.2;
 
 type Uniform<T> = {
   value: T;
@@ -48,10 +56,14 @@ export class RippleField {
     () => new THREE.Vector4(1, 1, 1, -99)
   );
   private readonly rippleLifetimeUniforms = new Float32Array(MAX_SHADER_RIPPLE_SOURCES);
-  private mesh: THREE.InstancedMesh | null = null;
-  private material: THREE.MeshStandardMaterial | null = null;
-  private geometry: THREE.BoxGeometry | null = null;
-  private shader: RippleShader | null = null;
+  private capMesh: THREE.InstancedMesh | null = null;
+  private columnMesh: THREE.InstancedMesh | null = null;
+  private capMaterial: THREE.MeshStandardMaterial | null = null;
+  private columnMaterial: THREE.MeshLambertMaterial | null = null;
+  private capGeometry: THREE.BoxGeometry | null = null;
+  private columnGeometry: THREE.BoxGeometry | null = null;
+  private capShader: RippleShader | null = null;
+  private columnShader: RippleShader | null = null;
   private instanceCount = 0;
 
   constructor(scene: THREE.Scene, preset: QualityPreset) {
@@ -62,7 +74,8 @@ export class RippleField {
 
   rebuild(preset: QualityPreset): void {
     this.disposeMesh();
-    this.shader = null;
+    this.capShader = null;
+    this.columnShader = null;
 
     const positions: number[] = [];
     const phases: number[] = [];
@@ -70,8 +83,10 @@ export class RippleField {
     const radius = preset.fieldRadius;
     const spacing = preset.cubeSpacing;
 
-    this.geometry = new THREE.BoxGeometry(1, 1, 1, 1, 1, 1);
-    this.material = this.createMaterial();
+    this.capGeometry = new THREE.BoxGeometry(1, 1, 1, 1, 1, 1);
+    this.columnGeometry = new THREE.BoxGeometry(1, 1, 1, 1, 1, 1);
+    this.capMaterial = this.createCapMaterial();
+    this.columnMaterial = this.createColumnMaterial();
 
     const halfCellCount = Math.ceil(radius / spacing);
     const placementRadius = radius + spacing * 0.5;
@@ -96,37 +111,41 @@ export class RippleField {
     }
 
     this.instanceCount = positions.length / 3;
-    this.mesh = new THREE.InstancedMesh(this.geometry, this.material, this.instanceCount);
-    this.mesh.name = `${preset.label} ripple cube field`;
-    this.mesh.frustumCulled = false;
-    this.mesh.castShadow = preset.shadowMapSize > 0;
-    this.mesh.receiveShadow = true;
-    this.mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+    this.columnMesh = new THREE.InstancedMesh(this.columnGeometry, this.columnMaterial, this.instanceCount);
+    this.columnMesh.name = `${preset.label} ripple column shafts`;
+    this.columnMesh.frustumCulled = false;
+    this.columnMesh.castShadow = false;
+    this.columnMesh.receiveShadow = false;
+    this.columnMesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+    this.columnMesh.renderOrder = 0;
+
+    this.capMesh = new THREE.InstancedMesh(this.capGeometry, this.capMaterial, this.instanceCount);
+    this.capMesh.name = `${preset.label} ripple cube caps`;
+    this.capMesh.frustumCulled = false;
+    this.capMesh.castShadow = preset.shadowMapSize > 0;
+    this.capMesh.receiveShadow = true;
+    this.capMesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+    this.capMesh.renderOrder = 1;
 
     const matrix = new THREE.Matrix4();
     for (let index = 0; index < this.instanceCount; index += 1) {
       const offset = index * 3;
       matrix.makeTranslation(positions[offset], positions[offset + 1], positions[offset + 2]);
-      this.mesh.setMatrixAt(index, matrix);
+      this.columnMesh.setMatrixAt(index, matrix);
+      this.capMesh.setMatrixAt(index, matrix);
     }
 
     // These per-instance attributes let the shader know where each cube lives
     // without touching instance matrices every frame. That keeps the ripple
     // effect GPU-side and leaves the CPU free to merely update a few uniforms.
-    this.geometry.setAttribute(
-      "instanceFieldPosition",
-      new THREE.InstancedBufferAttribute(new Float32Array(positions), 3)
-    );
-    this.geometry.setAttribute(
-      "instancePhase",
-      new THREE.InstancedBufferAttribute(new Float32Array(phases), 1)
-    );
-    this.geometry.setAttribute(
-      "instanceTint",
-      new THREE.InstancedBufferAttribute(new Float32Array(tints), 3)
-    );
+    setInstanceAttributes(this.capGeometry, positions, phases, tints);
+    setInstanceAttributes(this.columnGeometry, positions, phases, tints);
 
-    this.object.add(this.mesh);
+    // Draw the cheap shafts first, then the polished caps. The caps keep PBR,
+    // shadows, and the strongest sparkle response; the shafts use Lambert
+    // lighting without shadows so they match the scene color without paying the
+    // original full-column MeshStandard cost.
+    this.object.add(this.columnMesh, this.capMesh);
   }
 
   update(
@@ -138,7 +157,7 @@ export class RippleField {
     playerVelocity: THREE.Vector3,
     playerSpeed: number
   ): void {
-    if (!this.shader) return;
+    if (!this.capShader && !this.columnShader) return;
 
     const basePropagationSpeed = getBasePropagationSpeedMetersPerSecond(settings.waveMedium);
     const activeCount = sources.writeUniforms(
@@ -147,18 +166,28 @@ export class RippleField {
       this.rippleLifetimeUniforms,
       time
     );
-    this.shader.uniforms.uTime.value = time;
-    this.shader.uniforms.uPlayerPosition.value.copy(playerPosition);
-    this.shader.uniforms.uPlayerVelocity.value.set(playerVelocity.x, playerVelocity.z);
-    this.shader.uniforms.uPlayerSpeed.value = playerSpeed;
-    this.shader.uniforms.uRippleHeight.value = settings.rippleHeight;
-    this.shader.uniforms.uRippleRadius.value = settings.rippleRadius;
-    this.shader.uniforms.uVoxelSize.value = settings.voxelSizeMeters;
-    this.shader.uniforms.uBasePropagationSpeed.value = basePropagationSpeed;
-    this.shader.uniforms.uMediumDamping.value = settings.waveMedium.damping;
-    this.shader.uniforms.uMediumDispersion.value = settings.waveMedium.dispersion;
-    this.shader.uniforms.uBloomMood.value = Math.max(settings.bloomStrength, preset.bloomStrength);
-    this.shader.uniforms.uRippleCount.value = activeCount;
+    this.writeShaderUniforms(
+      this.capShader,
+      time,
+      settings,
+      preset,
+      playerPosition,
+      playerVelocity,
+      playerSpeed,
+      basePropagationSpeed,
+      activeCount
+    );
+    this.writeShaderUniforms(
+      this.columnShader,
+      time,
+      settings,
+      preset,
+      playerPosition,
+      playerVelocity,
+      playerSpeed,
+      basePropagationSpeed,
+      activeCount
+    );
   }
 
   getInstanceCount(): number {
@@ -170,7 +199,7 @@ export class RippleField {
     this.object.removeFromParent();
   }
 
-  private createMaterial(): THREE.MeshStandardMaterial {
+  private createCapMaterial(): THREE.MeshStandardMaterial {
     const material = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       metalness: 0.22,
@@ -181,7 +210,7 @@ export class RippleField {
 
     material.onBeforeCompile = (shader) => {
       const rippleShader = shader as unknown as RippleShader;
-      this.shader = rippleShader;
+      this.capShader = rippleShader;
       shader.uniforms.uTime = { value: 0 };
       shader.uniforms.uPlayerPosition = { value: new THREE.Vector3() };
       shader.uniforms.uPlayerVelocity = { value: new THREE.Vector2() };
@@ -359,20 +388,246 @@ export class RippleField {
         );
     };
 
-    material.customProgramCacheKey = () => "ripple-field-shader-v8";
+    material.customProgramCacheKey = () => "ripple-field-cap-shader-v10";
     return material;
   }
 
+  private createColumnMaterial(): THREE.MeshLambertMaterial {
+    const material = new THREE.MeshLambertMaterial({
+      color: 0xffffff,
+      emissive: 0x01070b
+    });
+
+    material.onBeforeCompile = (shader) => {
+      const rippleShader = shader as unknown as RippleShader;
+      this.columnShader = rippleShader;
+      shader.uniforms.uTime = { value: 0 };
+      shader.uniforms.uPlayerPosition = { value: new THREE.Vector3() };
+      shader.uniforms.uPlayerVelocity = { value: new THREE.Vector2() };
+      shader.uniforms.uPlayerSpeed = { value: 0 };
+      shader.uniforms.uRippleHeight = { value: 1.25 };
+      shader.uniforms.uRippleRadius = { value: 9 };
+      shader.uniforms.uVoxelSize = { value: 1 };
+      shader.uniforms.uBasePropagationSpeed = { value: 9 };
+      shader.uniforms.uMediumDamping = { value: 0.16 };
+      shader.uniforms.uMediumDispersion = { value: 0.22 };
+      shader.uniforms.uBloomMood = { value: 1 };
+      shader.uniforms.uRippleCount = { value: 0 };
+      shader.uniforms.uRipples = { value: this.rippleUniforms };
+      shader.uniforms.uRippleMetadata = { value: this.rippleMetadataUniforms };
+      shader.uniforms.uRippleLifetimes = { value: this.rippleLifetimeUniforms };
+
+      rippleShader.vertexShader = shader.vertexShader
+        .replace(
+          "#include <common>",
+          `#include <common>
+          uniform float uTime;
+          uniform vec3 uPlayerPosition;
+          uniform vec2 uPlayerVelocity;
+          uniform float uPlayerSpeed;
+          uniform float uRippleHeight;
+          uniform float uRippleRadius;
+          uniform float uVoxelSize;
+          uniform float uBasePropagationSpeed;
+          uniform float uMediumDamping;
+          uniform float uMediumDispersion;
+          uniform int uRippleCount;
+          uniform vec4 uRipples[${MAX_SHADER_RIPPLE_SOURCES}];
+          uniform vec4 uRippleMetadata[${MAX_SHADER_RIPPLE_SOURCES}];
+          uniform float uRippleLifetimes[${MAX_SHADER_RIPPLE_SOURCES}];
+          attribute vec3 instanceFieldPosition;
+          attribute float instancePhase;
+          attribute vec3 instanceTint;
+          varying vec3 vColumnTint;
+          varying float vColumnDepth;
+
+          float rippleRing(vec4 ripple, vec4 metadata, float lifetime, vec2 cellPosition) {
+            vec2 origin = ripple.xy;
+            float startTime = ripple.z;
+            float strength = ripple.w;
+            float age = max(0.0, uTime - startTime);
+            float fadeLifetime = max(0.2, lifetime);
+            float propagationSpeed = uBasePropagationSpeed * max(0.05, metadata.x);
+            float distanceToCell = distance(origin, cellPosition);
+            float front = age * propagationSpeed;
+            float width = ${RIPPLE_WIDTH.toFixed(2)} * max(0.2, metadata.y) +
+              age * uMediumDispersion * 0.16;
+            float ring = exp(-pow((distanceToCell - front) / max(0.12, width), 2.0));
+            float fade = max(0.0, 1.0 - age / fadeLifetime);
+            float damping = exp(-age * uMediumDamping * max(0.05, metadata.z)) *
+              exp(-distanceToCell * uMediumDamping * max(0.05, metadata.z) * 0.018);
+            float directionalSource = step(-10.0, metadata.w);
+            float directionMask = 1.0;
+
+            if (directionalSource > 0.5 && distanceToCell > 0.001) {
+              vec2 direction = vec2(cos(metadata.w), sin(metadata.w));
+              vec2 radial = (cellPosition - origin) / distanceToCell;
+              float behind = smoothstep(-0.15, 0.78, dot(radial, -direction));
+              float lateral = abs(radial.x * direction.y - radial.y * direction.x);
+              float centerTrail = exp(-pow(lateral / 0.42, 2.0)) * 0.34;
+              float shoulderTrail = exp(-pow((lateral - 0.52) / 0.24, 2.0)) * 0.72;
+              directionMask = clamp(behind * (0.25 + centerTrail + shoulderTrail), 0.0, 1.0);
+            }
+
+            return ring * fade * damping * strength * mix(1.0, directionMask, directionalSource);
+          }
+
+          float movingBodyWake(vec2 fromPlayer, float distanceToPlayer, float phase) {
+            float speed = length(uPlayerVelocity);
+            float moving = smoothstep(0.8, 10.5, speed);
+            if (moving <= 0.001 || distanceToPlayer <= 0.001) {
+              return 0.0;
+            }
+
+            vec2 direction = uPlayerVelocity / max(speed, 0.001);
+            vec2 radial = fromPlayer / max(distanceToPlayer, 0.001);
+            float ahead = dot(radial, direction);
+            float sideways = abs(radial.x * direction.y - radial.y * direction.x);
+            float bowBand = exp(-pow((distanceToPlayer - 1.75) / 1.05, 2.0));
+            float bow = smoothstep(0.12, 0.94, ahead) * bowBand;
+            float behind = smoothstep(0.08, 0.92, -ahead);
+            float localStern = exp(-pow(distanceToPlayer / 2.65, 2.0)) *
+              exp(-pow(sideways * 2.45, 2.0));
+            float shoulderWake = exp(-pow((sideways - 0.54) / 0.16, 2.0)) *
+              exp(-pow((distanceToPlayer - 2.0) / 1.25, 2.0));
+            float texture = 0.62 + 0.38 * sin(uTime * 7.1 - distanceToPlayer * 3.2 + phase);
+
+            return moving * (bow * 0.34 + behind * texture * (localStern * 0.18 + shoulderWake * 0.28));
+          }`
+        )
+        .replace(
+          "#include <begin_vertex>",
+          `vec3 transformed = vec3(position);
+          vec2 cellPosition = instanceFieldPosition.xz;
+          vec2 fromPlayer = cellPosition - uPlayerPosition.xz;
+          float playerDistance = length(fromPlayer);
+          float proximity = 1.0 - smoothstep(0.0, uRippleRadius, playerDistance);
+          float bodyPressure = 1.0 - smoothstep(0.15, 2.55, playerDistance);
+          float pressureRim = exp(-pow((playerDistance - 2.35) / 0.9, 2.0));
+          float movementPush = clamp(uPlayerSpeed / 16.0, 0.0, 1.0);
+          float shimmer = sin(uTime * 5.8 - playerDistance * 2.15 + instancePhase) * 0.5 + 0.5;
+          float flowWave = movingBodyWake(fromPlayer, playerDistance, instancePhase);
+          float sourceWave = 0.0;
+
+          for (int index = 0; index < ${MAX_SHADER_RIPPLE_SOURCES}; index += 1) {
+            if (index >= uRippleCount) {
+              break;
+            }
+            vec4 ripple = uRipples[index];
+            vec4 metadata = uRippleMetadata[index];
+            float lifetime = uRippleLifetimes[index];
+            sourceWave += rippleRing(ripple, metadata, lifetime, cellPosition);
+          }
+
+          float pressureDepression = bodyPressure * (0.82 + shimmer * 0.22 + movementPush * 0.28);
+          float rimLift = pressureRim * (0.16 + shimmer * 0.14 + movementPush * 0.1);
+          float shelteredSourceWave = sourceWave * (1.0 - bodyPressure * 0.5);
+          float lift = (-pressureDepression + rimLift + shelteredSourceWave * 0.92 + flowWave * 0.58) * uRippleHeight;
+          float glow = clamp(proximity * (0.04 + shimmer * 0.08) + pressureRim * 0.08 + shelteredSourceWave * 0.18 + flowWave * 0.1, 0.0, 0.4);
+          float voxelScale = clamp(uVoxelSize, 0.25, 2.0);
+          float capHeight = max(0.02, (${BASE_CUBE_HEIGHT.toFixed(2)} + pressureRim * 0.16 + shelteredSourceWave * 0.44 + flowWave * 0.22 - bodyPressure * 0.025) * voxelScale);
+          float footprint = (${CUBE_FOOTPRINT.toFixed(2)} + glow * 0.05) * voxelScale * ${COLUMN_FOOTPRINT_SCALE.toFixed(2)};
+          float visualHeight = instanceFieldPosition.y + lift + capHeight;
+          float heightWhiteness = smoothstep(-0.75, 3.05, visualHeight);
+          float floorBaseLocal = ${FIELD_COLUMN_BASE_Y.toFixed(2)} - instanceFieldPosition.y;
+          float floorLimitedDepth = max(${MIN_COLUMN_HEIGHT.toFixed(2)} * voxelScale, lift - floorBaseLocal);
+          float depthBudget = (${MAX_COLUMN_DEPTH.toFixed(2)} + heightWhiteness * 1.15 + glow * 0.65) * voxelScale;
+          float columnHeight = max(${MIN_COLUMN_HEIGHT.toFixed(2)} * voxelScale, min(floorLimitedDepth, depthBudget));
+          float columnTopLocal = lift;
+          float columnBaseLocal = columnTopLocal - columnHeight;
+          float column01 = position.y + 0.5;
+
+          transformed.xz *= footprint;
+          transformed.y = columnBaseLocal + column01 * columnHeight;
+
+          // The shafts now use the same lit material family as the caps, but
+          // without shadows or PBR. The top inherits cap tint; the bottom fades
+          // to a darker version of that same hue instead of becoming white.
+          float topInfluence = smoothstep(0.16, 0.96, column01);
+          float baseMist = smoothstep(0.0, 0.24, column01);
+          vec3 rippleTint = mix(instanceTint, vec3(0.18, 0.82, 0.74), clamp(glow * 0.46, 0.0, 0.7));
+          vec3 capTint = mix(
+            rippleTint,
+            vec3(0.94, 0.985, 1.0),
+            clamp(heightWhiteness * (0.34 + glow * 0.32), 0.0, 0.76)
+          );
+          vec3 darkRoot = capTint * 0.16;
+          vec3 topTint = capTint * 0.72;
+          vColumnTint = mix(darkRoot, topTint, topInfluence) * (0.52 + glow * 0.32 + baseMist * 0.16);
+          vColumnDepth = baseMist * (0.34 + topInfluence * 0.66);`
+        );
+
+      rippleShader.fragmentShader = shader.fragmentShader
+        .replace(
+          "#include <common>",
+          `#include <common>
+          varying vec3 vColumnTint;
+          varying float vColumnDepth;`
+        )
+        .replace(
+          "#include <color_fragment>",
+          `#include <color_fragment>
+          diffuseColor.rgb = mix(vec3(0.002, 0.006, 0.012), vColumnTint, vColumnDepth);`
+        )
+        .replace(
+          "#include <emissivemap_fragment>",
+          `#include <emissivemap_fragment>
+          totalEmissiveRadiance += vColumnTint * vColumnDepth * 0.035;`
+        );
+    };
+
+    material.customProgramCacheKey = () => "ripple-field-column-shafts-v11";
+    return material;
+  }
+
+  private writeShaderUniforms(
+    shader: RippleShader | null,
+    time: number,
+    settings: LabSettings,
+    preset: QualityPreset,
+    playerPosition: THREE.Vector3,
+    playerVelocity: THREE.Vector3,
+    playerSpeed: number,
+    basePropagationSpeed: number,
+    activeCount: number
+  ): void {
+    if (!shader) return;
+
+    shader.uniforms.uTime.value = time;
+    shader.uniforms.uPlayerPosition.value.copy(playerPosition);
+    shader.uniforms.uPlayerVelocity.value.set(playerVelocity.x, playerVelocity.z);
+    shader.uniforms.uPlayerSpeed.value = playerSpeed;
+    shader.uniforms.uRippleHeight.value = settings.rippleHeight;
+    shader.uniforms.uRippleRadius.value = settings.rippleRadius;
+    shader.uniforms.uVoxelSize.value = settings.voxelSizeMeters;
+    shader.uniforms.uBasePropagationSpeed.value = basePropagationSpeed;
+    shader.uniforms.uMediumDamping.value = settings.waveMedium.damping;
+    shader.uniforms.uMediumDispersion.value = settings.waveMedium.dispersion;
+    shader.uniforms.uBloomMood.value = Math.max(settings.bloomStrength, preset.bloomStrength);
+    shader.uniforms.uRippleCount.value = activeCount;
+  }
+
   private disposeMesh(): void {
-    if (this.mesh) {
-      this.object.remove(this.mesh);
-      this.mesh.dispose();
-      this.mesh = null;
+    if (this.capMesh) {
+      this.object.remove(this.capMesh);
+      this.capMesh.dispose();
+      this.capMesh = null;
     }
-    this.geometry?.dispose();
-    this.material?.dispose();
-    this.geometry = null;
-    this.material = null;
+    if (this.columnMesh) {
+      this.object.remove(this.columnMesh);
+      this.columnMesh.dispose();
+      this.columnMesh = null;
+    }
+    this.capGeometry?.dispose();
+    this.columnGeometry?.dispose();
+    this.capMaterial?.dispose();
+    this.columnMaterial?.dispose();
+    this.capGeometry = null;
+    this.columnGeometry = null;
+    this.capMaterial = null;
+    this.columnMaterial = null;
+    this.capShader = null;
+    this.columnShader = null;
     this.instanceCount = 0;
   }
 }
@@ -398,6 +653,26 @@ function createTerrainTint(x: number, y: number, z: number): THREE.Color {
 function smoothstep(edge0: number, edge1: number, value: number): number {
   const x = Math.min(1, Math.max(0, (value - edge0) / (edge1 - edge0)));
   return x * x * (3 - 2 * x);
+}
+
+function setInstanceAttributes(
+  geometry: THREE.BoxGeometry,
+  positions: number[],
+  phases: number[],
+  tints: number[]
+): void {
+  geometry.setAttribute(
+    "instanceFieldPosition",
+    new THREE.InstancedBufferAttribute(new Float32Array(positions), 3)
+  );
+  geometry.setAttribute(
+    "instancePhase",
+    new THREE.InstancedBufferAttribute(new Float32Array(phases), 1)
+  );
+  geometry.setAttribute(
+    "instanceTint",
+    new THREE.InstancedBufferAttribute(new Float32Array(tints), 3)
+  );
 }
 
 function pseudoRandom(x: number, z: number): number {

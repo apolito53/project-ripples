@@ -4,6 +4,14 @@
 
 - No changes yet.
 
+## 0.1.2-ALPHA - 2026-06-17
+
+### Changed
+
+- Changed the voxel field from floating tiles into same-width capped columns,
+  keeping lit animated caps on top while cheaper Lambert-lit shafts inherit the
+  cap color and fade darker as they sink into the stage.
+
 ## 0.1.1-ALPHA - 2026-06-17
 
 ### Added

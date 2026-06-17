@@ -18,7 +18,7 @@ import {
   isQualityId,
   type QualityPreset
 } from "./qualityPresets";
-import { RippleField } from "./rippleField";
+import { FIELD_COLUMN_BASE_Y, RippleField } from "./rippleField";
 import { RippleSourceStore, type RippleSourceOptions } from "./rippleSources";
 import "./styles.css";
 import { sampleFieldHeight } from "./terrain";
@@ -705,7 +705,7 @@ function createStageFloor(): THREE.Mesh {
   const floor = new THREE.Mesh(geometry, material);
   floor.name = "Dark reflective stage floor";
   floor.rotation.x = -Math.PI / 2;
-  floor.position.y = -3.2;
+  floor.position.y = FIELD_COLUMN_BASE_Y;
   floor.receiveShadow = true;
   scene.add(floor);
   return floor;

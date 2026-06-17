@@ -7,7 +7,7 @@ This is intentionally separate from `voxel-sandbox-engine`. The goal is to make
 a polished visual lab first, then borrow patterns or ideas later if they deserve
 to graduate into the main voxel engine.
 
-Current version: `v0.1.1-ALPHA`.
+Current version: `v0.1.2-ALPHA`.
 
 ## Quick Start
 
@@ -40,6 +40,9 @@ Open `http://127.0.0.1:5183`.
 The avatar is clamped inside the circular arena edge.
 The arena edge is rendered as a glowing volumetric barrier so the playable
 boundary is visible in-world instead of only being implied by movement clamping.
+The voxel field is drawn as lit animated caps with same-width column shafts
+sinking into the stage below them, so the field reads as depth instead of
+floating platform tiles.
 Manual pulses have a short shared cooldown so held keys or rapid clicks do not
 flood the field.
 Sparkling Echo columns spawn around the arena as real local light sources with
@@ -114,14 +117,16 @@ Project planning:
 Versioning:
 
 - While the project is still experimental, release tags use alpha prerelease
-  labels. The current baseline is `v0.1.1-ALPHA`.
+  labels. The current baseline is `v0.1.2-ALPHA`.
 
 ## Design Notes
 
 - `src/rippleField.ts` owns the circular shader-displaced instanced cube field,
   including the directional bow/wake deformation around the moving avatar and
-  shader-side voxel footprint/height scaling. It also tints voxels by animated
-  height, pushing raised cubes toward white while lower cubes stay darker.
+  shader-side voxel footprint/height scaling. It draws lit caps plus cheaper
+  Lambert-lit same-width column shafts, then tints voxels by animated height so
+  raised cubes push toward white while lower shaft bases keep the cap hue and
+  fade darker.
 - `src/arenaBarrier.ts` owns the visual-only glowing arena-edge barrier that
   follows the live arena radius without changing collision behavior.
 - `src/rippleSources.ts` keeps the lifetime-pruned pulse and movement-wake list
