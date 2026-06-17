@@ -9,7 +9,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Vite + strict TypeScript browser app.
 - Three.js renderer, postprocessing composer, Unreal bloom pass, shader-customized
   `InstancedMesh`, additive `Points`, and dynamic lights.
-- Current alpha baseline: `v0.1.2-ALPHA`; keep release tags in alpha prerelease
+- Current alpha baseline: `v0.1.3-ALPHA`; keep release tags in alpha prerelease
   territory until the lab graduates from prototype status.
 - Dedicated dev port `5183`; preview port `4183`.
 
@@ -34,7 +34,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `src/controls.ts`
 - Circular shader-displaced instanced cube field and directional movement
   wake deformation, including lit caps, same-width Lambert-lit column shafts,
-  and animated-height voxel tinting: `src/rippleField.ts`
+  animated-height voxel tinting, and bounded crest-specific glow:
+  `src/rippleField.ts`
 - Visual-only glowing arena-edge barrier: `src/arenaBarrier.ts`
 - Lifetime-pruned pulse/wake source list and shader uniform writer:
   `src/rippleSources.ts`
@@ -69,8 +70,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
    active quality, voxel-size, and arena-radius settings, then sends active
    source/metadata/lifetime uniforms plus wave-medium and voxel-scale values to
    the shaders; cube matrices stay static while the GPU animates lit cap height,
-   cheap same-width Lambert column shafts, lift/stretch/glow, and height-based
-   tinting.
+   cheap same-width Lambert column shafts, lift/stretch/glow, crest bloom, and
+   height-based tinting.
 6. `ArenaBarrier` draws a visual-only glowing curtain and rings at the arena
    radius so the map edge is visible without changing collision logic.
 7. `EchoZoneField` animates live Echo markers and reports run-through triggers.
@@ -89,7 +90,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Change the visible map-edge barrier color, height, or shimmer:
   `src/arenaBarrier.ts`
 - Change ripple math, cube shape, directional water-like movement response,
-  same-width column shaft behavior, animated-height tint, or glow:
+  same-width column shaft behavior, animated-height tint, crest glow, or generic
+  proximity glow:
   `src/rippleField.ts`
 - Change Echo-zone spawn count, trigger radius, column visuals, or collection
   behavior: `src/echoZones.ts` and `src/main.ts`

@@ -250,6 +250,7 @@ export class RippleField {
           attribute float instancePhase;
           attribute vec3 instanceTint;
           varying float vRippleGlow;
+          varying float vCrestGlow;
           varying float vHeightWhiteness;
           varying vec3 vRippleTint;
 
@@ -342,8 +343,12 @@ export class RippleField {
           float pressureDepression = bodyPressure * (0.82 + shimmer * 0.22 + movementPush * 0.28);
           float rimLift = pressureRim * (0.16 + shimmer * 0.14 + movementPush * 0.1);
           float shelteredSourceWave = sourceWave * (1.0 - bodyPressure * 0.5);
+          // Crest glow is separate from generic ripple glow so only raised wave
+          // fronts bloom. This avoids globally brightening the whole field when
+          // multiple sources overlap.
+          float crestGlow = clamp(max(shelteredSourceWave, 0.0) * 1.18 + max(flowWave, 0.0) * 0.34, 0.0, 0.9);
           float lift = (-pressureDepression + rimLift + shelteredSourceWave * 0.92 + flowWave * 0.58) * uRippleHeight;
-          float glow = clamp(proximity * (0.04 + shimmer * 0.08) + pressureRim * 0.08 + shelteredSourceWave * 0.18 + flowWave * 0.1, 0.0, 0.4);
+          float glow = clamp(proximity * (0.04 + shimmer * 0.08) + pressureRim * 0.08 + shelteredSourceWave * 0.2 + flowWave * 0.1, 0.0, 0.46);
           float voxelScale = clamp(uVoxelSize, 0.25, 2.0);
           float cubeHeight = max(0.02, (${BASE_CUBE_HEIGHT.toFixed(2)} + pressureRim * 0.16 + shelteredSourceWave * 0.44 + flowWave * 0.22 - bodyPressure * 0.025) * voxelScale);
           float footprint = (${CUBE_FOOTPRINT.toFixed(2)} + glow * 0.05) * voxelScale;
@@ -353,6 +358,7 @@ export class RippleField {
           transformed.xz *= footprint;
           transformed.y = transformed.y * cubeHeight + cubeHeight * 0.5 + lift;
           vRippleGlow = glow;
+          vCrestGlow = crestGlow;
           vHeightWhiteness = heightWhiteness;
 
           // Height color is driven from the animated shader height, not only the
@@ -364,7 +370,8 @@ export class RippleField {
             shadedLowTint,
             vec3(0.94, 0.985, 1.0),
             clamp(heightWhiteness * (0.34 + glow * 0.32), 0.0, 0.76)
-          );`
+          );
+          vRippleTint = mix(vRippleTint, vec3(0.76, 1.0, 0.92), crestGlow * 0.3);`
         );
 
       rippleShader.fragmentShader = shader.fragmentShader
@@ -373,22 +380,26 @@ export class RippleField {
           `#include <common>
           uniform float uBloomMood;
           varying float vRippleGlow;
+          varying float vCrestGlow;
           varying float vHeightWhiteness;
           varying vec3 vRippleTint;`
         )
         .replace(
           "#include <color_fragment>",
           `#include <color_fragment>
-          diffuseColor.rgb *= vRippleTint * (0.62 + vRippleGlow * 0.05 + vHeightWhiteness * 0.07);`
+          diffuseColor.rgb *= vRippleTint * (0.62 + vRippleGlow * 0.05 + vHeightWhiteness * 0.07 + vCrestGlow * 0.2);
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.78, 1.0, 0.94), vCrestGlow * 0.26);`
         )
         .replace(
           "#include <emissivemap_fragment>",
           `#include <emissivemap_fragment>
-          totalEmissiveRadiance += vRippleTint * vRippleGlow * (0.025 + uBloomMood * 0.055);`
+          vec3 crestLight = mix(vRippleTint, vec3(0.7, 1.0, 0.9), 0.55);
+          totalEmissiveRadiance += vRippleTint * vRippleGlow * (0.025 + uBloomMood * 0.055);
+          totalEmissiveRadiance += crestLight * vCrestGlow * (0.12 + uBloomMood * 0.32);`
         );
     };
 
-    material.customProgramCacheKey = () => "ripple-field-cap-shader-v10";
+    material.customProgramCacheKey = () => "ripple-field-cap-shader-v12";
     return material;
   }
 
@@ -440,6 +451,7 @@ export class RippleField {
           attribute vec3 instanceTint;
           varying vec3 vColumnTint;
           varying float vColumnDepth;
+          varying float vColumnCrestGlow;
 
           float rippleRing(vec4 ripple, vec4 metadata, float lifetime, vec2 cellPosition) {
             vec2 origin = ripple.xy;
@@ -522,8 +534,11 @@ export class RippleField {
           float pressureDepression = bodyPressure * (0.82 + shimmer * 0.22 + movementPush * 0.28);
           float rimLift = pressureRim * (0.16 + shimmer * 0.14 + movementPush * 0.1);
           float shelteredSourceWave = sourceWave * (1.0 - bodyPressure * 0.5);
+          // The column shafts inherit only the top-heavy part of the crest glow.
+          // Bases stay dark, while the cap/shaft join can shimmer with the wave.
+          float crestGlow = clamp(max(shelteredSourceWave, 0.0) * 0.92 + max(flowWave, 0.0) * 0.24, 0.0, 0.85);
           float lift = (-pressureDepression + rimLift + shelteredSourceWave * 0.92 + flowWave * 0.58) * uRippleHeight;
-          float glow = clamp(proximity * (0.04 + shimmer * 0.08) + pressureRim * 0.08 + shelteredSourceWave * 0.18 + flowWave * 0.1, 0.0, 0.4);
+          float glow = clamp(proximity * (0.04 + shimmer * 0.08) + pressureRim * 0.08 + shelteredSourceWave * 0.2 + flowWave * 0.1, 0.0, 0.46);
           float voxelScale = clamp(uVoxelSize, 0.25, 2.0);
           float capHeight = max(0.02, (${BASE_CUBE_HEIGHT.toFixed(2)} + pressureRim * 0.16 + shelteredSourceWave * 0.44 + flowWave * 0.22 - bodyPressure * 0.025) * voxelScale);
           float footprint = (${CUBE_FOOTPRINT.toFixed(2)} + glow * 0.05) * voxelScale * ${COLUMN_FOOTPRINT_SCALE.toFixed(2)};
@@ -551,10 +566,12 @@ export class RippleField {
             vec3(0.94, 0.985, 1.0),
             clamp(heightWhiteness * (0.34 + glow * 0.32), 0.0, 0.76)
           );
+          capTint = mix(capTint, vec3(0.76, 1.0, 0.92), crestGlow * 0.24);
           vec3 darkRoot = capTint * 0.16;
-          vec3 topTint = capTint * 0.72;
-          vColumnTint = mix(darkRoot, topTint, topInfluence) * (0.52 + glow * 0.32 + baseMist * 0.16);
-          vColumnDepth = baseMist * (0.34 + topInfluence * 0.66);`
+          vec3 topTint = capTint * (0.72 + crestGlow * 0.2);
+          vColumnTint = mix(darkRoot, topTint, topInfluence) * (0.52 + glow * 0.32 + baseMist * 0.16 + crestGlow * topInfluence * 0.16);
+          vColumnDepth = baseMist * (0.34 + topInfluence * 0.66);
+          vColumnCrestGlow = crestGlow * topInfluence;`
         );
 
       rippleShader.fragmentShader = shader.fragmentShader
@@ -562,7 +579,8 @@ export class RippleField {
           "#include <common>",
           `#include <common>
           varying vec3 vColumnTint;
-          varying float vColumnDepth;`
+          varying float vColumnDepth;
+          varying float vColumnCrestGlow;`
         )
         .replace(
           "#include <color_fragment>",
@@ -572,11 +590,11 @@ export class RippleField {
         .replace(
           "#include <emissivemap_fragment>",
           `#include <emissivemap_fragment>
-          totalEmissiveRadiance += vColumnTint * vColumnDepth * 0.035;`
+          totalEmissiveRadiance += vColumnTint * vColumnDepth * (0.035 + vColumnCrestGlow * 0.13);`
         );
     };
 
-    material.customProgramCacheKey = () => "ripple-field-column-shafts-v11";
+    material.customProgramCacheKey = () => "ripple-field-column-shafts-v13";
     return material;
   }
 

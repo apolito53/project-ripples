@@ -4,6 +4,14 @@
 
 - No changes yet.
 
+## 0.1.3-ALPHA - 2026-06-17
+
+### Changed
+
+- Brightened wave crests with a dedicated shader crest-glow signal, letting
+  raised ripple fronts bloom and tint toward cyan-white without lifting the
+  brightness of the entire voxel field.
+
 ## 0.1.2-ALPHA - 2026-06-17
 
 ### Changed
