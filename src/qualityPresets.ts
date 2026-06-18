@@ -15,10 +15,10 @@ export type QualityPreset = {
 
 // Internal scene units are kept on the original art scale, while the UI now
 // speaks in meters. At the default 200m arena radius, the scene is visually
-// identical to the pre-slider field; 400m is exactly twice that internal limit.
+// identical to the pre-slider field; 100m halves it and 400m doubles that internal limit.
 export const ARENA_RADIUS = 92;
 export const DEFAULT_ARENA_RADIUS_METERS = 200;
-export const ARENA_RADIUS_MIN_METERS = 200;
+export const ARENA_RADIUS_MIN_METERS = 100;
 export const ARENA_RADIUS_MAX_METERS = DEFAULT_ARENA_RADIUS_METERS * 2;
 export const DEFAULT_VOXEL_SIZE_METERS = 1;
 export const VOXEL_SIZE_MIN_METERS = 0.25;

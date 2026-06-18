@@ -40,7 +40,9 @@ const radiusSlider = requireElement<HTMLInputElement>("#radius-slider");
 const depthSlider = requireElement<HTMLInputElement>("#depth-slider");
 const depthSpeedValue = requireElement<HTMLOutputElement>("#depth-speed-value");
 const particleSlider = requireElement<HTMLInputElement>("#particle-slider");
+const particleToggle = requireElement<HTMLButtonElement>("#particle-toggle");
 const bloomSlider = requireElement<HTMLInputElement>("#bloom-slider");
+const bloomToggle = requireElement<HTMLButtonElement>("#bloom-toggle");
 const menuToggle = requireElement<HTMLButtonElement>("#menu-toggle");
 const sceneMenuBackdrop = requireElement<HTMLDivElement>("#scene-menu-backdrop");
 const sceneMenu = requireElement<HTMLElement>("#scene-menu");
@@ -220,25 +222,30 @@ function animate(): void {
   player.update(delta);
   const playerSpeed = player.getSpeed();
   avatar.update(delta, player.position, playerSpeed);
-  particles.spawnAura(player.position, delta, playerSpeed / 18);
-  particles.spawnWake(player.position, playerSpeed / 18);
+  if (settings.particlesEnabled) {
+    particles.spawnAura(player.position, delta, playerSpeed / 18);
+    particles.spawnWake(player.position, playerSpeed / 18);
+  }
   maybeSpawnMovementRipple(time, playerSpeed);
   arenaBarrier.update(time);
   echoZones.update(time);
   collectEchoZones(time);
   maybeSpawnEchoZone(time);
-  particles.update(delta);
-  rippleField.update(time, settings, preset, rippleSources, player.position, player.velocity, playerSpeed);
+  if (settings.particlesEnabled) {
+    particles.update(delta);
+  }
+  rippleField.update(time, getEffectiveRenderSettings(), preset, rippleSources, player.position, player.velocity, playerSpeed);
+  const effectiveBloomStrength = getEffectiveBloomStrength();
   pulseLights.update(
     rippleSources.getActiveLightSources(time),
     time,
-    0.28 + settings.bloomStrength * 0.42,
+    0.28 + effectiveBloomStrength * 0.42,
     getBasePropagationSpeedMetersPerSecond(settings.waveMedium)
   );
   updateStats(delta, time);
 
-  bloomPass.strength = settings.bloomStrength;
-  if (settings.bloomStrength > 0.02) {
+  bloomPass.strength = effectiveBloomStrength;
+  if (effectiveBloomStrength > 0.02) {
     composer.render();
   } else {
     renderer.render(scene, camera);
@@ -264,7 +271,9 @@ function spawnPulseParticles(position: THREE.Vector3, strength: number): void {
   const count = Math.max(0, Math.floor(
     preset.burstParticleCount * settings.particleDensity * (0.42 + strength * 1.7)
   ));
-  particles.spawnBurst(position, count, strength);
+  if (settings.particlesEnabled) {
+    particles.spawnBurst(position, count, strength);
+  }
 }
 
 function maybeSpawnMovementRipple(time: number, playerSpeed: number): void {
@@ -452,20 +461,22 @@ function triggerEchoZone(echo: TriggeredEchoZone, time: number): void {
     preset.burstParticleCount * settings.particleDensity * (0.58 + echo.burstStrength * 0.45)
   ));
   const activeBeforeParticles = particles.getActiveCount();
-  debugMeasure(
-    "echo.collect",
-    "Spawned Echo disc burst particles",
-    () => particles.spawnDiscBurst(position, particleCount, echo.burstStrength, echo.discBurstRadius),
-    {
-      requestedParticleCount: particleCount,
-      activeParticlesBefore: activeBeforeParticles,
-      particleBudget: preset.particleBudget,
-      quality: preset.id,
-      particleDensity: roundMetric(settings.particleDensity),
-      discBurstRadius: echo.discBurstRadius
-    },
-    10
-  );
+  if (settings.particlesEnabled) {
+    debugMeasure(
+      "echo.collect",
+      "Spawned Echo disc burst particles",
+      () => particles.spawnDiscBurst(position, particleCount, echo.burstStrength, echo.discBurstRadius),
+      {
+        requestedParticleCount: particleCount,
+        activeParticlesBefore: activeBeforeParticles,
+        particleBudget: preset.particleBudget,
+        quality: preset.id,
+        particleDensity: roundMetric(settings.particleDensity),
+        discBurstRadius: echo.discBurstRadius
+      },
+      10
+    );
+  }
   debugEvent("echo.collect", "Finished Echo detonation gameplay burst", {
     totalMs: roundMetric(performance.now() - detonationStartedAt),
     activeParticlesAfter: particles.getActiveCount(),
@@ -513,7 +524,9 @@ function wireControls(): void {
     settings.qualityId = qualitySelect.value;
     preset = getQualityPreset(settings);
     settings.bloomStrength = preset.bloomStrength;
+    settings.bloomEnabled = settings.bloomStrength > 0;
     bloomSlider.value = String(settings.bloomStrength);
+    updateEffectToggle(bloomToggle, settings.bloomEnabled, bloomSlider);
     applyQualityPreset(preset, false);
   });
 
@@ -542,8 +555,17 @@ function wireControls(): void {
   particleSlider.addEventListener("input", () => {
     settings.particleDensity = Number(particleSlider.value);
   });
+  particleToggle.addEventListener("click", () => {
+    settings.particlesEnabled = !settings.particlesEnabled;
+    particles.setEnabled(settings.particlesEnabled);
+    updateEffectToggle(particleToggle, settings.particlesEnabled, particleSlider);
+  });
   bloomSlider.addEventListener("input", () => {
     settings.bloomStrength = THREE.MathUtils.clamp(Number(bloomSlider.value), 0, 0.38);
+  });
+  bloomToggle.addEventListener("click", () => {
+    settings.bloomEnabled = !settings.bloomEnabled;
+    updateEffectToggle(bloomToggle, settings.bloomEnabled, bloomSlider);
   });
 }
 
@@ -561,11 +583,28 @@ function syncControlValues(): void {
   radiusSlider.value = String(settings.rippleRadius);
   depthSlider.value = String(settings.waveMedium.effectiveDepth);
   particleSlider.value = String(settings.particleDensity);
+  updateEffectToggle(particleToggle, settings.particlesEnabled, particleSlider);
+  particles.setEnabled(settings.particlesEnabled);
   bloomSlider.value = String(settings.bloomStrength);
+  updateEffectToggle(bloomToggle, settings.bloomEnabled, bloomSlider);
 }
 
 function areSceneInputsEnabled(): boolean {
   return !menuVisible && !changelogVisible;
+}
+
+function getEffectiveBloomStrength(): number {
+  return settings.bloomEnabled ? settings.bloomStrength : 0;
+}
+
+function getEffectiveRenderSettings(): typeof settings {
+  return settings.bloomEnabled ? settings : { ...settings, bloomStrength: 0 };
+}
+
+function updateEffectToggle(button: HTMLButtonElement, enabled: boolean, slider: HTMLInputElement): void {
+  button.textContent = enabled ? "On" : "Off";
+  button.setAttribute("aria-pressed", String(enabled));
+  slider.disabled = !enabled;
 }
 
 function handleGlobalKeyDown(event: KeyboardEvent): void {
@@ -776,7 +815,7 @@ function applyQualityPreset(nextPreset: QualityPreset, initial: boolean): void {
   renderer.shadowMap.enabled = nextPreset.shadowMapSize > 0;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   scene.fog = new THREE.FogExp2(0x020815, nextPreset.fogDensity);
-  bloomPass.strength = settings.bloomStrength;
+  bloomPass.strength = getEffectiveBloomStrength();
 
   if (!initial) {
     rebuildFieldGeometry(nextPreset);
@@ -1178,7 +1217,7 @@ function logEchoDetonationFrame(time: number, delta: number, frameStartedAt: num
     quality: preset.id,
     hexDiameterMeters: roundMetric(settings.voxelSizeMeters),
     arenaRadiusMeters: roundMetric(settings.arenaRadiusMeters),
-    bloomStrength: roundMetric(settings.bloomStrength)
+    bloomStrength: roundMetric(getEffectiveBloomStrength())
   }, isSlow ? "warn" : "debug");
 }
 
@@ -1212,8 +1251,10 @@ function logGlobalFrameHitch(time: number, delta: number, rawDelta: number, fram
     quality: preset.id,
     hexDiameterMeters: roundMetric(settings.voxelSizeMeters),
     arenaRadiusMeters: roundMetric(settings.arenaRadiusMeters),
-    bloomStrength: roundMetric(settings.bloomStrength),
+    bloomStrength: roundMetric(getEffectiveBloomStrength()),
     particleDensity: roundMetric(settings.particleDensity),
+    particlesEnabled: settings.particlesEnabled,
+    bloomEnabled: settings.bloomEnabled,
     rendererPixelRatio: roundMetric(getPixelRatio()),
     visibilityState: document.visibilityState
   }, "warn");

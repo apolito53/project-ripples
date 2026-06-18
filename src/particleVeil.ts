@@ -129,6 +129,16 @@ export class ParticleVeil {
     return this.activeCount;
   }
 
+  setEnabled(enabled: boolean): void {
+    this.points.visible = enabled;
+    if (enabled) return;
+
+    this.activeCount = 0;
+    this.cursor = 0;
+    this.auraAccumulator = 0;
+    this.geometry.setDrawRange(0, 0);
+  }
+
   spawnBurst(center: THREE.Vector3, count: number, strength: number): void {
     for (let burstIndex = 0; burstIndex < count; burstIndex += 1) {
       this.emitCloudParticle(center, strength, 1, 1, 0.9);
