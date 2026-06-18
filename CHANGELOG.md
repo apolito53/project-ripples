@@ -7,6 +7,9 @@
 - Rotated the hex prism geometry to match the staggered lattice and calibrated
   Meltdown's visible hex footprint into an interlocked honeycomb without raising
   the previous stress-test instance count.
+- Removed the field's per-hex vertical shaft mesh and duplicate shaft shader,
+  leaving a single animated cap surface as cleaner groundwork for the upcoming
+  spherical arena change.
 
 ## 0.2.0-ALPHA - 2026-06-18
 

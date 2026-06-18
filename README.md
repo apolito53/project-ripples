@@ -40,11 +40,11 @@ Open `http://127.0.0.1:5183`.
 The avatar is clamped inside the circular arena edge.
 The arena edge is rendered as a smooth glowing gradient barrier so the playable
 boundary is visible in-world without looking like a tiled wall texture.
-The hex field is drawn as lit animated caps with same-width hex column shafts
-sinking into the stage below them, so the field reads as depth instead of
-floating platform tiles. Meltdown uses a calibrated honeycomb footprint so tiny
-hexes visually interlock without raising the old stress-test instance count,
-while lighter quality modes keep more breathing room.
+The hex field is drawn as a single shader-animated cap surface, without the old
+per-cell vertical shafts, so the renderer is cleaner for the upcoming spherical
+arena pass. Meltdown uses a calibrated honeycomb footprint so tiny hexes
+visually interlock without raising the old stress-test instance count, while
+lighter quality modes keep more breathing room.
 Raised wave crests carry an extra bounded glow signal, so ripple fronts bloom
 brighter without washing out the whole field.
 Manual pulses have a short shared cooldown so held keys or rapid clicks do not
@@ -131,11 +131,10 @@ Versioning:
 
 - `src/rippleField.ts` owns the circular shader-displaced instanced hex field,
   including the directional bow/wake deformation around the moving avatar and
-  shader-side hex footprint/height scaling. It draws lit hex caps plus cheaper
-  Lambert-lit same-width hex column shafts, calibrates Meltdown into an
-  interlocked honeycomb without increasing its old instance density, then tints
-  cells by animated height so raised caps push toward white while lower shaft
-  bases keep the cap hue and fade darker. Wave crests have their own glow
+  shader-side hex footprint/height scaling. It now renders only the lit cap
+  surface, calibrates Meltdown into an interlocked honeycomb without increasing
+  its old instance density, then tints cells by animated height so raised caps
+  push toward white while troughs stay darker. Wave crests have their own glow
   varying so peak brightness can be tuned separately from generic
   player-proximity glow.
 - `src/arenaBarrier.ts` owns the visual-only glowing arena-edge gradient that

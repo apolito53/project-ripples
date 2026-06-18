@@ -34,8 +34,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `src/controls.ts`
 - Circular shader-displaced instanced hex field and directional movement
   wake deformation, including Meltdown-calibrated honeycomb orientation, lit
-  hex caps, same-width Lambert-lit hex shafts, animated-height cell tinting,
-  and bounded crest-specific glow:
+  hex caps, animated-height cell tinting, and bounded crest-specific glow:
   `src/rippleField.ts`
 - Visual-only smooth glowing arena-edge gradient barrier: `src/arenaBarrier.ts`
 - Lifetime-pruned pulse/wake source list and shader uniform writer:
@@ -74,8 +73,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
    to read as an interlocked honeycomb while preserving its previous density.
    The field then sends active source/metadata/lifetime uniforms plus
    wave-medium and cell-scale values to the shaders; cell matrices stay static
-   while the GPU animates lit cap height, cheap same-width Lambert hex shafts,
-   lift/stretch/glow, crest bloom, and height-based tinting.
+   while the GPU animates lit cap height, lift/stretch/glow, crest bloom, and
+   height-based tinting. The old per-cell shaft mesh has been removed to keep
+   the geometry path simpler before the sphere work.
 6. `ArenaBarrier` draws a visual-only smooth glowing gradient curtain at the
    arena radius so the map edge is visible without changing collision logic.
 7. `EchoZoneField` animates live Echo markers and reports run-through triggers.
@@ -94,8 +94,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Change the visible map-edge barrier color, height, or shimmer:
   `src/arenaBarrier.ts`
 - Change ripple math, hex shape, directional water-like movement response,
-  same-width hex shaft behavior, animated-height tint, crest glow, or generic
-  proximity glow:
+  animated-height tint, crest glow, or generic proximity glow:
   `src/rippleField.ts`
 - Change Echo-zone spawn count, trigger radius, column visuals, or collection
   behavior: `src/echoZones.ts` and `src/main.ts`

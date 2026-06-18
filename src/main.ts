@@ -18,7 +18,7 @@ import {
   isQualityId,
   type QualityPreset
 } from "./qualityPresets";
-import { FIELD_COLUMN_BASE_Y, RippleField } from "./rippleField";
+import { RippleField } from "./rippleField";
 import { RippleSourceStore, type RippleSourceOptions } from "./rippleSources";
 import "./styles.css";
 import { sampleFieldHeight } from "./terrain";
@@ -88,6 +88,9 @@ const ECHO_BURST_OPTIONS: RippleSourceOptions = {
 const AVATAR_ORBIT_MOTE_COUNT = 36;
 const AVATAR_ORBIT_TRAIL_SEGMENTS = 6;
 const AVATAR_ORBIT_TRAIL_SECONDS = 0.54;
+// A low visual floor remains while the playable surface is still planar. The
+// upcoming sphere pass can delete or replace this without touching RippleField.
+const STAGE_FLOOR_Y = -3.2;
 
 type AvatarOrbitTrails = {
   readonly points: THREE.Points<THREE.BufferGeometry, THREE.ShaderMaterial>;
@@ -727,7 +730,7 @@ function createStageFloor(): THREE.Mesh {
   const floor = new THREE.Mesh(geometry, material);
   floor.name = "Dark reflective stage floor";
   floor.rotation.x = -Math.PI / 2;
-  floor.position.y = FIELD_COLUMN_BASE_Y;
+  floor.position.y = STAGE_FLOOR_Y;
   floor.receiveShadow = true;
   scene.add(floor);
   return floor;
@@ -781,12 +784,12 @@ function createAvatar(): {
   object.add(orbitTrails.trails, orbitTrails.points);
 
   const coreLight = new THREE.PointLight(0x8fffe0, 4.4, 19, 1.65);
-  coreLight.name = "Player bright local cube light";
+  coreLight.name = "Player bright local field light";
   coreLight.position.y = 0.35;
   object.add(coreLight);
 
   const floorLight = new THREE.PointLight(0x55cfff, 2.1, 14, 1.45);
-  floorLight.name = "Player low cyan block fill";
+  floorLight.name = "Player low cyan field fill";
   floorLight.position.y = -1.05;
   object.add(floorLight);
 

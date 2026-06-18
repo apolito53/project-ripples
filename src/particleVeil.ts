@@ -64,7 +64,7 @@ export class ParticleVeil {
       transparent: true,
       // These motes are decorative light in the air, not physical debris.
       // Disabling depth testing keeps the cloud readable instead of letting
-      // nearby cube columns swallow most of the tiny particles.
+      // nearby animated field cells swallow most of the tiny particles.
       depthTest: false,
       depthWrite: false,
       blending: THREE.AdditiveBlending,

@@ -443,7 +443,7 @@ function createColumnLights(): readonly THREE.PointLight[] {
   // with this many instanced field cells. The central orb light is intentionally the
   // strongest so the collectible visibly paints nearby blocks.
   const lowerLight = new THREE.PointLight(BEAM_LIGHT_COLOR, 1.35, 13, 1.65);
-  lowerLight.name = "Echo lower cube light";
+  lowerLight.name = "Echo lower field light";
   lowerLight.position.y = COLUMN_BASE_LIFT + 1.1;
 
   const coreLight = new THREE.PointLight(ORB_LIGHT_COLOR, 2.35, 17, 1.45);
