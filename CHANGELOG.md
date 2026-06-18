@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-- No changes yet.
+### Changed
+
+- Rotated the hex prism geometry to match the staggered lattice and calibrated
+  Meltdown's visible hex footprint into an interlocked honeycomb without raising
+  the previous stress-test instance count.
 
 ## 0.2.0-ALPHA - 2026-06-18
 

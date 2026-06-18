@@ -42,8 +42,11 @@ The arena edge is rendered as a smooth glowing gradient barrier so the playable
 boundary is visible in-world without looking like a tiled wall texture.
 The hex field is drawn as lit animated caps with same-width hex column shafts
 sinking into the stage below them, so the field reads as depth instead of
-floating platform tiles. Raised wave crests carry an extra bounded glow signal,
-so ripple fronts bloom brighter without washing out the whole field.
+floating platform tiles. Meltdown uses a calibrated honeycomb footprint so tiny
+hexes visually interlock without raising the old stress-test instance count,
+while lighter quality modes keep more breathing room.
+Raised wave crests carry an extra bounded glow signal, so ripple fronts bloom
+brighter without washing out the whole field.
 Manual pulses have a short shared cooldown so held keys or rapid clicks do not
 flood the field.
 The avatar itself uses fast orbiting energy motes with long additive trails
@@ -75,10 +78,11 @@ propagation and scale tuning have a quick visual sanity check.
 
 ## Quality Modes
 
-- `Clean`: lower cube density, no bloom, small particle budget.
+- `Clean`: lower hex density, no bloom, small particle budget.
 - `Pretty`: default polished mode with bloom, shadows, pulse lights, and sparks.
 - `Showoff`: denser field, more particles, stronger bloom and shadows.
-- `Meltdown`: intentionally excessive density and effects for GPU stress.
+- `Meltdown`: visually interlocked honeycomb hex density and intentionally
+  excessive effects for GPU stress.
 
 ## Development
 
@@ -128,10 +132,12 @@ Versioning:
 - `src/rippleField.ts` owns the circular shader-displaced instanced hex field,
   including the directional bow/wake deformation around the moving avatar and
   shader-side hex footprint/height scaling. It draws lit hex caps plus cheaper
-  Lambert-lit same-width hex column shafts, then tints cells by animated height
-  so raised caps push toward white while lower shaft bases keep the cap hue and
-  fade darker. Wave crests have their own glow varying so peak brightness can be
-  tuned separately from generic player-proximity glow.
+  Lambert-lit same-width hex column shafts, calibrates Meltdown into an
+  interlocked honeycomb without increasing its old instance density, then tints
+  cells by animated height so raised caps push toward white while lower shaft
+  bases keep the cap hue and fade darker. Wave crests have their own glow
+  varying so peak brightness can be tuned separately from generic
+  player-proximity glow.
 - `src/arenaBarrier.ts` owns the visual-only glowing arena-edge gradient that
   follows the live arena radius without changing collision behavior.
 - `src/rippleSources.ts` keeps the lifetime-pruned pulse and movement-wake list

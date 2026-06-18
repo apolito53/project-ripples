@@ -5,14 +5,15 @@ import { MAX_SHADER_RIPPLE_SOURCES, type RippleSourceStore } from "./rippleSourc
 import { sampleFieldHeight } from "./terrain";
 import { getBasePropagationSpeedMetersPerSecond } from "./waveMedium";
 
-const HEX_TILE_DIAMETER = 0.68;
+const HEX_TILE_DIAMETER = 0.89;
 const BASE_TILE_HEIGHT = 0.08;
 const RIPPLE_WIDTH = 1.45;
 const MIN_COLUMN_HEIGHT = 0.05;
 const MAX_COLUMN_DEPTH = 2.55;
 const COLUMN_FOOTPRINT_SCALE = 1;
-const HEX_ROW_SPACING_RATIO = Math.sqrt(3) * 0.5;
-const HEX_LATTICE_DENSITY_SCALE = Math.sqrt(2 / Math.sqrt(3));
+const HEX_FLAT_TOP_COLUMN_SPACING_RATIO = 0.75;
+const HEX_FLAT_TOP_ROW_SPACING_RATIO = Math.sqrt(3) * 0.5;
+const HEX_AREA_RATIO = HEX_FLAT_TOP_COLUMN_SPACING_RATIO * HEX_FLAT_TOP_ROW_SPACING_RATIO;
 
 // The stage floor is still the visual darkness the columns sink toward. The
 // shafts are depth-limited for performance, then graded to black so their lower
@@ -83,8 +84,8 @@ export class RippleField {
     const phases: number[] = [];
     const tints: number[] = [];
     const radius = preset.fieldRadius;
-    const spacing = preset.tileSpacing * HEX_LATTICE_DENSITY_SCALE;
-    const rowSpacing = spacing * HEX_ROW_SPACING_RATIO;
+    const spacing = getHexColumnSpacing(preset);
+    const rowSpacing = getHexRowSpacing(preset);
 
     this.capGeometry = createHexPrismGeometry();
     this.columnGeometry = createHexPrismGeometry();
@@ -96,10 +97,9 @@ export class RippleField {
     const placementRadius = radius + spacing * 0.5;
     const placementRadiusSquared = placementRadius * placementRadius;
 
-    // The arena floor is circular, but the cells now live on a staggered hex
-    // lattice. The slider's "size" is the widest point-to-point diameter; this
-    // spacing nudge keeps quality presets near their old cell counts instead of
-    // quietly getting more expensive from tighter hex packing.
+    // The arena floor is circular, but the cells live on a flat-top hex lattice.
+    // The footprint calibration below makes Meltdown read as an interlocked
+    // honeycomb while preserving the old stress-test density budget.
     for (let iz = -halfRowCount; iz <= halfRowCount; iz += 1) {
       const rowOffset = Math.abs(iz % 2) === 1 ? spacing * 0.5 : 0;
       const z = iz * rowSpacing;
@@ -684,8 +684,29 @@ function createHexPrismGeometry(): THREE.CylinderGeometry {
   // CylinderGeometry with six radial segments gives us a real hexagonal prism.
   // The radius is 0.5 so shader-side footprint scaling treats `1.0` as the
   // full point-to-point diameter, matching the user's "widest point" size rule.
-  const geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 6, 1, false, Math.PI / 6);
+  // `thetaStart = 0` rotates each hex so its shared edges face the staggered
+  // neighbor directions. With the flat-top lattice below, Meltdown now reads as
+  // one interlocking honeycomb instead of offset individual badges.
+  const geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 6, 1, false, 0);
   return geometry;
+}
+
+function getHexColumnSpacing(preset: QualityPreset): number {
+  return getHexPlacementDiameter(preset) * HEX_FLAT_TOP_COLUMN_SPACING_RATIO;
+}
+
+function getHexRowSpacing(preset: QualityPreset): number {
+  return getHexPlacementDiameter(preset) * HEX_FLAT_TOP_ROW_SPACING_RATIO;
+}
+
+function getHexPlacementDiameter(preset: QualityPreset): number {
+  // Before the hex conversion, `tileSpacing` roughly meant one cell's area in
+  // the placement grid. Preserve that density by solving for the flat-top hex
+  // diameter that gives the same center-cell area. `HEX_TILE_DIAMETER` is then
+  // calibrated so Meltdown's visual footprint nearly equals this placement
+  // diameter, producing an interlocking honeycomb without inflating the old
+  // instance count.
+  return preset.tileSpacing / Math.sqrt(HEX_AREA_RATIO);
 }
 
 function setInstanceAttributes(

@@ -1,6 +1,6 @@
 # Codebase Index
 
-Last reviewed: 2026-06-17
+Last reviewed: 2026-06-18
 
 Purpose: compact map for the standalone ripple-field visual lab.
 
@@ -33,8 +33,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Avatar movement, circular arena clamp, pointer lock, and camera follow behavior:
   `src/controls.ts`
 - Circular shader-displaced instanced hex field and directional movement
-  wake deformation, including lit hex caps, same-width Lambert-lit hex shafts,
-  animated-height cell tinting, and bounded crest-specific glow:
+  wake deformation, including Meltdown-calibrated honeycomb orientation, lit
+  hex caps, same-width Lambert-lit hex shafts, animated-height cell tinting,
+  and bounded crest-specific glow:
   `src/rippleField.ts`
 - Visual-only smooth glowing arena-edge gradient barrier: `src/arenaBarrier.ts`
 - Lifetime-pruned pulse/wake source list and shader uniform writer:
@@ -68,11 +69,13 @@ Purpose: compact map for the standalone ripple-field visual lab.
    sources; Echo-zone timers add persistent collectible markers instead of
    immediate ambient waves.
 5. `RippleField` builds hex instances inside the circular arena using the
-   active quality, hex-size, and arena-radius settings, then sends active
-   source/metadata/lifetime uniforms plus wave-medium and cell-scale values to
-   the shaders; cell matrices stay static while the GPU animates lit cap height,
-   cheap same-width Lambert hex shafts, lift/stretch/glow, crest bloom, and
-   height-based tinting.
+   active quality, hex-size, and arena-radius settings. Hex geometry is rotated
+   to match the staggered lattice, and Meltdown's visible footprint is calibrated
+   to read as an interlocked honeycomb while preserving its previous density.
+   The field then sends active source/metadata/lifetime uniforms plus
+   wave-medium and cell-scale values to the shaders; cell matrices stay static
+   while the GPU animates lit cap height, cheap same-width Lambert hex shafts,
+   lift/stretch/glow, crest bloom, and height-based tinting.
 6. `ArenaBarrier` draws a visual-only smooth glowing gradient curtain at the
    arena radius so the map edge is visible without changing collision logic.
 7. `EchoZoneField` animates live Echo markers and reports run-through triggers.
@@ -133,9 +136,10 @@ Purpose: compact map for the standalone ripple-field visual lab.
   changing particle lifetimes or replacement behavior, or dead budget slots will
   quietly become render cost again.
 - The hex-size and arena-radius sliders rebuild the InstancedMesh after a
-  short debounce. Extreme combinations such as tiny hexes plus a 400m arena can
-  create very large instance counts, so check the HUD hex count and
-  `field.rebuild` debug events before assuming a visual hitch comes from waves.
+  short debounce. Meltdown's honeycomb look preserves its prior density, but
+  extreme combinations such as tiny hexes plus a 400m arena can still create
+  very large instance counts; check the HUD hex count and `field.rebuild` debug
+  events before assuming a visual hitch comes from waves.
 - `Meltdown` is intentionally rude to weak GPUs. Keep it available, but do not
   tune the normal experience around it.
 - Pointer-lock behavior should be browser-tested in Chrome, not trusted from a
