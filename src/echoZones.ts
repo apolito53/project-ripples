@@ -440,7 +440,7 @@ export class EchoZoneField {
 function createColumnLights(): readonly THREE.PointLight[] {
   // Three real lights give the column volume without relying on a fake glowing
   // texture. Shadows stay off; moving point-light shadows would be far too rude
-  // with this many instanced cubes. The central orb light is intentionally the
+  // with this many instanced field cells. The central orb light is intentionally the
   // strongest so the collectible visibly paints nearby blocks.
   const lowerLight = new THREE.PointLight(BEAM_LIGHT_COLOR, 1.35, 13, 1.65);
   lowerLight.name = "Echo lower cube light";

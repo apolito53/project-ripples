@@ -4,6 +4,16 @@
 
 - No changes yet.
 
+## 0.2.0-ALPHA - 2026-06-18
+
+### Changed
+
+- Replaced the square voxel field with regular hexagonal prism cells on a
+  staggered lattice, keeping the size slider as the hex's widest point-to-point
+  diameter so `25cm` still means the smallest visible cell diameter.
+- Renamed visible field readouts from cubes/voxels to hexes/hex diameter and
+  updated diagnostics to report `hexCount`, `hexDiameterMeters`, and `tileSpacing`.
+
 ## 0.1.5-ALPHA - 2026-06-17
 
 ### Changed

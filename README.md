@@ -1,13 +1,13 @@
 # Ripple Field Lab
 
-A standalone GPU-heavy Three.js/Vite prototype for a field of luminous cubes
+A standalone GPU-heavy Three.js/Vite prototype for a field of luminous hex cells
 that ripple, glow, and throw particles when the player moves through them.
 
 This is intentionally separate from `voxel-sandbox-engine`. The goal is to make
 a polished visual lab first, then borrow patterns or ideas later if they deserve
 to graduate into the main voxel engine.
 
-Current version: `v0.1.5-ALPHA`.
+Current version: `v0.2.0-ALPHA`.
 
 ## Quick Start
 
@@ -40,7 +40,7 @@ Open `http://127.0.0.1:5183`.
 The avatar is clamped inside the circular arena edge.
 The arena edge is rendered as a smooth glowing gradient barrier so the playable
 boundary is visible in-world without looking like a tiled wall texture.
-The voxel field is drawn as lit animated caps with same-width column shafts
+The hex field is drawn as lit animated caps with same-width hex column shafts
 sinking into the stage below them, so the field reads as depth instead of
 floating platform tiles. Raised wave crests carry an extra bounded glow signal,
 so ripple fronts bloom brighter without washing out the whole field.
@@ -60,15 +60,16 @@ outward after the avatar moves on. Dense movement wake stamps use a shorter
 per-source lifetime than manual pulses so they can trail smoothly without
 forcing older rings to flicker through the shader's fixed upload budget.
 
-The tuning panel changes quality, voxel size, arena radius, ripple
+The tuning panel changes quality, hex size, arena radius, ripple
 height/radius, Depth / Speed, particle density, and bloom strength while the
-scene is running. Voxel size treats the current block scale as `1m`, ranges from
-`25cm` to `2m`, and rebuilds the instanced field after a short debounce so slider
-drags do not spam geometry work. Arena radius is expressed in lab meters:
+scene is running. Hex size treats the current cell scale as `1m`, ranges from
+`25cm` to `2m`, and measures the regular hexagon's widest point-to-point
+diameter. Changing it rebuilds the instanced field after a short debounce so
+slider drags do not spam geometry work. Arena radius is expressed in lab meters:
 `200m` preserves the original scene radius, while `400m` doubles it. Depth /
 Speed changes the medium's effective depth, then shows the derived propagation
 speed from the shallow-water-inspired `sqrt(g * depth)` model.
-The HUD shows that derived speed, voxel size, arena radius, active source count,
+The HUD shows that derived speed, hex diameter, arena radius, active source count,
 and the newest ring's approximate radius, plus the number of live Echo zones, so
 propagation and scale tuning have a quick visual sanity check.
 
@@ -120,15 +121,15 @@ Project planning:
 Versioning:
 
 - While the project is still experimental, release tags use alpha prerelease
-  labels. The current baseline is `v0.1.5-ALPHA`.
+  labels. The current baseline is `v0.2.0-ALPHA`.
 
 ## Design Notes
 
-- `src/rippleField.ts` owns the circular shader-displaced instanced cube field,
+- `src/rippleField.ts` owns the circular shader-displaced instanced hex field,
   including the directional bow/wake deformation around the moving avatar and
-  shader-side voxel footprint/height scaling. It draws lit caps plus cheaper
-  Lambert-lit same-width column shafts, then tints voxels by animated height so
-  raised cubes push toward white while lower shaft bases keep the cap hue and
+  shader-side hex footprint/height scaling. It draws lit hex caps plus cheaper
+  Lambert-lit same-width hex column shafts, then tints cells by animated height
+  so raised caps push toward white while lower shaft bases keep the cap hue and
   fade darker. Wave crests have their own glow varying so peak brightness can be
   tuned separately from generic player-proximity glow.
 - `src/arenaBarrier.ts` owns the visual-only glowing arena-edge gradient that
@@ -144,7 +145,8 @@ Versioning:
   trails, and their run-through trigger/despawn burst detection.
 - `src/waveMedium.ts` defines the medium settings and derived propagation speed.
 - `src/labSettings.ts` maps UI meters onto the original scene-unit art scale,
-  including voxel-size density scaling and the 200m-to-400m arena radius range.
+  including hex point-to-point diameter scaling and the 200m-to-400m arena
+  radius range.
 - `src/particleVeil.ts` owns the player sparkle aura, additive glitter-cloud
   bursts, flat Echo disc bursts, and wake trails.
 - `src/pulseLights.ts` maps recent pulses onto a small pool of point lights.
@@ -155,6 +157,6 @@ Versioning:
 The CPU decides where the player, manual pulses, persistent Echo zones, and
 movement wakes are. Manual pulse input is cooldown-gated, Echo zones only become
 wave sources after collection, sources age out by per-source lifetime, and
-propagation speed comes from the current wave medium. The GPU handles cube lift,
-stretch, tint, emissive glow, and voxel footprint/height from the current source
+propagation speed comes from the current wave medium. The GPU handles hex lift,
+stretch, tint, emissive glow, and cell footprint/height from the current source
 and scale uniforms.

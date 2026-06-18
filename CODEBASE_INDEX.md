@@ -9,7 +9,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Vite + strict TypeScript browser app.
 - Three.js renderer, postprocessing composer, Unreal bloom pass, shader-customized
   `InstancedMesh`, additive `Points`, and dynamic lights.
-- Current alpha baseline: `v0.1.5-ALPHA`; keep release tags in alpha prerelease
+- Current alpha baseline: `v0.2.0-ALPHA`; keep release tags in alpha prerelease
   territory until the lab graduates from prototype status.
 - Dedicated dev port `5183`; preview port `4183`.
 
@@ -32,9 +32,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `src/main.ts`
 - Avatar movement, circular arena clamp, pointer lock, and camera follow behavior:
   `src/controls.ts`
-- Circular shader-displaced instanced cube field and directional movement
-  wake deformation, including lit caps, same-width Lambert-lit column shafts,
-  animated-height voxel tinting, and bounded crest-specific glow:
+- Circular shader-displaced instanced hex field and directional movement
+  wake deformation, including lit hex caps, same-width Lambert-lit hex shafts,
+  animated-height cell tinting, and bounded crest-specific glow:
   `src/rippleField.ts`
 - Visual-only smooth glowing arena-edge gradient barrier: `src/arenaBarrier.ts`
 - Lifetime-pruned pulse/wake source list and shader uniform writer:
@@ -67,11 +67,11 @@ Purpose: compact map for the standalone ripple-field visual lab.
 4. Cooldown-gated clicks, `Space`, and denser movement wake spacing add ripple
    sources; Echo-zone timers add persistent collectible markers instead of
    immediate ambient waves.
-5. `RippleField` builds cube instances inside the circular arena using the
-   active quality, voxel-size, and arena-radius settings, then sends active
-   source/metadata/lifetime uniforms plus wave-medium and voxel-scale values to
-   the shaders; cube matrices stay static while the GPU animates lit cap height,
-   cheap same-width Lambert column shafts, lift/stretch/glow, crest bloom, and
+5. `RippleField` builds hex instances inside the circular arena using the
+   active quality, hex-size, and arena-radius settings, then sends active
+   source/metadata/lifetime uniforms plus wave-medium and cell-scale values to
+   the shaders; cell matrices stay static while the GPU animates lit cap height,
+   cheap same-width Lambert hex shafts, lift/stretch/glow, crest bloom, and
    height-based tinting.
 6. `ArenaBarrier` draws a visual-only smooth glowing gradient curtain at the
    arena radius so the map edge is visible without changing collision logic.
@@ -86,12 +86,12 @@ Purpose: compact map for the standalone ripple-field visual lab.
 
 ## Common Change Targets
 
-- Tune visual density, voxel-size ranges, arena-radius ranges, or GPU pressure:
+- Tune visual density, hex-size ranges, arena-radius ranges, or GPU pressure:
   `src/qualityPresets.ts`, `src/labSettings.ts`, and `src/main.ts`
 - Change the visible map-edge barrier color, height, or shimmer:
   `src/arenaBarrier.ts`
-- Change ripple math, cube shape, directional water-like movement response,
-  same-width column shaft behavior, animated-height tint, crest glow, or generic
+- Change ripple math, hex shape, directional water-like movement response,
+  same-width hex shaft behavior, animated-height tint, crest glow, or generic
   proximity glow:
   `src/rippleField.ts`
 - Change Echo-zone spawn count, trigger radius, column visuals, or collection
@@ -132,9 +132,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
   sets Three.js draw/update ranges from `activeCount`; preserve that shape when
   changing particle lifetimes or replacement behavior, or dead budget slots will
   quietly become render cost again.
-- The voxel-size and arena-radius sliders rebuild the InstancedMesh after a
-  short debounce. Extreme combinations such as tiny voxels plus a 400m arena can
-  create very large instance counts, so check the HUD cube count and
+- The hex-size and arena-radius sliders rebuild the InstancedMesh after a
+  short debounce. Extreme combinations such as tiny hexes plus a 400m arena can
+  create very large instance counts, so check the HUD hex count and
   `field.rebuild` debug events before assuming a visual hitch comes from waves.
 - `Meltdown` is intentionally rude to weak GPUs. Keep it available, but do not
   tune the normal experience around it.

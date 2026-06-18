@@ -41,13 +41,13 @@ export function getQualityPreset(settings: LabSettings): QualityPreset {
   const basePreset = QUALITY_PRESETS[settings.qualityId];
   const voxelSizeMeters = clamp(settings.voxelSizeMeters, VOXEL_SIZE_MIN_METERS, VOXEL_SIZE_MAX_METERS);
 
-  // Quality still picks the baseline density. The voxel-size slider scales that
-  // baseline spacing, so Meltdown can keep its visual character while the user
-  // makes the individual blocks smaller or chunkier.
+  // Quality still picks the baseline density. The size slider scales that
+  // baseline spacing and now represents the hex tile's widest point-to-point
+  // diameter, so Meltdown can keep its visual character while cells shrink.
   return {
     ...basePreset,
     fieldRadius: getArenaRadiusSceneUnits(settings.arenaRadiusMeters),
-    cubeSpacing: basePreset.cubeSpacing * voxelSizeMeters
+    tileSpacing: basePreset.tileSpacing * voxelSizeMeters
   };
 }
 

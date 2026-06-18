@@ -4,7 +4,7 @@ export type QualityPreset = {
   readonly id: QualityId;
   readonly label: string;
   readonly fieldRadius: number;
-  readonly cubeSpacing: number;
+  readonly tileSpacing: number;
   readonly particleBudget: number;
   readonly burstParticleCount: number;
   readonly bloomStrength: number;
@@ -32,7 +32,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
     id: "clean",
     label: "Clean",
     fieldRadius: ARENA_RADIUS,
-    cubeSpacing: 1.2,
+    tileSpacing: 1.2,
     particleBudget: 30000,
     burstParticleCount: 7200,
     bloomStrength: 0,
@@ -44,7 +44,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
     id: "pretty",
     label: "Pretty",
     fieldRadius: ARENA_RADIUS,
-    cubeSpacing: 1,
+    tileSpacing: 1,
     particleBudget: 82000,
     burstParticleCount: 20500,
     bloomStrength: 0.14,
@@ -56,7 +56,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
     id: "showoff",
     label: "Showoff",
     fieldRadius: ARENA_RADIUS,
-    cubeSpacing: 0.9,
+    tileSpacing: 0.9,
     particleBudget: 165000,
     burstParticleCount: 41000,
     bloomStrength: 0.24,
@@ -68,7 +68,7 @@ export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
     id: "meltdown",
     label: "Meltdown",
     fieldRadius: ARENA_RADIUS,
-    cubeSpacing: 0.72,
+    tileSpacing: 0.72,
     particleBudget: 320000,
     burstParticleCount: 82000,
     bloomStrength: 0.38,

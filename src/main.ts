@@ -655,14 +655,14 @@ function rebuildFieldGeometry(nextPreset: QualityPreset): void {
   resize();
 
   const durationMs = performance.now() - rebuildStartedAt;
-  debugEvent("field.rebuild", "Rebuilt voxel field geometry", {
+  debugEvent("field.rebuild", "Rebuilt hex tile field geometry", {
     durationMs: roundMetric(durationMs),
     quality: nextPreset.id,
-    cubeCount: rippleField.getInstanceCount(),
-    voxelSizeMeters: roundMetric(settings.voxelSizeMeters),
+    hexCount: rippleField.getInstanceCount(),
+    hexDiameterMeters: roundMetric(settings.voxelSizeMeters),
     arenaRadiusMeters: roundMetric(settings.arenaRadiusMeters),
     sceneRadius: roundMetric(nextPreset.fieldRadius),
-    cubeSpacing: roundMetric(nextPreset.cubeSpacing)
+    tileSpacing: roundMetric(nextPreset.tileSpacing)
   }, durationMs > GLOBAL_FRAME_HITCH_MS ? "warn" : "info");
 }
 
@@ -736,7 +736,7 @@ function createStageFloor(): THREE.Mesh {
 function updateStageFloor(nextPreset: QualityPreset): void {
   // The floor is a unit circle scaled to the active arena. Reusing one mesh is
   // much cheaper than throwing away geometry every time the arena slider moves.
-  const floorRadius = nextPreset.fieldRadius + nextPreset.cubeSpacing * 0.5;
+  const floorRadius = nextPreset.fieldRadius + nextPreset.tileSpacing * 0.5;
   stageFloor.scale.set(floorRadius, floorRadius, 1);
   arenaBarrier.setRadius(floorRadius);
 }
@@ -803,8 +803,8 @@ function createAvatar(): {
       updateAvatarOrbitTrails(orbitTrails, clock.elapsedTime, movementGlow);
 
       // The player should now behave like an actual local light source for the
-      // cube field. Keep shadows off for this moving light pair; point-light
-      // shadows would be expensive with tens of thousands of instanced cubes.
+      // hex field. Keep shadows off for this moving light pair; point-light
+      // shadows would be expensive with tens of thousands of instanced cells.
       coreLight.intensity = 3.8 + breathingGlow * 0.9 + movementGlow * 1.4;
       coreLight.distance = 17 + movementGlow * 5;
       floorLight.intensity = 1.65 + breathingGlow * 0.42 + movementGlow * 0.9;
@@ -1049,8 +1049,8 @@ function updateStats(delta: number, time: number): void {
   measuredFps = frameCount / fpsAccumulatorSeconds;
   frameCount = 0;
   fpsAccumulatorSeconds = 0;
-  statsLine.textContent = `${Math.round(measuredFps)} fps | ${rippleField.getInstanceCount().toLocaleString()} cubes | ${preset.particleBudget.toLocaleString()} particles`;
-  mediumLine.textContent = `${basePropagationSpeed.toFixed(1)} m/s | ${settings.waveMedium.effectiveDepth.toFixed(1)}m depth | ${formatVoxelSize(settings.voxelSizeMeters)} voxels | ${settings.arenaRadiusMeters.toFixed(0)}m arena | ${echoZones.getActiveCount()} echoes | ${activeSources.length} waves | newest ${newestRingRadius.toFixed(1)}m`;
+  statsLine.textContent = `${Math.round(measuredFps)} fps | ${rippleField.getInstanceCount().toLocaleString()} hexes | ${preset.particleBudget.toLocaleString()} particles`;
+  mediumLine.textContent = `${basePropagationSpeed.toFixed(1)} m/s | ${settings.waveMedium.effectiveDepth.toFixed(1)}m depth | ${formatVoxelSize(settings.voxelSizeMeters)} hex dia | ${settings.arenaRadiusMeters.toFixed(0)}m arena | ${echoZones.getActiveCount()} echoes | ${activeSources.length} waves | newest ${newestRingRadius.toFixed(1)}m`;
 }
 
 function logEchoDetonationFrame(time: number, delta: number, frameStartedAt: number): void {
@@ -1071,7 +1071,7 @@ function logEchoDetonationFrame(time: number, delta: number, frameStartedAt: num
     activeParticles: particles.getActiveCount(),
     activeRippleSources: rippleSources.getActiveSources(time).length,
     quality: preset.id,
-    voxelSizeMeters: roundMetric(settings.voxelSizeMeters),
+    hexDiameterMeters: roundMetric(settings.voxelSizeMeters),
     arenaRadiusMeters: roundMetric(settings.arenaRadiusMeters),
     bloomStrength: roundMetric(settings.bloomStrength)
   }, isSlow ? "warn" : "debug");
@@ -1105,7 +1105,7 @@ function logGlobalFrameHitch(time: number, delta: number, rawDelta: number, fram
     particleBudget: preset.particleBudget,
     activeRippleSources: activeSources.length,
     quality: preset.id,
-    voxelSizeMeters: roundMetric(settings.voxelSizeMeters),
+    hexDiameterMeters: roundMetric(settings.voxelSizeMeters),
     arenaRadiusMeters: roundMetric(settings.arenaRadiusMeters),
     bloomStrength: roundMetric(settings.bloomStrength),
     particleDensity: roundMetric(settings.particleDensity),

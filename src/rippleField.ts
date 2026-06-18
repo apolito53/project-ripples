@@ -5,12 +5,14 @@ import { MAX_SHADER_RIPPLE_SOURCES, type RippleSourceStore } from "./rippleSourc
 import { sampleFieldHeight } from "./terrain";
 import { getBasePropagationSpeedMetersPerSecond } from "./waveMedium";
 
-const CUBE_FOOTPRINT = 0.68;
-const BASE_CUBE_HEIGHT = 0.08;
+const HEX_TILE_DIAMETER = 0.68;
+const BASE_TILE_HEIGHT = 0.08;
 const RIPPLE_WIDTH = 1.45;
 const MIN_COLUMN_HEIGHT = 0.05;
 const MAX_COLUMN_DEPTH = 2.55;
 const COLUMN_FOOTPRINT_SCALE = 1;
+const HEX_ROW_SPACING_RATIO = Math.sqrt(3) * 0.5;
+const HEX_LATTICE_DENSITY_SCALE = Math.sqrt(2 / Math.sqrt(3));
 
 // The stage floor is still the visual darkness the columns sink toward. The
 // shafts are depth-limited for performance, then graded to black so their lower
@@ -60,14 +62,14 @@ export class RippleField {
   private columnMesh: THREE.InstancedMesh | null = null;
   private capMaterial: THREE.MeshStandardMaterial | null = null;
   private columnMaterial: THREE.MeshLambertMaterial | null = null;
-  private capGeometry: THREE.BoxGeometry | null = null;
-  private columnGeometry: THREE.BoxGeometry | null = null;
+  private capGeometry: THREE.CylinderGeometry | null = null;
+  private columnGeometry: THREE.CylinderGeometry | null = null;
   private capShader: RippleShader | null = null;
   private columnShader: RippleShader | null = null;
   private instanceCount = 0;
 
   constructor(scene: THREE.Scene, preset: QualityPreset) {
-    this.object.name = "Shader ripple voxel field";
+    this.object.name = "Shader ripple hex field";
     scene.add(this.object);
     this.rebuild(preset);
   }
@@ -81,24 +83,29 @@ export class RippleField {
     const phases: number[] = [];
     const tints: number[] = [];
     const radius = preset.fieldRadius;
-    const spacing = preset.cubeSpacing;
+    const spacing = preset.tileSpacing * HEX_LATTICE_DENSITY_SCALE;
+    const rowSpacing = spacing * HEX_ROW_SPACING_RATIO;
 
-    this.capGeometry = new THREE.BoxGeometry(1, 1, 1, 1, 1, 1);
-    this.columnGeometry = new THREE.BoxGeometry(1, 1, 1, 1, 1, 1);
+    this.capGeometry = createHexPrismGeometry();
+    this.columnGeometry = createHexPrismGeometry();
     this.capMaterial = this.createCapMaterial();
     this.columnMaterial = this.createColumnMaterial();
 
-    const halfCellCount = Math.ceil(radius / spacing);
+    const halfColumnCount = Math.ceil(radius / spacing) + 1;
+    const halfRowCount = Math.ceil(radius / rowSpacing) + 1;
     const placementRadius = radius + spacing * 0.5;
     const placementRadiusSquared = placementRadius * placementRadius;
 
-    // The arena floor is circular, so the voxel field should be circular too.
-    // We still walk a square coordinate range because it is the simplest grid
-    // generator, but only cells whose footprint reaches the arena disc survive.
-    for (let iz = -halfCellCount; iz <= halfCellCount; iz += 1) {
-      for (let ix = -halfCellCount; ix <= halfCellCount; ix += 1) {
-        const x = ix * spacing;
-        const z = iz * spacing;
+    // The arena floor is circular, but the cells now live on a staggered hex
+    // lattice. The slider's "size" is the widest point-to-point diameter; this
+    // spacing nudge keeps quality presets near their old cell counts instead of
+    // quietly getting more expensive from tighter hex packing.
+    for (let iz = -halfRowCount; iz <= halfRowCount; iz += 1) {
+      const rowOffset = Math.abs(iz % 2) === 1 ? spacing * 0.5 : 0;
+      const z = iz * rowSpacing;
+
+      for (let ix = -halfColumnCount; ix <= halfColumnCount; ix += 1) {
+        const x = ix * spacing + rowOffset;
         if (x * x + z * z > placementRadiusSquared) continue;
 
         const y = sampleFieldHeight(x, z);
@@ -112,7 +119,7 @@ export class RippleField {
 
     this.instanceCount = positions.length / 3;
     this.columnMesh = new THREE.InstancedMesh(this.columnGeometry, this.columnMaterial, this.instanceCount);
-    this.columnMesh.name = `${preset.label} ripple column shafts`;
+    this.columnMesh.name = `${preset.label} ripple hex shaft columns`;
     this.columnMesh.frustumCulled = false;
     this.columnMesh.castShadow = false;
     this.columnMesh.receiveShadow = false;
@@ -120,7 +127,7 @@ export class RippleField {
     this.columnMesh.renderOrder = 0;
 
     this.capMesh = new THREE.InstancedMesh(this.capGeometry, this.capMaterial, this.instanceCount);
-    this.capMesh.name = `${preset.label} ripple cube caps`;
+    this.capMesh.name = `${preset.label} ripple hex caps`;
     this.capMesh.frustumCulled = false;
     this.capMesh.castShadow = preset.shadowMapSize > 0;
     this.capMesh.receiveShadow = true;
@@ -135,7 +142,7 @@ export class RippleField {
       this.capMesh.setMatrixAt(index, matrix);
     }
 
-    // These per-instance attributes let the shader know where each cube lives
+    // These per-instance attributes let the shader know where each hex cell lives
     // without touching instance matrices every frame. That keeps the ripple
     // effect GPU-side and leaves the CPU free to merely update a few uniforms.
     setInstanceAttributes(this.capGeometry, positions, phases, tints);
@@ -350,13 +357,13 @@ export class RippleField {
           float lift = (-pressureDepression + rimLift + shelteredSourceWave * 0.92 + flowWave * 0.58) * uRippleHeight;
           float glow = clamp(proximity * (0.04 + shimmer * 0.08) + pressureRim * 0.08 + shelteredSourceWave * 0.2 + flowWave * 0.1, 0.0, 0.46);
           float voxelScale = clamp(uVoxelSize, 0.25, 2.0);
-          float cubeHeight = max(0.02, (${BASE_CUBE_HEIGHT.toFixed(2)} + pressureRim * 0.16 + shelteredSourceWave * 0.44 + flowWave * 0.22 - bodyPressure * 0.025) * voxelScale);
-          float footprint = (${CUBE_FOOTPRINT.toFixed(2)} + glow * 0.05) * voxelScale;
-          float visualHeight = instanceFieldPosition.y + lift + cubeHeight;
+          float tileHeight = max(0.02, (${BASE_TILE_HEIGHT.toFixed(2)} + pressureRim * 0.16 + shelteredSourceWave * 0.44 + flowWave * 0.22 - bodyPressure * 0.025) * voxelScale);
+          float footprint = (${HEX_TILE_DIAMETER.toFixed(2)} + glow * 0.05) * voxelScale;
+          float visualHeight = instanceFieldPosition.y + lift + tileHeight;
           float heightWhiteness = smoothstep(-0.75, 3.05, visualHeight);
 
           transformed.xz *= footprint;
-          transformed.y = transformed.y * cubeHeight + cubeHeight * 0.5 + lift;
+          transformed.y = transformed.y * tileHeight + tileHeight * 0.5 + lift;
           vRippleGlow = glow;
           vCrestGlow = crestGlow;
           vHeightWhiteness = heightWhiteness;
@@ -399,7 +406,7 @@ export class RippleField {
         );
     };
 
-    material.customProgramCacheKey = () => "ripple-field-cap-shader-v12";
+    material.customProgramCacheKey = () => "ripple-field-hex-cap-shader-v1";
     return material;
   }
 
@@ -540,8 +547,8 @@ export class RippleField {
           float lift = (-pressureDepression + rimLift + shelteredSourceWave * 0.92 + flowWave * 0.58) * uRippleHeight;
           float glow = clamp(proximity * (0.04 + shimmer * 0.08) + pressureRim * 0.08 + shelteredSourceWave * 0.2 + flowWave * 0.1, 0.0, 0.46);
           float voxelScale = clamp(uVoxelSize, 0.25, 2.0);
-          float capHeight = max(0.02, (${BASE_CUBE_HEIGHT.toFixed(2)} + pressureRim * 0.16 + shelteredSourceWave * 0.44 + flowWave * 0.22 - bodyPressure * 0.025) * voxelScale);
-          float footprint = (${CUBE_FOOTPRINT.toFixed(2)} + glow * 0.05) * voxelScale * ${COLUMN_FOOTPRINT_SCALE.toFixed(2)};
+          float capHeight = max(0.02, (${BASE_TILE_HEIGHT.toFixed(2)} + pressureRim * 0.16 + shelteredSourceWave * 0.44 + flowWave * 0.22 - bodyPressure * 0.025) * voxelScale);
+          float footprint = (${HEX_TILE_DIAMETER.toFixed(2)} + glow * 0.05) * voxelScale * ${COLUMN_FOOTPRINT_SCALE.toFixed(2)};
           float visualHeight = instanceFieldPosition.y + lift + capHeight;
           float heightWhiteness = smoothstep(-0.75, 3.05, visualHeight);
           float floorBaseLocal = ${FIELD_COLUMN_BASE_Y.toFixed(2)} - instanceFieldPosition.y;
@@ -594,7 +601,7 @@ export class RippleField {
         );
     };
 
-    material.customProgramCacheKey = () => "ripple-field-column-shafts-v13";
+    material.customProgramCacheKey = () => "ripple-field-hex-column-shafts-v1";
     return material;
   }
 
@@ -673,8 +680,16 @@ function smoothstep(edge0: number, edge1: number, value: number): number {
   return x * x * (3 - 2 * x);
 }
 
+function createHexPrismGeometry(): THREE.CylinderGeometry {
+  // CylinderGeometry with six radial segments gives us a real hexagonal prism.
+  // The radius is 0.5 so shader-side footprint scaling treats `1.0` as the
+  // full point-to-point diameter, matching the user's "widest point" size rule.
+  const geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 6, 1, false, Math.PI / 6);
+  return geometry;
+}
+
 function setInstanceAttributes(
-  geometry: THREE.BoxGeometry,
+  geometry: THREE.BufferGeometry,
   positions: number[],
   phases: number[],
   tints: number[]
