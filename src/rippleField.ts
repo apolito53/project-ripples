@@ -11,6 +11,8 @@ const RIPPLE_WIDTH = 1.45;
 const HEX_FLAT_TOP_HORIZONTAL_SPACING_RATIO = 0.75;
 const HEX_FLAT_TOP_VERTICAL_SPACING_RATIO = Math.sqrt(3) * 0.5;
 const HEX_AREA_RATIO = HEX_FLAT_TOP_HORIZONTAL_SPACING_RATIO * HEX_FLAT_TOP_VERTICAL_SPACING_RATIO;
+const MIN_RENDERED_RIPPLE_SOURCES = 8;
+const SHADER_SOURCE_EVALUATION_BUDGET = 2_400_000;
 
 type Uniform<T> = {
   value: T;
@@ -56,6 +58,8 @@ export class RippleField {
   private capGeometry: THREE.CylinderGeometry | null = null;
   private capShader: RippleShader | null = null;
   private instanceCount = 0;
+  private renderedRippleSourceCount = 0;
+  private renderedRippleSourceLimit = MAX_SHADER_RIPPLE_SOURCES;
 
   constructor(scene: THREE.Scene, preset: QualityPreset) {
     this.object.name = "Shader ripple hex field";
@@ -139,12 +143,16 @@ export class RippleField {
     if (!this.capShader) return;
 
     const basePropagationSpeed = getBasePropagationSpeedMetersPerSecond(settings.waveMedium);
+    const sourceLimit = getRenderedRippleSourceLimit(this.instanceCount);
     const activeCount = sources.writeUniforms(
       this.rippleUniforms,
       this.rippleMetadataUniforms,
       this.rippleLifetimeUniforms,
-      time
+      time,
+      sourceLimit
     );
+    this.renderedRippleSourceCount = activeCount;
+    this.renderedRippleSourceLimit = sourceLimit;
     this.writeShaderUniforms(
       this.capShader,
       time,
@@ -160,6 +168,14 @@ export class RippleField {
 
   getInstanceCount(): number {
     return this.instanceCount;
+  }
+
+  getRenderedRippleSourceCount(): number {
+    return this.renderedRippleSourceCount;
+  }
+
+  getRenderedRippleSourceLimit(): number {
+    return this.renderedRippleSourceLimit;
   }
 
   dispose(): void {
@@ -410,6 +426,8 @@ export class RippleField {
     this.capMaterial = null;
     this.capShader = null;
     this.instanceCount = 0;
+    this.renderedRippleSourceCount = 0;
+    this.renderedRippleSourceLimit = MAX_SHADER_RIPPLE_SOURCES;
   }
 }
 
@@ -463,6 +481,16 @@ function getHexPlacementDiameter(preset: QualityPreset): number {
   // diameter, producing an interlocking honeycomb without inflating the old
   // instance count.
   return preset.tileSpacing / Math.sqrt(HEX_AREA_RATIO);
+}
+
+function getRenderedRippleSourceLimit(instanceCount: number): number {
+  // Ripple source evaluation runs once per rendered hex cap. At 25cm voxels a
+  // single arena can have hundreds of thousands of caps, so keeping all 32 wave
+  // sources visible turns each frame into millions of shader evaluations. This
+  // keeps the newest sources visible while density is extreme, without deleting
+  // older gameplay sources before their lifetimes finish.
+  const densityLimit = Math.floor(SHADER_SOURCE_EVALUATION_BUDGET / Math.max(1, instanceCount));
+  return THREE.MathUtils.clamp(densityLimit, MIN_RENDERED_RIPPLE_SOURCES, MAX_SHADER_RIPPLE_SOURCES);
 }
 
 function setInstanceAttributes(

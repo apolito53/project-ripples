@@ -154,7 +154,7 @@ Versioning:
   including hex point-to-point diameter scaling and the 200m-to-400m arena
   radius range.
 - `src/particleVeil.ts` owns the player sparkle aura, additive glitter-cloud
-  bursts, flat Echo disc bursts, and wake trails.
+  bursts, layered Echo poof-disc bursts, and wake trails.
 - `src/pulseLights.ts` maps recent pulses onto a small pool of point lights.
 - `src/controls.ts` owns avatar movement, circular arena clamping, scene-input
   gating while menus are open, and camera pointer-lock behavior. The avatar
@@ -165,5 +165,6 @@ The CPU decides where the player, manual pulses, persistent Echo zones, and
 movement wakes are. Manual pulse input is cooldown-gated, Echo zones only become
 wave sources after collection, sources age out by per-source lifetime, and
 propagation speed comes from the current wave medium. The GPU handles hex lift,
-stretch, tint, emissive glow, and cell footprint/height from the current source
-and scale uniforms.
+stretch, tint, emissive glow, and cell footprint/height from the newest rendered
+source uniforms, with dense fields allowed to render fewer sources than the
+full gameplay source list contains.

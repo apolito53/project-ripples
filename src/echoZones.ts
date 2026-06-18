@@ -86,6 +86,8 @@ const ECHO_ORBIT_TRAIL_SEGMENTS = 5;
 const ECHO_ORBIT_TRAIL_SECONDS = 0.42;
 const COLLECT_BURST_MOTE_COUNT = 220;
 const COLLECT_BURST_DURATION = 0.88;
+const ECHO_COLUMN_LIGHT_POOL_SIZE = 5;
+const COLLECT_BURST_LIGHT_POOL_SIZE = 2;
 const TEMP_COLOR = new THREE.Color();
 const TURQUOISE = new THREE.Color(MOTE_COLOR);
 const VIOLET = new THREE.Color(VIOLET_COLOR);
@@ -96,13 +98,23 @@ export class EchoZoneField {
   private readonly coreGeometry = new THREE.IcosahedronGeometry(0.42, 2);
   private readonly diamondGeometry = new THREE.OctahedronGeometry(1, 1);
   private readonly mistGeometry = new THREE.SphereGeometry(1, 32, 20);
+  private readonly columnLightSets = createColumnLightPool();
   private readonly zones: EchoZoneVisual[] = [];
   private readonly collectBursts: EchoCollectBurst[] = [];
+  private readonly collectBurstLights = createCollectBurstLightPool();
   private lastBurstSlowFrameLogAt = -Infinity;
   private nextId = 1;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
+    for (const lightSet of this.columnLightSets) {
+      for (const light of lightSet) {
+        this.scene.add(light);
+      }
+    }
+    for (const light of this.collectBurstLights) {
+      this.scene.add(light);
+    }
   }
 
   add(position: THREE.Vector3, startTime: number, options: EchoZoneOptions): void {
@@ -154,10 +166,7 @@ export class EchoZoneField {
     orbMist.scale.set(columnRadius * 0.95, columnRadius * 3.75, columnRadius * 0.95);
     object.add(orbMist);
 
-    const columnLights = createColumnLights();
-    for (const light of columnLights) {
-      object.add(light);
-    }
+    const columnLights = this.takeColumnLights();
 
     const sparkles = createOrbitSparkles(columnRadius, COLUMN_HEIGHT, COLUMN_BASE_LIFT);
     object.add(sparkles.points, sparkles.trails);
@@ -214,7 +223,7 @@ export class EchoZoneField {
       zone.orbMist.material.uniforms.uPulse.value = pulse;
       zone.orbMist.material.uniforms.uOpacity.value = 0.28 + pulse * 0.22;
 
-      updateColumnLights(zone.columnLights, pulse);
+      updateColumnLights(zone.columnLights, pulse, zone.object.position);
       updateOrbitSparkles(zone.sparkles, age, pulse);
     }
 
@@ -273,6 +282,16 @@ export class EchoZoneField {
     for (let index = this.collectBursts.length - 1; index >= 0; index -= 1) {
       this.removeCollectBurstAt(index);
     }
+    for (const lightSet of this.columnLightSets) {
+      for (const light of lightSet) {
+        light.removeFromParent();
+        light.dispose();
+      }
+    }
+    for (const light of this.collectBurstLights) {
+      light.removeFromParent();
+      light.dispose();
+    }
     this.coreGeometry.dispose();
     this.diamondGeometry.dispose();
     this.mistGeometry.dispose();
@@ -320,10 +339,10 @@ export class EchoZoneField {
     );
     object.add(shardCloud.points);
 
-    const burstLight = new THREE.PointLight(ORB_LIGHT_COLOR, 8, 22, 1.35);
-    burstLight.name = "Echo collect flash light";
-    burstLight.position.y = orbHeight;
-    object.add(burstLight);
+    const burstLight = this.takeCollectBurstLight();
+    burstLight.position.set(zone.position.x, zone.position.y + orbHeight, zone.position.z);
+    burstLight.intensity = 8;
+    burstLight.distance = 22;
 
     this.scene.add(object);
     this.collectBursts.push({
@@ -390,6 +409,11 @@ export class EchoZoneField {
 
       burst.burstLight.intensity = 7.8 * flash;
       burst.burstLight.distance = 10 + easeOut * 18;
+      burst.burstLight.position.set(
+        burst.object.position.x,
+        burst.object.position.y + orbHeight,
+        burst.object.position.z
+      );
       updateCollectBurstShards(burst, age, progress);
     }
 
@@ -413,9 +437,7 @@ export class EchoZoneField {
     zone.core.material.dispose();
     zone.orbShell.material.dispose();
     zone.orbMist.material.dispose();
-    for (const light of zone.columnLights) {
-      light.dispose();
-    }
+    this.releaseColumnLights(zone.columnLights);
     zone.sparkles.points.geometry.dispose();
     zone.sparkles.points.material.dispose();
     zone.sparkles.trails.geometry.dispose();
@@ -429,15 +451,61 @@ export class EchoZoneField {
     burst.mist.material.dispose();
     burst.shards.geometry.dispose();
     burst.shards.material.dispose();
-    burst.burstLight.dispose();
+    this.releaseCollectBurstLight(burst.burstLight);
     debugEvent("echo.collect", "Disposed Echo collection burst", {
       activeBurstsAfter: this.collectBursts.length,
       shardCount: COLLECT_BURST_MOTE_COUNT
     });
   }
+
+  private takeCollectBurstLight(): THREE.PointLight {
+    const activeLights = new Set(this.collectBursts.map((burst) => burst.burstLight));
+    const freeLight = this.collectBurstLights.find((light) => !activeLights.has(light));
+    return freeLight ?? this.collectBurstLights[0];
+  }
+
+  private releaseCollectBurstLight(light: THREE.PointLight): void {
+    // Keep the light object alive in the scene with zero intensity. Adding or
+    // removing a point light changes Three's light-count shader defines, which
+    // can force a huge MeshStandardMaterial recompile exactly when an Echo
+    // detonates. Parking pooled lights avoids that render-side hitch.
+    light.intensity = 0;
+    light.distance = 0.01;
+    light.position.set(0, -999, 0);
+  }
+
+  private takeColumnLights(): readonly THREE.PointLight[] {
+    const activeSets = new Set(this.zones.map((zone) => zone.columnLights));
+    const freeSet = this.columnLightSets.find((lightSet) => !activeSets.has(lightSet));
+    return freeSet ?? this.columnLightSets[0];
+  }
+
+  private releaseColumnLights(lights: readonly THREE.PointLight[]): void {
+    // Like collection flashes, Echo columns keep their light objects alive.
+    // Collection/spawn should move light energy, not mutate the renderer's
+    // point-light count and trigger a field-material recompile.
+    for (const light of lights) {
+      light.intensity = 0;
+      light.distance = 0.01;
+      light.position.set(0, -999, 0);
+    }
+  }
 }
 
-function createColumnLights(): readonly THREE.PointLight[] {
+function createColumnLightPool(): THREE.PointLight[][] {
+  return Array.from({ length: ECHO_COLUMN_LIGHT_POOL_SIZE }, (_, index) => {
+    const lights = createColumnLights();
+    for (const light of lights) {
+      light.name = `${light.name} ${index + 1}`;
+      light.intensity = 0;
+      light.distance = 0.01;
+      light.position.set(0, -999, 0);
+    }
+    return lights;
+  });
+}
+
+function createColumnLights(): THREE.PointLight[] {
   // Three real lights give the column volume without relying on a fake glowing
   // texture. Shadows stay off; moving point-light shadows would be far too rude
   // with this many instanced field cells. The central orb light is intentionally the
@@ -457,12 +525,24 @@ function createColumnLights(): readonly THREE.PointLight[] {
   return [lowerLight, coreLight, upperLight];
 }
 
-function updateColumnLights(lights: readonly THREE.PointLight[], pulse: number): void {
+function createCollectBurstLightPool(): THREE.PointLight[] {
+  return Array.from({ length: COLLECT_BURST_LIGHT_POOL_SIZE }, (_, index) => {
+    const light = new THREE.PointLight(ORB_LIGHT_COLOR, 0, 0.01, 1.35);
+    light.name = `Echo pooled collect flash light ${index + 1}`;
+    light.position.set(0, -999, 0);
+    return light;
+  });
+}
+
+function updateColumnLights(lights: readonly THREE.PointLight[], pulse: number, basePosition: THREE.Vector3): void {
   const [lowerLight, coreLight, upperLight] = lights;
+  lowerLight.position.set(basePosition.x, basePosition.y + COLUMN_BASE_LIFT + 1.1, basePosition.z);
   lowerLight.intensity = 1.05 + pulse * 0.78;
   lowerLight.distance = 11.5 + pulse * 3.5;
+  coreLight.position.set(basePosition.x, basePosition.y + COLUMN_BASE_LIFT + COLUMN_HEIGHT * 0.5, basePosition.z);
   coreLight.intensity = 2.25 + pulse * 1.85;
   coreLight.distance = 16 + pulse * 5.5;
+  upperLight.position.set(basePosition.x, basePosition.y + COLUMN_BASE_LIFT + COLUMN_HEIGHT - 0.7, basePosition.z);
   upperLight.intensity = 0.68 + pulse * 0.7;
   upperLight.distance = 10 + pulse * 3;
 }

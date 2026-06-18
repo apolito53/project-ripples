@@ -126,17 +126,26 @@ Purpose: compact map for the standalone ripple-field visual lab.
   sparkle trails, and
   short collection bursts. They should not become shader sources until
   collected, otherwise they turn back into ambient pulses with extra jewelry.
+  Their point lights are pooled and parked at zero intensity; do not add/remove
+  point lights during Echo spawn or collection, because changing Three.js light
+  counts can recompile the lit field shader during gameplay.
 - Echo detonation and global frame-hitch logging defaults on for local hosts
   and writes a retained ring buffer to `window.__rippleDebugLog`; use
   `window.__rippleDebugDump()` in DevTools after a freeze to inspect the last
-  collection, slow frames, raw clock gaps, and frame timings. Console lines
-  include inline JSON because Chrome automation collapses object arguments.
+  collection, slow frames, raw clock gaps, update/render timing, rendered source
+  limits, and Echo burst particle budgets. Console lines include inline JSON
+  because Chrome automation collapses object arguments.
   When `npm.cmd run debug:logs` is listening, the browser also batches records
   to `127.0.0.1:5184` and appends JSONL under `logs/`.
 - `ParticleVeil` keeps active motes packed into the leading buffer range and
   sets Three.js draw/update ranges from `activeCount`; preserve that shape when
   changing particle lifetimes or replacement behavior, or dead budget slots will
-  quietly become render cost again.
+  quietly become render cost again. Echo disc detonations intentionally spend a
+  capped intensity budget on broad soft poof motes plus a smaller large-glitter
+  layer instead of one enormous glitter-only burst.
+- `RippleField` can upload fewer rendered ripple sources than the gameplay
+  source list contains when the hex instance count is extreme. This is a
+  GPU-side density throttle for shader loop cost, not a gameplay source cap.
 - The hex-size and arena-radius sliders rebuild the InstancedMesh after a
   short debounce. Meltdown's honeycomb look preserves its prior density, but
   extreme combinations such as tiny hexes plus a 400m arena can still create

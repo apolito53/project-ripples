@@ -4,8 +4,13 @@ const TEMP_COLOR = new THREE.Color();
 const TURQUOISE = new THREE.Color(0x7dffd8);
 const VIOLET = new THREE.Color(0x7f7dff);
 const GOLD = new THREE.Color(0xffd36a);
+const PALE_CYAN = new THREE.Color(0xdffcff);
 const PARTICLE_ALPHA_MIN = 0.34;
 const PARTICLE_ALPHA_VARIANCE = 0.32;
+const DISC_CLOUD_PARTICLE_RATIO = 0.012;
+const DISC_CLOUD_PARTICLE_MAX = 720;
+const DISC_GLITTER_PARTICLE_RATIO = 0.06;
+const DISC_GLITTER_PARTICLE_MAX = 3200;
 
 export class ParticleVeil {
   readonly points: THREE.Points;
@@ -17,6 +22,7 @@ export class ParticleVeil {
   private readonly alphas: Float32Array;
   private readonly sizes: Float32Array;
   private readonly twinkles: Float32Array;
+  private readonly cloudinesses: Float32Array;
   private readonly ages: Float32Array;
   private readonly lifetimes: Float32Array;
   private readonly baseSizes: Float32Array;
@@ -26,6 +32,7 @@ export class ParticleVeil {
   private readonly alphaAttribute: THREE.BufferAttribute;
   private readonly sizeAttribute: THREE.BufferAttribute;
   private readonly twinkleAttribute: THREE.BufferAttribute;
+  private readonly cloudinessAttribute: THREE.BufferAttribute;
   private activeCount = 0;
   private readonly capacity: number;
   // Live particles stay packed into [0, activeCount). When the buffer is full,
@@ -42,6 +49,7 @@ export class ParticleVeil {
     this.alphas = new Float32Array(budget);
     this.sizes = new Float32Array(budget);
     this.twinkles = new Float32Array(budget);
+    this.cloudinesses = new Float32Array(budget);
     this.ages = new Float32Array(budget);
     this.lifetimes = new Float32Array(budget);
     this.baseSizes = new Float32Array(budget);
@@ -53,11 +61,13 @@ export class ParticleVeil {
     this.alphaAttribute = createDynamicAttribute(this.alphas, 1);
     this.sizeAttribute = createDynamicAttribute(this.sizes, 1);
     this.twinkleAttribute = createDynamicAttribute(this.twinkles, 1);
+    this.cloudinessAttribute = createDynamicAttribute(this.cloudinesses, 1);
     this.geometry.setAttribute("position", this.positionAttribute);
     this.geometry.setAttribute("color", this.colorAttribute);
     this.geometry.setAttribute("aAlpha", this.alphaAttribute);
     this.geometry.setAttribute("aSize", this.sizeAttribute);
     this.geometry.setAttribute("aTwinkle", this.twinkleAttribute);
+    this.geometry.setAttribute("aCloudiness", this.cloudinessAttribute);
     this.geometry.setDrawRange(0, 0);
 
     this.material = new THREE.ShaderMaterial({
@@ -79,14 +89,17 @@ export class ParticleVeil {
         attribute float aAlpha;
         attribute float aSize;
         attribute float aTwinkle;
+        attribute float aCloudiness;
         varying vec3 vColor;
         varying float vAlpha;
         varying float vTwinkle;
+        varying float vCloudiness;
 
         void main() {
           vColor = color;
           vAlpha = aAlpha;
           vTwinkle = 0.62 + 0.38 * sin(uTime * 9.5 + aTwinkle * 6.2831853);
+          vCloudiness = aCloudiness;
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
           gl_Position = projectionMatrix * mvPosition;
           gl_PointSize = aSize * uPixelRatio * (102.0 / max(9.0, -mvPosition.z));
@@ -96,16 +109,24 @@ export class ParticleVeil {
         varying vec3 vColor;
         varying float vAlpha;
         varying float vTwinkle;
+        varying float vCloudiness;
 
         void main() {
           vec2 center = gl_PointCoord - vec2(0.5);
           float dist = length(center);
           float pinCore = smoothstep(0.075, 0.0, dist);
           float softMote = smoothstep(0.24, 0.035, dist);
-          float sparkle = pinCore * 0.86 + softMote * 0.14;
-          float alpha = sparkle * vAlpha * vTwinkle;
+          float glitterShape = pinCore * 0.86 + softMote * 0.14;
+          float cloudBody = smoothstep(0.52, 0.0, dist);
+          float cloudCore = smoothstep(0.32, 0.0, dist);
+          float cloudShape = cloudBody * (0.44 + cloudCore * 0.56);
+          float shape = mix(glitterShape, cloudShape, vCloudiness);
+          float twinkle = mix(vTwinkle, 0.88 + vTwinkle * 0.12, vCloudiness);
+          float alpha = shape * vAlpha * twinkle;
           if (alpha < 0.004) discard;
-          gl_FragColor = vec4(vColor * (1.75 + pinCore * 3.4 + vTwinkle * 0.75), alpha);
+          float glitterEnergy = 1.75 + pinCore * 3.4 + vTwinkle * 0.75;
+          float cloudEnergy = 1.05 + cloudCore * 1.65 + cloudBody * 0.55;
+          gl_FragColor = vec4(vColor * mix(glitterEnergy, cloudEnergy, vCloudiness), alpha);
         }
       `
     });
@@ -147,12 +168,32 @@ export class ParticleVeil {
     this.markDirty(true);
   }
 
-  spawnDiscBurst(center: THREE.Vector3, count: number, strength: number, radius: number): void {
-    for (let burstIndex = 0; burstIndex < count; burstIndex += 1) {
+  spawnDiscBurst(center: THREE.Vector3, count: number, strength: number, radius: number): number {
+    const intensityBudget = Math.max(0, Math.floor(count));
+    if (intensityBudget <= 0) return 0;
+
+    // Echo detonations now spend their budget on a layered pressure poof:
+    // broad low-alpha cloud motes sell the disc shape, then a smaller glitter
+    // layer gives the burst texture without flooding the particle buffer.
+    const cloudCount = Math.min(
+      DISC_CLOUD_PARTICLE_MAX,
+      Math.max(18, Math.floor(intensityBudget * DISC_CLOUD_PARTICLE_RATIO))
+    );
+    const glitterCount = Math.min(
+      DISC_GLITTER_PARTICLE_MAX,
+      Math.max(48, Math.floor(intensityBudget * DISC_GLITTER_PARTICLE_RATIO))
+    );
+
+    for (let burstIndex = 0; burstIndex < cloudCount; burstIndex += 1) {
+      this.emitDiscCloudParticle(center, strength, radius);
+    }
+
+    for (let burstIndex = 0; burstIndex < glitterCount; burstIndex += 1) {
       this.emitDiscParticle(center, strength, radius);
     }
 
     this.markDirty(true);
+    return cloudCount + glitterCount;
   }
 
   spawnAura(center: THREE.Vector3, delta: number, movementStrength: number): void {
@@ -224,6 +265,7 @@ export class ParticleVeil {
     this.positions[offset + 2] = 0;
     this.alphas[index] = 0;
     this.sizes[index] = 0;
+    this.cloudinesses[index] = 0;
     this.ages[index] = 0;
     this.lifetimes[index] = 0;
     this.baseSizes[index] = 0;
@@ -269,6 +311,38 @@ export class ParticleVeil {
     this.alphas[index] = this.baseAlphas[index];
     this.sizes[index] = this.baseSizes[index];
     this.twinkles[index] = Math.random();
+    this.cloudinesses[index] = 0;
+  }
+
+  private emitDiscCloudParticle(center: THREE.Vector3, strength: number, discRadius: number): void {
+    const index = this.allocateParticleSlot();
+
+    const angle = Math.random() * Math.PI * 2;
+    const normalizedRadius = Math.sqrt(Math.random());
+    const radius = normalizedRadius * discRadius * (0.36 + Math.random() * 0.74);
+    const outward = (1.8 + Math.random() * 3.8 + strength * 2.2) * (0.45 + normalizedRadius * 0.7);
+    const tangent = (Math.random() - 0.5) * (1.2 + strength * 1.1);
+    const lift = (Math.random() - 0.32) * (0.12 + strength * 0.2);
+    const positionOffset = index * 3;
+    const color = pickDiscCloudColor(Math.random());
+
+    this.positions[positionOffset] = center.x + Math.cos(angle) * radius;
+    this.positions[positionOffset + 1] = center.y + 0.18 + (Math.random() - 0.5) * 0.18;
+    this.positions[positionOffset + 2] = center.z + Math.sin(angle) * radius;
+    this.velocities[positionOffset] = Math.cos(angle) * outward - Math.sin(angle) * tangent;
+    this.velocities[positionOffset + 1] = lift;
+    this.velocities[positionOffset + 2] = Math.sin(angle) * outward + Math.cos(angle) * tangent;
+    this.colors[positionOffset] = color.r;
+    this.colors[positionOffset + 1] = color.g;
+    this.colors[positionOffset + 2] = color.b;
+    this.ages[index] = 0;
+    this.lifetimes[index] = 0.48 + Math.random() * 0.72;
+    this.baseAlphas[index] = 0.045 + Math.random() * 0.075;
+    this.baseSizes[index] = 5.8 + Math.random() * (8.2 + strength * 3.8);
+    this.alphas[index] = this.baseAlphas[index];
+    this.sizes[index] = this.baseSizes[index];
+    this.twinkles[index] = Math.random();
+    this.cloudinesses[index] = 1;
   }
 
   private emitDiscParticle(center: THREE.Vector3, strength: number, discRadius: number): void {
@@ -296,12 +370,13 @@ export class ParticleVeil {
     this.colors[positionOffset + 1] = color.g;
     this.colors[positionOffset + 2] = color.b;
     this.ages[index] = 0;
-    this.lifetimes[index] = 0.7 + Math.random() * 1.15;
-    this.baseAlphas[index] = PARTICLE_ALPHA_MIN + 0.18 + Math.random() * (PARTICLE_ALPHA_VARIANCE + 0.2);
-    this.baseSizes[index] = 0.55 + Math.random() * (1.3 + strength * 0.85);
+    this.lifetimes[index] = 0.58 + Math.random() * 0.88;
+    this.baseAlphas[index] = PARTICLE_ALPHA_MIN + 0.24 + Math.random() * (PARTICLE_ALPHA_VARIANCE + 0.18);
+    this.baseSizes[index] = 1.1 + Math.random() * (2.2 + strength * 1.15);
     this.alphas[index] = this.baseAlphas[index];
     this.sizes[index] = this.baseSizes[index];
     this.twinkles[index] = Math.random();
+    this.cloudinesses[index] = 0;
   }
 
   private markDirty(includeStaticParticleData: boolean): void {
@@ -313,6 +388,7 @@ export class ParticleVeil {
     if (!includeStaticParticleData) return;
     markAttributeRange(this.colorAttribute, this.activeCount * 3);
     markAttributeRange(this.twinkleAttribute, this.activeCount);
+    markAttributeRange(this.cloudinessAttribute, this.activeCount);
   }
 
   private allocateParticleSlot(): number {
@@ -346,6 +422,7 @@ export class ParticleVeil {
     this.alphas[toIndex] = this.alphas[fromIndex];
     this.sizes[toIndex] = this.sizes[fromIndex];
     this.twinkles[toIndex] = this.twinkles[fromIndex];
+    this.cloudinesses[toIndex] = this.cloudinesses[fromIndex];
     this.ages[toIndex] = this.ages[fromIndex];
     this.lifetimes[toIndex] = this.lifetimes[fromIndex];
     this.baseSizes[toIndex] = this.baseSizes[fromIndex];
@@ -356,6 +433,11 @@ export class ParticleVeil {
 function pickParticleColor(seed: number): THREE.Color {
   if (seed < 0.5) return TEMP_COLOR.copy(TURQUOISE).lerp(VIOLET, seed * 1.4);
   return TEMP_COLOR.copy(TURQUOISE).lerp(GOLD, (seed - 0.5) * 1.2);
+}
+
+function pickDiscCloudColor(seed: number): THREE.Color {
+  if (seed < 0.58) return TEMP_COLOR.copy(TURQUOISE).lerp(PALE_CYAN, seed * 0.92);
+  return TEMP_COLOR.copy(TURQUOISE).lerp(GOLD, (seed - 0.58) * 1.08);
 }
 
 function createDynamicAttribute(array: Float32Array, itemSize: number): THREE.BufferAttribute {

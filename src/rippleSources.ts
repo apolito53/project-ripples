@@ -78,13 +78,15 @@ export class RippleSourceStore {
     target: THREE.Vector4[],
     metadataTarget: THREE.Vector4[],
     lifetimeTarget: Float32Array,
-    time: number
+    time: number,
+    sourceLimit = target.length
   ): number {
     this.pruneExpired(time);
 
+    const maxWrittenSources = Math.max(0, Math.min(target.length, Math.floor(sourceLimit)));
     let writtenCount = 0;
     for (const source of this.sources) {
-      if (writtenCount >= target.length) break;
+      if (writtenCount >= maxWrittenSources) break;
 
       // Uniform layout is deliberately small but no longer arbitrary:
       // - target: x/z position, birth time, amplitude
@@ -102,6 +104,9 @@ export class RippleSourceStore {
       writtenCount += 1;
     }
 
+    // Clear the rest of the fixed WebGL uniform array every frame. The shader
+    // loop stops at uRippleCount, but stale entries here are confusing during
+    // debugging and can leak visual state if the count ever changes mid-frame.
     for (let index = writtenCount; index < target.length; index += 1) {
       target[index].set(0, 0, -999, 0);
       metadataTarget[index].set(1, 1, 1, CIRCULAR_SOURCE_DIRECTION);

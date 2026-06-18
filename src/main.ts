@@ -5,7 +5,7 @@ import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { ArenaBarrier } from "./arenaBarrier";
 import { PlayerRig } from "./controls";
-import { debugEvent, debugMeasure, roundMetric, vectorPayload } from "./debugLog";
+import { debugEvent, debugMeasure, roundMetric, vectorPayload, type RippleDebugPayload } from "./debugLog";
 import { EchoZoneField, type TriggeredEchoZone } from "./echoZones";
 import { cloneDefaultSettings, getQualityPreset } from "./labSettings";
 import { ParticleVeil } from "./particleVeil";
@@ -66,6 +66,8 @@ const ECHO_ZONE_MIN_PLAYER_DISTANCE = 11;
 const ECHO_ZONE_MIN_ZONE_DISTANCE = 12;
 const ECHO_ZONE_BURST_STRENGTH = 0.76;
 const ECHO_ZONE_DISC_BURST_RADIUS = 8.6;
+const ECHO_DISC_BURST_PARTICLE_CAP_RATIO = 0.16;
+const ECHO_DISC_BURST_MIN_PARTICLE_CAP = 5000;
 const ECHO_DETONATION_FRAME_LOG_SECONDS = 2;
 const ECHO_DEBUG_FRAME_SAMPLE_SECONDS = 0.22;
 const ECHO_DEBUG_SLOW_FRAME_MS = 24;
@@ -147,6 +149,8 @@ let movementWakeSide = 1;
 let echoDebugFrameWatchUntil = -Infinity;
 let echoDebugLastFrameLogAt = -Infinity;
 let lastGlobalFrameHitchLogAt = -Infinity;
+let lastFrameUpdateMs = 0;
+let lastFrameRenderMs = 0;
 let fieldRebuildTimeoutId = 0;
 const lastMovementRipplePosition = new THREE.Vector3(Infinity, 0, Infinity);
 const movementDirection = new THREE.Vector3();
@@ -246,11 +250,14 @@ function animate(): void {
   updateStats(delta, time);
 
   bloomPass.strength = effectiveBloomStrength;
+  const renderStartedAt = performance.now();
+  lastFrameUpdateMs = renderStartedAt - frameStartedAt;
   if (effectiveBloomStrength > 0.02) {
     composer.render();
   } else {
     renderer.render(scene, camera);
   }
+  lastFrameRenderMs = performance.now() - renderStartedAt;
   logGlobalFrameHitch(time, delta, rawDelta, frameStartedAt);
   logEchoDetonationFrame(time, delta, frameStartedAt);
 }
@@ -458,28 +465,44 @@ function triggerEchoZone(echo: TriggeredEchoZone, time: number): void {
     2
   );
 
-  const particleCount = Math.max(0, Math.floor(
+  const rawParticleCount = Math.max(0, Math.floor(
     preset.burstParticleCount * settings.particleDensity * (0.58 + echo.burstStrength * 0.45)
   ));
+  const particleCap = Math.max(
+    ECHO_DISC_BURST_MIN_PARTICLE_CAP,
+    Math.floor(preset.particleBudget * ECHO_DISC_BURST_PARTICLE_CAP_RATIO)
+  );
+  const particleCount = Math.min(rawParticleCount, particleCap);
   const activeBeforeParticles = particles.getActiveCount();
+  let emittedParticleCount = 0;
   if (settings.particlesEnabled) {
+    const particleLogPayload: RippleDebugPayload = {
+      rawParticleBudget: rawParticleCount,
+      cappedParticleBudget: particleCount,
+      particleCap,
+      emittedParticleCount,
+      activeParticlesBefore: activeBeforeParticles,
+      particleBudget: preset.particleBudget,
+      quality: preset.id,
+      particleDensity: roundMetric(settings.particleDensity),
+      discBurstRadius: echo.discBurstRadius
+    };
     debugMeasure(
       "echo.collect",
-      "Spawned Echo disc burst particles",
-      () => particles.spawnDiscBurst(position, particleCount, echo.burstStrength, echo.discBurstRadius),
-      {
-        requestedParticleCount: particleCount,
-        activeParticlesBefore: activeBeforeParticles,
-        particleBudget: preset.particleBudget,
-        quality: preset.id,
-        particleDensity: roundMetric(settings.particleDensity),
-        discBurstRadius: echo.discBurstRadius
+      "Spawned Echo poof-disc particles",
+      () => {
+        emittedParticleCount = particles.spawnDiscBurst(position, particleCount, echo.burstStrength, echo.discBurstRadius);
+        particleLogPayload.emittedParticleCount = emittedParticleCount;
       },
+      particleLogPayload,
       10
     );
   }
   debugEvent("echo.collect", "Finished Echo detonation gameplay burst", {
     totalMs: roundMetric(performance.now() - detonationStartedAt),
+    rawParticleBudget: rawParticleCount,
+    cappedParticleBudget: particleCount,
+    emittedParticleCount,
     activeParticlesAfter: particles.getActiveCount(),
     activeVisualBursts: echoZones.getCollectBurstCount(),
     activeRippleSources: rippleSources.getActiveSources(time).length
@@ -1215,11 +1238,15 @@ function logEchoDetonationFrame(time: number, delta: number, frameStartedAt: num
   debugEvent("echo.frame", "Frame timing during Echo detonation window", {
     time: roundMetric(time),
     frameMs: roundMetric(frameMs),
+    updateMs: roundMetric(lastFrameUpdateMs),
+    renderMs: roundMetric(lastFrameRenderMs),
     clockDeltaMs: roundMetric(delta * 1000),
     activeEchoes: echoZones.getActiveCount(),
     activeVisualBursts: echoZones.getCollectBurstCount(),
     activeParticles: particles.getActiveCount(),
     activeRippleSources: rippleSources.getActiveSources(time).length,
+    renderedRippleSources: rippleField.getRenderedRippleSourceCount(),
+    renderedRippleSourceLimit: rippleField.getRenderedRippleSourceLimit(),
     quality: preset.id,
     hexDiameterMeters: roundMetric(settings.voxelSizeMeters),
     arenaRadiusMeters: roundMetric(settings.arenaRadiusMeters),
@@ -1246,6 +1273,8 @@ function logGlobalFrameHitch(time: number, delta: number, rawDelta: number, fram
   debugEvent("frame.hitch", "Global frame hitch", {
     time: roundMetric(time),
     frameMs: roundMetric(frameMs),
+    updateMs: roundMetric(lastFrameUpdateMs),
+    renderMs: roundMetric(lastFrameRenderMs),
     rawClockDeltaMs: roundMetric(rawClockDeltaMs),
     cappedClockDeltaMs: roundMetric(delta * 1000),
     echoWatchActive: time <= echoDebugFrameWatchUntil,
@@ -1254,6 +1283,8 @@ function logGlobalFrameHitch(time: number, delta: number, rawDelta: number, fram
     activeParticles: particles.getActiveCount(),
     particleBudget: preset.particleBudget,
     activeRippleSources: activeSources.length,
+    renderedRippleSources: rippleField.getRenderedRippleSourceCount(),
+    renderedRippleSourceLimit: rippleField.getRenderedRippleSourceLimit(),
     quality: preset.id,
     hexDiameterMeters: roundMetric(settings.voxelSizeMeters),
     arenaRadiusMeters: roundMetric(settings.arenaRadiusMeters),

@@ -12,6 +12,17 @@
 - Removed the field's per-hex vertical shaft mesh and duplicate shaft shader,
   leaving a single animated cap surface as cleaner groundwork for the upcoming
   spherical arena change.
+- Reworked Echo detonation particles from a raw glitter disc into a soft
+  low-alpha poof disc with a smaller large-glitter accent layer, cutting live
+  particle pressure while keeping the burst bright and readable.
+- Added a density-aware shader-source throttle so extreme 25cm hex fields render
+  fewer newest wave sources instead of evaluating all 32 possible sources across
+  hundreds of thousands of hexes.
+- Expanded Echo hitch diagnostics with update/render frame timing, rendered
+  ripple-source limits, and raw/capped/emitted Echo burst particle counts.
+- Pooled Echo column and collection-flash point lights so collecting or spawning
+  Echoes moves existing lights instead of changing Three.js light counts and
+  forcing large render-side shader recompiles.
 
 ## 0.2.0-ALPHA - 2026-06-18
 

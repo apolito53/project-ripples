@@ -5,10 +5,10 @@ concrete follow-ups that we actually intend to revisit.
 
 ## High Priority
 
-- Replace brute-force particle density with a more deliberate sparkle system.
-  The x100 particle experiment proved that raw count can become expensive and
-  visually flat. The next pass should separate "sparkle mass" from haze, likely
-  with a smaller visible particle budget plus shader/procedural density.
+- Continue replacing brute-force particle density with more deliberate effects.
+  Echo detonations now have a first layered poof-disc/glitter pass, but the
+  broader particle system still needs a real split between sparkle mass, haze,
+  and shader/procedural density.
 - Make particle buffer uploads less blunt.
   `ParticleVeil.markDirty()` currently marks large dynamic attributes every
   frame. Investigate update ranges, packed/interleaved buffers, or a more
@@ -18,7 +18,7 @@ concrete follow-ups that we actually intend to revisit.
   it, but the boundary could use a visible rim, edge fade, collision feedback,
   or pulse shimmer so it feels intentional instead of invisible.
 - Add a small debug/perf overlay.
-  Useful readings: frame time, draw mode, cube count, active particle count,
+  Useful readings: frame time, draw mode, hex count, active particle count,
   resident particle budget, pixel ratio, bloom state, and quality preset.
 - Decide how this lab plugs into `voxel-sandbox-engine`.
   Keep this project standalone for now. Later, harvest visual patterns, shader
