@@ -46,6 +46,7 @@ const bloomToggle = requireElement<HTMLButtonElement>("#bloom-toggle");
 const menuToggle = requireElement<HTMLButtonElement>("#menu-toggle");
 const sceneMenuBackdrop = requireElement<HTMLDivElement>("#scene-menu-backdrop");
 const sceneMenu = requireElement<HTMLElement>("#scene-menu");
+const resumeButton = requireElement<HTMLButtonElement>("#resume-button");
 const versionLink = requireElement<HTMLButtonElement>("#version-link");
 const changelogBackdrop = requireElement<HTMLDivElement>("#changelog-backdrop");
 const changelogDialog = requireElement<HTMLElement>("#changelog-dialog");
@@ -493,6 +494,9 @@ function wireControls(): void {
   menuToggle.addEventListener("click", () => {
     setMenuVisible(!menuVisible);
   });
+  resumeButton.addEventListener("click", () => {
+    setMenuVisible(false);
+  });
   sceneMenuBackdrop.addEventListener("pointerdown", (event) => {
     if (event.target === sceneMenuBackdrop) setMenuVisible(false);
   });
@@ -640,14 +644,16 @@ function setMenuVisible(visible: boolean, shouldFocus = true): void {
   sceneMenuBackdrop.hidden = !visible;
   document.body.classList.toggle("menu-open", visible);
   menuToggle.setAttribute("aria-expanded", String(visible));
-  menuToggle.setAttribute("aria-label", visible ? "Close scene menu" : "Open scene menu");
+  menuToggle.setAttribute("aria-label", visible ? "Close pause menu" : "Open pause menu");
 
   if (visible) {
     releaseTouchControls();
     if (document.pointerLockElement === renderer.domElement) {
       document.exitPointerLock();
     }
-    if (shouldFocus) sceneMenu.focus({ preventScroll: true });
+    // A pause menu should put the safest action under focus first. Resume is
+    // also the best keyboard target for users who opened the menu accidentally.
+    if (shouldFocus) resumeButton.focus({ preventScroll: true });
   }
 
   updateMobileControlsVisibility();

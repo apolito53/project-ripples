@@ -26,7 +26,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 
 ## Fast Lookup
 
-- HTML shell, scene menu, changelog dialog, and tuning controls: `index.html`
+- HTML shell, pause menu, changelog dialog, and tuning controls: `index.html`
 - Visual styling and overlay layout: `src/styles.css`
 - App bootstrap, Three.js scene, render loop, quality wiring, and postprocessing:
   `src/main.ts`
@@ -85,8 +85,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
    point lights.
 10. The HUD reports FPS, instance counts, base propagation speed, voxel size,
     arena radius, live Echo count, active source count, and newest ring radius.
-11. Esc or the hamburger button opens the scene menu, which owns tuning controls
-    and exposes the current version as a changelog button.
+11. Esc or the hamburger button opens the centered pause menu, which owns
+    tuning controls, a Resume action, and a version changelog button.
 12. The scene renders through bloom when bloom strength is above zero.
 
 ## Common Change Targets
@@ -108,7 +108,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Change propagation-speed semantics or medium parameters: `src/waveMedium.ts`,
   `src/labSettings.ts`, and `PROPAGATION_NOTES.md`
 - Change movement/camera feel or the circular player boundary: `src/controls.ts`
-- Change scene-menu layout, changelog behavior, or tuning labels:
+- Change pause-menu layout, changelog behavior, or tuning labels:
   `index.html`, `src/styles.css`, and `src/main.ts`
 
 ## Sharp Edges

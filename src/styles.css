@@ -95,26 +95,29 @@ canvas {
 
 .scene-menu-backdrop {
   z-index: 5;
-  background: linear-gradient(90deg, rgba(2, 4, 9, 0.04), rgba(2, 4, 9, 0.28));
+  display: grid;
+  place-items: center;
+  padding: max(18px, calc(env(safe-area-inset-top) + 18px)) max(18px, calc(env(safe-area-inset-right) + 18px)) max(18px, calc(env(safe-area-inset-bottom) + 18px)) max(18px, calc(env(safe-area-inset-left) + 18px));
+  background:
+    radial-gradient(circle at 50% 42%, rgba(117, 255, 215, 0.1), transparent 32%),
+    rgba(2, 4, 9, 0.64);
+  backdrop-filter: blur(7px);
 }
 
 .scene-menu {
-  position: absolute;
-  top: max(72px, calc(env(safe-area-inset-top) + 72px));
-  right: max(18px, calc(env(safe-area-inset-right) + 18px));
   display: grid;
-  width: min(372px, calc(100vw - 36px));
-  max-height: calc(var(--app-height, 100dvh) - max(94px, calc(env(safe-area-inset-top) + 94px)) - max(18px, calc(env(safe-area-inset-bottom) + 18px)));
-  gap: 14px;
-  border: 1px solid rgba(142, 218, 255, 0.2);
+  width: min(680px, 100%);
+  max-height: min(720px, calc(var(--app-height, 100dvh) - max(36px, calc(env(safe-area-inset-top) + env(safe-area-inset-bottom) + 36px))));
+  gap: 16px;
+  border: 1px solid rgba(142, 218, 255, 0.24);
   border-radius: 8px;
   background:
-    linear-gradient(180deg, rgba(8, 18, 29, 0.84), rgba(3, 8, 15, 0.72));
+    linear-gradient(180deg, rgba(9, 20, 32, 0.94), rgba(3, 8, 15, 0.88));
   box-shadow:
-    0 22px 80px rgba(0, 0, 0, 0.44),
+    0 30px 110px rgba(0, 0, 0, 0.68),
+    0 0 70px rgba(117, 255, 215, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(14px);
-  padding: 14px;
+  padding: 18px;
   overflow: auto;
   overscroll-behavior: contain;
   color: rgba(237, 247, 255, 0.92);
@@ -139,7 +142,7 @@ canvas {
 .changelog-dialog__header h2 {
   margin: 0;
   color: rgba(237, 247, 255, 0.88);
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 950;
   letter-spacing: 0;
 }
@@ -168,9 +171,40 @@ canvas {
   background: rgba(8, 34, 43, 0.86);
 }
 
+.pause-actions {
+  display: grid;
+  grid-template-columns: minmax(160px, 240px);
+  justify-content: center;
+}
+
+.resume-button {
+  min-height: 42px;
+  border: 1px solid rgba(122, 245, 214, 0.5);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(122, 245, 214, 0.24), rgba(24, 87, 92, 0.42));
+  color: #eafff9;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 950;
+  cursor: pointer;
+  box-shadow:
+    0 0 28px rgba(117, 255, 215, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.resume-button:hover,
+.resume-button:focus-visible {
+  border-color: rgba(158, 255, 231, 0.78);
+  background:
+    linear-gradient(180deg, rgba(122, 245, 214, 0.34), rgba(24, 87, 92, 0.54));
+}
+
 .scene-controls {
   display: grid;
   gap: 10px;
+  border-top: 1px solid rgba(142, 218, 255, 0.14);
+  padding-top: 14px;
 }
 
 .control-row {
@@ -231,12 +265,19 @@ input[type="range"] {
     left: 12px;
   }
 
-  .scene-menu {
-    top: 64px;
-    right: 12px;
-    width: min(360px, calc(100vw - 24px));
-    max-height: calc(var(--app-height, 100dvh) - 82px - max(12px, calc(env(safe-area-inset-bottom) + 12px)));
+  .scene-menu-backdrop {
     padding: 12px;
+  }
+
+  .scene-menu {
+    width: 100%;
+    max-height: calc(var(--app-height, 100dvh) - 24px);
+    padding: 12px;
+  }
+
+  .scene-menu__header h2,
+  .changelog-dialog__header h2 {
+    font-size: 16px;
   }
 
   .control-row {
@@ -391,9 +432,7 @@ input[type="range"] {
   }
 
   .scene-menu {
-    top: max(54px, calc(env(safe-area-inset-top) + 54px));
-    right: max(62px, calc(env(safe-area-inset-right) + 62px));
-    max-height: calc(var(--app-height, 100dvh) - max(66px, calc(env(safe-area-inset-top) + 66px)) - max(12px, calc(env(safe-area-inset-bottom) + 12px)));
+    max-height: calc(var(--app-height, 100dvh) - max(16px, calc(env(safe-area-inset-top) + env(safe-area-inset-bottom) + 16px)));
     overflow: auto;
     overscroll-behavior: contain;
     padding: 10px;

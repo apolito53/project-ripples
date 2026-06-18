@@ -11,7 +11,7 @@
   </head>
   <body>
     <main id="app">
-      <button id="menu-toggle" class="menu-toggle" type="button" aria-controls="scene-menu" aria-expanded="false" aria-label="Open scene menu">
+      <button id="menu-toggle" class="menu-toggle" type="button" aria-controls="scene-menu" aria-expanded="false" aria-label="Open pause menu">
         <span></span>
         <span></span>
         <span></span>
@@ -27,11 +27,15 @@
       </section>
 
       <div id="scene-menu-backdrop" class="scene-menu-backdrop" hidden>
-        <section id="scene-menu" class="scene-menu" aria-label="Scene menu" role="dialog" aria-modal="true" tabindex="-1">
+        <section id="scene-menu" class="scene-menu" aria-label="Pause menu" role="dialog" aria-modal="true" tabindex="-1">
           <header class="scene-menu__header">
-            <h2>Scene</h2>
+            <h2>Paused</h2>
             <button id="version-link" class="version-link" type="button" aria-haspopup="dialog">v0.2.0-ALPHA</button>
           </header>
+
+          <div class="pause-actions" aria-label="Pause actions">
+            <button id="resume-button" class="resume-button" type="button">Resume</button>
+          </div>
 
           <section id="panel" class="scene-controls" aria-label="Tuning controls">
             <label class="control-row">

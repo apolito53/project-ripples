@@ -35,8 +35,8 @@ Open `http://127.0.0.1:5183`.
 - `+` / `-` zoom in and out; `0` resets the camera distance.
 - `Space` drops a pulse in front of the avatar.
 - `Shift` increases movement speed.
-- `Esc` releases pointer lock and opens/closes the scene menu.
-- The scene menu's version pill opens the in-app changelog.
+- `Esc` releases pointer lock and opens/closes the pause menu.
+- The pause menu's version pill opens the in-app changelog.
 
 The avatar is clamped inside the circular arena edge.
 The arena edge is rendered as a smooth glowing gradient barrier so the playable
@@ -64,7 +64,7 @@ outward after the avatar moves on. Dense movement wake stamps use a shorter
 per-source lifetime than manual pulses so they can trail smoothly without
 forcing older rings to flicker through the shader's fixed upload budget.
 
-The Esc/hamburger scene menu changes quality, hex size, arena radius, ripple
+The Esc/hamburger pause menu changes quality, hex size, arena radius, ripple
 height/radius, Depth / Speed, particle density, and bloom strength while the
 scene is running. Hex size treats the current cell scale as `1m`, ranges from
 `25cm` to `2m`, and measures the regular hexagon's widest point-to-point
