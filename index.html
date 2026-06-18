@@ -53,7 +53,7 @@
             <label class="control-row">
               <span>Arena Radius</span>
               <div class="range-with-value">
-                <input id="arena-radius-slider" type="range" min="200" max="400" step="5" value="200" />
+                <input id="arena-radius-slider" type="range" min="100" max="400" step="5" value="200" />
                 <output id="arena-radius-value" class="control-value" for="arena-radius-slider">200 m</output>
               </div>
             </label>
@@ -74,11 +74,17 @@
             </label>
             <label class="control-row">
               <span>Particles</span>
-              <input id="particle-slider" type="range" min="0" max="1" step="0.01" value="0.62" />
+              <div class="slider-with-toggle">
+                <input id="particle-slider" type="range" min="0" max="1" step="0.01" value="0.62" />
+                <button id="particle-toggle" class="effect-toggle" type="button" aria-pressed="true">On</button>
+              </div>
             </label>
             <label class="control-row">
               <span>Bloom</span>
-              <input id="bloom-slider" type="range" min="0" max="0.38" step="0.01" value="0.14" />
+              <div class="slider-with-toggle">
+                <input id="bloom-slider" type="range" min="0" max="0.38" step="0.01" value="0.14" />
+                <button id="bloom-toggle" class="effect-toggle" type="button" aria-pressed="true">On</button>
+              </div>
             </label>
           </section>
         </section>

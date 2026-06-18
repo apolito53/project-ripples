@@ -23,7 +23,9 @@ export type LabSettings = {
   arenaRadiusMeters: number;
   waveMedium: WaveMediumSettings;
   particleDensity: number;
+  particlesEnabled: boolean;
   bloomStrength: number;
+  bloomEnabled: boolean;
 };
 
 export const DEFAULT_SETTINGS: LabSettings = {
@@ -31,10 +33,12 @@ export const DEFAULT_SETTINGS: LabSettings = {
   rippleHeight: 1.25,
   rippleRadius: 9,
   voxelSizeMeters: DEFAULT_VOXEL_SIZE_METERS,
-  arenaRadiusMeters: ARENA_RADIUS_MIN_METERS,
+  arenaRadiusMeters: DEFAULT_ARENA_RADIUS_METERS,
   waveMedium: cloneDefaultWaveMedium(),
   particleDensity: 0.62,
-  bloomStrength: QUALITY_PRESETS.pretty.bloomStrength
+  particlesEnabled: true,
+  bloomStrength: QUALITY_PRESETS.pretty.bloomStrength,
+  bloomEnabled: true
 };
 
 export function getQualityPreset(settings: LabSettings): QualityPreset {

@@ -394,7 +394,7 @@ export class RippleField {
     shader.uniforms.uBasePropagationSpeed.value = basePropagationSpeed;
     shader.uniforms.uMediumDamping.value = settings.waveMedium.damping;
     shader.uniforms.uMediumDispersion.value = settings.waveMedium.dispersion;
-    shader.uniforms.uBloomMood.value = Math.max(settings.bloomStrength, preset.bloomStrength);
+    shader.uniforms.uBloomMood.value = settings.bloomEnabled ? Math.max(settings.bloomStrength, preset.bloomStrength) : 0;
     shader.uniforms.uRippleCount.value = activeCount;
   }
 
