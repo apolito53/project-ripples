@@ -6,6 +6,7 @@ export type PlayerRigOptions = {
   readonly sampleHeight: (x: number, z: number) => number;
   readonly getBoundaryRadius: () => number;
   readonly onPulse: (position: THREE.Vector3) => void;
+  readonly isInputEnabled?: () => boolean;
 };
 
 const WALK_SPEED = 8.4;
@@ -40,6 +41,7 @@ export class PlayerRig {
   private readonly sampleHeight: (x: number, z: number) => number;
   private readonly getBoundaryRadius: () => number;
   private readonly onPulse: (position: THREE.Vector3) => void;
+  private readonly isInputEnabled: () => boolean;
   private readonly desiredCameraPosition = new THREE.Vector3();
   private readonly movementIntent = new THREE.Vector3();
   private readonly lookTarget = new THREE.Vector3();
@@ -57,6 +59,7 @@ export class PlayerRig {
     this.sampleHeight = options.sampleHeight;
     this.getBoundaryRadius = options.getBoundaryRadius;
     this.onPulse = options.onPulse;
+    this.isInputEnabled = options.isInputEnabled ?? (() => true);
 
     window.addEventListener("keydown", this.handleKeyDown);
     window.addEventListener("keyup", this.handleKeyUp);
@@ -74,7 +77,17 @@ export class PlayerRig {
   }
 
   update(delta: number): void {
-    this.applyMobileLook(delta);
+    const inputEnabled = this.isInputEnabled();
+    if (!inputEnabled) {
+      // UI overlays should feel modal. Clearing held inputs every frame avoids
+      // the classic browser-game bug where opening a menu preserves W/A/S/D or
+      // a touch-stick vector until the user taps back into the scene.
+      this.keys.clear();
+      this.mobileMoveIntent.set(0, 0);
+      this.mobileLookIntent.set(0, 0);
+    }
+
+    if (inputEnabled) this.applyMobileLook(delta);
 
     const forward = this.getPlanarForward();
     const right = new THREE.Vector3(forward.z, 0, -forward.x);
@@ -130,6 +143,7 @@ export class PlayerRig {
   }
 
   triggerPulse(): void {
+    if (!this.isInputEnabled()) return;
     this.tryCreatePulse();
   }
 
@@ -212,6 +226,7 @@ export class PlayerRig {
 
   private handleKeyDown = (event: KeyboardEvent): void => {
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
+    if (!this.isInputEnabled()) return;
     if (event.code === "Equal" || event.code === "NumpadAdd") {
       event.preventDefault();
       this.adjustZoom(-CAMERA_ZOOM_STEP);
@@ -243,6 +258,7 @@ export class PlayerRig {
   };
 
   private handlePointerDown = (event: PointerEvent): void => {
+    if (!this.isInputEnabled()) return;
     if (event.button !== 0) return;
     if (event.target !== this.canvas) return;
     void this.canvas.requestPointerLock();
@@ -250,6 +266,7 @@ export class PlayerRig {
   };
 
   private handlePointerMove = (event: PointerEvent): void => {
+    if (!this.isInputEnabled()) return;
     if (document.pointerLockElement !== this.canvas) return;
     this.yaw -= event.movementX * LOOK_SENSITIVITY_X;
     this.pitch = THREE.MathUtils.clamp(
@@ -260,6 +277,7 @@ export class PlayerRig {
   };
 
   private handleWheel = (event: WheelEvent): void => {
+    if (!this.isInputEnabled()) return;
     event.preventDefault();
     this.adjustZoom(event.deltaY * CAMERA_WHEEL_ZOOM_SPEED);
   };

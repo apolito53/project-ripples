@@ -11,7 +11,7 @@
   </head>
   <body>
     <main id="app">
-      <button id="menu-toggle" class="menu-toggle" type="button" aria-controls="hud panel" aria-expanded="true" aria-label="Hide menu">
+      <button id="menu-toggle" class="menu-toggle" type="button" aria-controls="scene-menu" aria-expanded="false" aria-label="Open scene menu">
         <span></span>
         <span></span>
         <span></span>
@@ -26,54 +26,73 @@
         <div id="medium-line" class="medium-line">medium pending</div>
       </section>
 
-      <section id="panel" aria-label="Tuning controls">
-        <label class="control-row">
-          <span>Quality</span>
-          <select id="quality-select">
-            <option value="clean">Clean</option>
-            <option value="pretty" selected>Pretty</option>
-            <option value="showoff">Showoff</option>
-            <option value="meltdown">Meltdown</option>
-          </select>
-        </label>
-        <label class="control-row">
-          <span>Hex Size</span>
-          <div class="range-with-value">
-            <input id="voxel-size-slider" type="range" min="0.25" max="2" step="0.05" value="1" />
-            <output id="voxel-size-value" class="control-value" for="voxel-size-slider">1.00 m</output>
-          </div>
-        </label>
-        <label class="control-row">
-          <span>Arena Radius</span>
-          <div class="range-with-value">
-            <input id="arena-radius-slider" type="range" min="200" max="400" step="5" value="200" />
-            <output id="arena-radius-value" class="control-value" for="arena-radius-slider">200 m</output>
-          </div>
-        </label>
-        <label class="control-row">
-          <span>Ripple Height</span>
-          <input id="height-slider" type="range" min="0.2" max="3.2" step="0.05" value="1.25" />
-        </label>
-        <label class="control-row">
-          <span>Ripple Radius</span>
-          <input id="radius-slider" type="range" min="4" max="18" step="0.5" value="9" />
-        </label>
-        <label class="control-row">
-          <span>Depth / Speed</span>
-          <div class="range-with-value">
-            <input id="depth-slider" type="range" min="1" max="20" step="0.25" value="8.25" />
-            <output id="depth-speed-value" class="control-value" for="depth-slider">9.0 m/s</output>
-          </div>
-        </label>
-        <label class="control-row">
-          <span>Particles</span>
-          <input id="particle-slider" type="range" min="0" max="1" step="0.01" value="0.62" />
-        </label>
-        <label class="control-row">
-          <span>Bloom</span>
-          <input id="bloom-slider" type="range" min="0" max="0.38" step="0.01" value="0.14" />
-        </label>
-      </section>
+      <div id="scene-menu-backdrop" class="scene-menu-backdrop" hidden>
+        <section id="scene-menu" class="scene-menu" aria-label="Scene menu" role="dialog" aria-modal="true" tabindex="-1">
+          <header class="scene-menu__header">
+            <h2>Scene</h2>
+            <button id="version-link" class="version-link" type="button" aria-haspopup="dialog">v0.2.0-ALPHA</button>
+          </header>
+
+          <section id="panel" class="scene-controls" aria-label="Tuning controls">
+            <label class="control-row">
+              <span>Quality</span>
+              <select id="quality-select">
+                <option value="clean">Clean</option>
+                <option value="pretty" selected>Pretty</option>
+                <option value="showoff">Showoff</option>
+                <option value="meltdown">Meltdown</option>
+              </select>
+            </label>
+            <label class="control-row">
+              <span>Hex Size</span>
+              <div class="range-with-value">
+                <input id="voxel-size-slider" type="range" min="0.25" max="2" step="0.05" value="1" />
+                <output id="voxel-size-value" class="control-value" for="voxel-size-slider">1.00 m</output>
+              </div>
+            </label>
+            <label class="control-row">
+              <span>Arena Radius</span>
+              <div class="range-with-value">
+                <input id="arena-radius-slider" type="range" min="200" max="400" step="5" value="200" />
+                <output id="arena-radius-value" class="control-value" for="arena-radius-slider">200 m</output>
+              </div>
+            </label>
+            <label class="control-row">
+              <span>Ripple Height</span>
+              <input id="height-slider" type="range" min="0.2" max="3.2" step="0.05" value="1.25" />
+            </label>
+            <label class="control-row">
+              <span>Ripple Radius</span>
+              <input id="radius-slider" type="range" min="4" max="18" step="0.5" value="9" />
+            </label>
+            <label class="control-row">
+              <span>Depth / Speed</span>
+              <div class="range-with-value">
+                <input id="depth-slider" type="range" min="1" max="20" step="0.25" value="8.25" />
+                <output id="depth-speed-value" class="control-value" for="depth-slider">9.0 m/s</output>
+              </div>
+            </label>
+            <label class="control-row">
+              <span>Particles</span>
+              <input id="particle-slider" type="range" min="0" max="1" step="0.01" value="0.62" />
+            </label>
+            <label class="control-row">
+              <span>Bloom</span>
+              <input id="bloom-slider" type="range" min="0" max="0.38" step="0.01" value="0.14" />
+            </label>
+          </section>
+        </section>
+      </div>
+
+      <div id="changelog-backdrop" class="changelog-backdrop" hidden>
+        <section id="changelog-dialog" class="changelog-dialog" aria-labelledby="changelog-title" role="dialog" aria-modal="true" tabindex="-1">
+          <header class="changelog-dialog__header">
+            <h2 id="changelog-title">Changelog</h2>
+            <button id="changelog-close" class="changelog-close" type="button" aria-label="Close changelog">&times;</button>
+          </header>
+          <pre id="changelog-content" class="changelog-content"></pre>
+        </section>
+      </div>
 
       <div id="mobile-controls" class="mobile-controls" aria-label="Mobile touch controls" hidden>
         <div class="touch-stick touch-stick--move" data-stick="move" aria-label="Move joystick">

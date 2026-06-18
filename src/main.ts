@@ -23,6 +23,8 @@ import { RippleSourceStore, type RippleSourceOptions } from "./rippleSources";
 import "./styles.css";
 import { sampleFieldHeight } from "./terrain";
 import { getBasePropagationSpeedMetersPerSecond } from "./waveMedium";
+import changelogMarkdown from "../CHANGELOG.md?raw";
+import packageMetadata from "../package.json";
 
 const app = requireElement<HTMLElement>("#app");
 const statsLine = requireElement<HTMLElement>("#stats-line");
@@ -40,8 +42,16 @@ const depthSpeedValue = requireElement<HTMLOutputElement>("#depth-speed-value");
 const particleSlider = requireElement<HTMLInputElement>("#particle-slider");
 const bloomSlider = requireElement<HTMLInputElement>("#bloom-slider");
 const menuToggle = requireElement<HTMLButtonElement>("#menu-toggle");
+const sceneMenuBackdrop = requireElement<HTMLDivElement>("#scene-menu-backdrop");
+const sceneMenu = requireElement<HTMLElement>("#scene-menu");
+const versionLink = requireElement<HTMLButtonElement>("#version-link");
+const changelogBackdrop = requireElement<HTMLDivElement>("#changelog-backdrop");
+const changelogDialog = requireElement<HTMLElement>("#changelog-dialog");
+const changelogClose = requireElement<HTMLButtonElement>("#changelog-close");
+const changelogContent = requireElement<HTMLPreElement>("#changelog-content");
 const mobileControls = requireElement<HTMLDivElement>("#mobile-controls");
 const pulseButton = requireElement<HTMLButtonElement>("#pulse-button");
+const APP_VERSION = `v${packageMetadata.version}`;
 const PLAYER_BOUNDARY_PADDING = 1.1;
 const ECHO_ZONE_MAX_ACTIVE = 5;
 const ECHO_ZONE_INITIAL_COUNT = 3;
@@ -141,7 +151,9 @@ const movementShoulder = new THREE.Vector3();
 const movementPerpendicular = new THREE.Vector3();
 const mobileQuery = window.matchMedia("(pointer: coarse), (hover: none)");
 const activeTouchSticks = new Map<number, TouchStickState>();
-let menuVisible = true;
+let menuVisible = false;
+let changelogVisible = false;
+let pointerLockWasActive = false;
 
 type TouchStickKind = "move" | "look";
 
@@ -177,7 +189,8 @@ const player = new PlayerRig({
   camera,
   sampleHeight: sampleFieldHeight,
   getBoundaryRadius: () => Math.max(0, preset.fieldRadius - PLAYER_BOUNDARY_PADDING),
-  onPulse: (position) => spawnPulse(position, 0.45)
+  onPulse: (position) => spawnPulse(position, 0.45),
+  isInputEnabled: areSceneInputsEnabled
 });
 
 createLighting();
@@ -462,9 +475,27 @@ function triggerEchoZone(echo: TriggeredEchoZone, time: number): void {
 }
 
 function wireControls(): void {
+  versionLink.textContent = APP_VERSION;
+  changelogContent.textContent = changelogMarkdown.trim();
+  setMenuVisible(false, false);
+
   menuToggle.addEventListener("click", () => {
     setMenuVisible(!menuVisible);
   });
+  sceneMenuBackdrop.addEventListener("pointerdown", (event) => {
+    if (event.target === sceneMenuBackdrop) setMenuVisible(false);
+  });
+  versionLink.addEventListener("click", () => {
+    setChangelogVisible(true);
+  });
+  changelogClose.addEventListener("click", () => {
+    setChangelogVisible(false);
+  });
+  changelogBackdrop.addEventListener("pointerdown", (event) => {
+    if (event.target === changelogBackdrop) setChangelogVisible(false);
+  });
+  window.addEventListener("keydown", handleGlobalKeyDown, { capture: true });
+  document.addEventListener("pointerlockchange", handlePointerLockChange);
 
   mobileQuery.addEventListener("change", updateMobileControlsVisibility);
   updateMobileControlsVisibility();
@@ -472,6 +503,7 @@ function wireControls(): void {
 
   pulseButton.addEventListener("pointerdown", (event) => {
     event.preventDefault();
+    if (!areSceneInputsEnabled()) return;
     player.triggerPulse();
   });
 
@@ -532,15 +564,75 @@ function syncControlValues(): void {
   bloomSlider.value = String(settings.bloomStrength);
 }
 
-function setMenuVisible(visible: boolean): void {
+function areSceneInputsEnabled(): boolean {
+  return !menuVisible && !changelogVisible;
+}
+
+function handleGlobalKeyDown(event: KeyboardEvent): void {
+  if (event.code !== "Escape") return;
+
+  // Esc is the one global UI key for the lab. Capture it before the movement
+  // rig sees the event so opening the menu cannot leave a phantom input behind.
+  event.preventDefault();
+  event.stopImmediatePropagation();
+
+  if (changelogVisible) {
+    setChangelogVisible(false);
+    return;
+  }
+
+  setMenuVisible(!menuVisible);
+}
+
+function handlePointerLockChange(): void {
+  const pointerIsLockedToScene = document.pointerLockElement === renderer.domElement;
+  if (!pointerIsLockedToScene && pointerLockWasActive && areSceneInputsEnabled()) {
+    setMenuVisible(true);
+  }
+  pointerLockWasActive = pointerIsLockedToScene;
+}
+
+function setMenuVisible(visible: boolean, shouldFocus = true): void {
+  if (!visible && changelogVisible) {
+    setChangelogVisible(false, false);
+  }
+
   menuVisible = visible;
-  document.body.classList.toggle("menu-hidden", !visible);
+  sceneMenuBackdrop.hidden = !visible;
+  document.body.classList.toggle("menu-open", visible);
   menuToggle.setAttribute("aria-expanded", String(visible));
-  menuToggle.setAttribute("aria-label", visible ? "Hide menu" : "Show menu");
+  menuToggle.setAttribute("aria-label", visible ? "Close scene menu" : "Open scene menu");
+
+  if (visible) {
+    releaseTouchControls();
+    if (document.pointerLockElement === renderer.domElement) {
+      document.exitPointerLock();
+    }
+    if (shouldFocus) sceneMenu.focus({ preventScroll: true });
+  }
+
+  updateMobileControlsVisibility();
+}
+
+function setChangelogVisible(visible: boolean, shouldFocus = true): void {
+  if (visible && !menuVisible) {
+    setMenuVisible(true, false);
+  }
+
+  changelogVisible = visible;
+  changelogBackdrop.hidden = !visible;
+  if (visible) {
+    releaseTouchControls();
+    if (shouldFocus) changelogDialog.focus({ preventScroll: true });
+  } else if (shouldFocus && menuVisible) {
+    sceneMenu.focus({ preventScroll: true });
+  }
+
+  updateMobileControlsVisibility();
 }
 
 function updateMobileControlsVisibility(): void {
-  mobileControls.hidden = !mobileQuery.matches;
+  mobileControls.hidden = !mobileQuery.matches || !areSceneInputsEnabled();
 }
 
 function wireMobileControls(): void {
@@ -556,6 +648,7 @@ function wireMobileControls(): void {
 
 function beginTouchStick(event: PointerEvent, element: HTMLElement, knob: HTMLElement, kind: TouchStickKind): void {
   event.preventDefault();
+  if (!areSceneInputsEnabled()) return;
   element.setPointerCapture(event.pointerId);
   const rect = element.getBoundingClientRect();
   const state: TouchStickState = {
@@ -600,6 +693,15 @@ function applyTouchStick(state: TouchStickState, clientX: number, clientY: numbe
   state.knob.style.transform = `translate3d(calc(-50% + ${x}px), calc(-50% + ${y}px), 0)`;
   if (state.kind === "move") player.setMobileMoveIntent(x / maxDistance, -y / maxDistance);
   if (state.kind === "look") player.setMobileLookIntent(x / maxDistance, y / maxDistance);
+}
+
+function releaseTouchControls(): void {
+  for (const state of activeTouchSticks.values()) {
+    state.knob.style.transform = "translate3d(-50%, -50%, 0)";
+  }
+  activeTouchSticks.clear();
+  player.setMobileMoveIntent(0, 0);
+  player.setMobileLookIntent(0, 0);
 }
 
 function requireChild<T extends HTMLElement>(parent: HTMLElement, selector: string): T {

@@ -4,6 +4,8 @@
 
 ### Changed
 
+- Moved scene tuning controls into an Esc/hamburger menu and added an in-app
+  changelog dialog opened from the menu's version button.
 - Rotated the hex prism geometry to match the staggered lattice and calibrated
   Meltdown's visible hex footprint into an interlocked honeycomb without raising
   the previous stress-test instance count.

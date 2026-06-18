@@ -26,12 +26,12 @@ Purpose: compact map for the standalone ripple-field visual lab.
 
 ## Fast Lookup
 
-- HTML shell and tuning panel controls: `index.html`
+- HTML shell, scene menu, changelog dialog, and tuning controls: `index.html`
 - Visual styling and overlay layout: `src/styles.css`
 - App bootstrap, Three.js scene, render loop, quality wiring, and postprocessing:
   `src/main.ts`
-- Avatar movement, circular arena clamp, pointer lock, and camera follow behavior:
-  `src/controls.ts`
+- Avatar movement, circular arena clamp, scene-input gating, pointer lock, and
+  camera follow behavior: `src/controls.ts`
 - Circular shader-displaced instanced hex field and directional movement
   wake deformation, including Meltdown-calibrated honeycomb orientation, lit
   hex caps, animated-height cell tinting, and bounded crest-specific glow:
@@ -84,8 +84,10 @@ Purpose: compact map for the standalone ripple-field visual lab.
 9. `PulseLightRig` assigns recent pulses and collected Echo detonations to
    point lights.
 10. The HUD reports FPS, instance counts, base propagation speed, voxel size,
-   arena radius, live Echo count, active source count, and newest ring radius.
-11. The scene renders through bloom when bloom strength is above zero.
+    arena radius, live Echo count, active source count, and newest ring radius.
+11. Esc or the hamburger button opens the scene menu, which owns tuning controls
+    and exposes the current version as a changelog button.
+12. The scene renders through bloom when bloom strength is above zero.
 
 ## Common Change Targets
 
@@ -106,7 +108,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Change propagation-speed semantics or medium parameters: `src/waveMedium.ts`,
   `src/labSettings.ts`, and `PROPAGATION_NOTES.md`
 - Change movement/camera feel or the circular player boundary: `src/controls.ts`
-- Change panel layout or labels: `index.html` and `src/styles.css`
+- Change scene-menu layout, changelog behavior, or tuning labels:
+  `index.html`, `src/styles.css`, and `src/main.ts`
 
 ## Sharp Edges
 
