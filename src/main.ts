@@ -106,6 +106,8 @@ const AVATAR_ORBIT_TRAIL_SECONDS = 0.54;
 // A low visual floor remains while the playable surface is still planar. The
 // upcoming sphere pass can delete or replace this without touching RippleField.
 const STAGE_FLOOR_Y = -3.2;
+const KEY_LIGHT_SOURCE_COLOR = 0xbcecff;
+const RIM_LIGHT_SOURCE_COLOR = 0xff7de7;
 
 type AvatarOrbitTrails = {
   readonly points: THREE.Points<THREE.BufferGeometry, THREE.ShaderMaterial>;
@@ -122,6 +124,12 @@ type AvatarOrbitTrails = {
   readonly speeds: Float32Array;
   readonly phases: Float32Array;
   readonly tilts: Float32Array;
+};
+
+type VisibleDirectionalLightSource = {
+  readonly object: THREE.Group;
+  readonly horizontalDirection: THREE.Vector3;
+  readonly heightScale: number;
 };
 
 const renderer = new THREE.WebGLRenderer({
@@ -156,6 +164,7 @@ const lastMovementRipplePosition = new THREE.Vector3(Infinity, 0, Infinity);
 const movementDirection = new THREE.Vector3();
 const movementShoulder = new THREE.Vector3();
 const movementPerpendicular = new THREE.Vector3();
+const visibleDirectionalLightSources: VisibleDirectionalLightSource[] = [];
 const mobileQuery = window.matchMedia("(pointer: coarse), (hover: none)");
 const activeTouchSticks = new Map<number, TouchStickState>();
 let menuVisible = false;
@@ -889,11 +898,111 @@ function createLighting(): void {
   key.name = "Soft cyan key light";
   key.position.set(-24, 38, 18);
   scene.add(key);
+  const keyMarker = createVisibleDirectionalLightSource(
+    "Visible cyan key light source",
+    key.position,
+    KEY_LIGHT_SOURCE_COLOR,
+    1.25,
+    0.26
+  );
+  visibleDirectionalLightSources.push(keyMarker);
+  scene.add(keyMarker.object);
 
   const rim = new THREE.DirectionalLight(0xff7de7, 1.1);
   rim.name = "Magenta rim light";
   rim.position.set(30, 18, -24);
   scene.add(rim);
+  const rimMarker = createVisibleDirectionalLightSource(
+    "Visible magenta rim light source",
+    rim.position,
+    RIM_LIGHT_SOURCE_COLOR,
+    0.92,
+    0.2
+  );
+  visibleDirectionalLightSources.push(rimMarker);
+  scene.add(rimMarker.object);
+}
+
+function createVisibleDirectionalLightSource(
+  name: string,
+  position: THREE.Vector3,
+  colorHex: number,
+  scale: number,
+  heightScale: number
+): VisibleDirectionalLightSource {
+  const color = new THREE.Color(colorHex);
+  const object = new THREE.Group();
+  object.name = name;
+
+  const horizontalDirection = new THREE.Vector3(position.x, 0, position.z);
+  if (horizontalDirection.lengthSq() <= 0.0001) horizontalDirection.set(1, 0, 0);
+  horizontalDirection.normalize();
+
+  // Directional lights are abstract in Three.js, which made the arena shadows
+  // feel like they came from nowhere. These markers are visible art only:
+  // no real light, no shadows, just a readable source in the sky. The actual
+  // position gets projected onto the current arena horizon below so the marker
+  // stays findable when the arena-radius slider changes.
+  const core = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.95 * scale, 2),
+    new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.96,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      toneMapped: false
+    })
+  );
+  core.name = `${name} bright core`;
+  core.renderOrder = 4;
+  object.add(core);
+
+  const halo = new THREE.Mesh(
+    new THREE.SphereGeometry(3.15 * scale, 32, 16),
+    new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.16,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      toneMapped: false
+    })
+  );
+  halo.name = `${name} soft halo`;
+  halo.renderOrder = 3;
+  object.add(halo);
+
+  const glint = new THREE.Mesh(
+    new THREE.OctahedronGeometry(1.65 * scale, 0),
+    new THREE.MeshBasicMaterial({
+      color: color.clone().lerp(new THREE.Color(0xffffff), 0.34),
+      transparent: true,
+      opacity: 0.34,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      wireframe: true,
+      toneMapped: false
+    })
+  );
+  glint.name = `${name} faceted glint`;
+  glint.rotation.set(0.35, 0.2, 0.7);
+  glint.renderOrder = 5;
+  object.add(glint);
+
+  return { object, horizontalDirection, heightScale };
+}
+
+function updateVisibleDirectionalLightSources(nextPreset: QualityPreset): void {
+  const horizonRadius = nextPreset.fieldRadius * 0.66;
+
+  for (const source of visibleDirectionalLightSources) {
+    source.object.position.set(
+      source.horizontalDirection.x * horizonRadius,
+      THREE.MathUtils.clamp(nextPreset.fieldRadius * source.heightScale, 13, 30),
+      source.horizontalDirection.z * horizonRadius
+    );
+  }
 }
 
 function createStageFloor(): THREE.Mesh {
@@ -920,6 +1029,7 @@ function updateStageFloor(nextPreset: QualityPreset): void {
   const floorRadius = nextPreset.fieldRadius + nextPreset.tileSpacing * 0.5;
   stageFloor.scale.set(floorRadius, floorRadius, 1);
   arenaBarrier.setRadius(floorRadius);
+  updateVisibleDirectionalLightSources(nextPreset);
 }
 
 function createAvatar(): {
