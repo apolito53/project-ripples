@@ -254,28 +254,19 @@ export class RippleField {
             float damping = exp(-age * uMediumDamping * max(0.05, metadata.z)) *
               exp(-distanceToCell * uMediumDamping * max(0.05, metadata.z) * 0.018);
             float directionalSource = step(-10.0, metadata.w);
+            float directionMask = 1.0;
 
             if (directionalSource > 0.5 && distanceToCell > 0.001) {
               vec2 direction = vec2(cos(metadata.w), sin(metadata.w));
-              vec2 relative = cellPosition - origin;
-              float alongWake = dot(relative, -direction);
-              float lateral = abs(relative.x * direction.y - relative.y * direction.x);
-              float wakeLength = max(width * 1.6, front * 0.58 + width * 2.4);
-              float behindMask = smoothstep(0.0, width * 0.72, alongWake) *
-                (1.0 - smoothstep(wakeLength, wakeLength + width * 1.8, alongWake));
-              float armSlope = 0.34 + uMediumDispersion * 0.16;
-              float armPosition = max(0.0, alongWake * armSlope + front * 0.08);
-              float armFront = exp(-pow((lateral - armPosition) / max(0.16, width * 0.58), 2.0));
-              float centerDrag = exp(-pow(lateral / max(0.16, width * 0.38), 2.0)) *
-                exp(-alongWake * 0.065);
-              float transverseFront = exp(-pow((alongWake - front * 0.34) / max(0.2, width * 1.15), 2.0)) *
-                exp(-pow(lateral / max(0.2, width * 1.65), 2.0));
-              float wakeFront = behindMask * (armFront * 0.86 + centerDrag * 0.22 + transverseFront * 0.28);
-
-              return wakeFront * fade * damping * strength;
+              vec2 radial = (cellPosition - origin) / distanceToCell;
+              float behind = smoothstep(-0.15, 0.78, dot(radial, -direction));
+              float lateral = abs(radial.x * direction.y - radial.y * direction.x);
+              float centerTrail = exp(-pow(lateral / 0.42, 2.0)) * 0.34;
+              float shoulderTrail = exp(-pow((lateral - 0.52) / 0.24, 2.0)) * 0.72;
+              directionMask = clamp(behind * (0.25 + centerTrail + shoulderTrail), 0.0, 1.0);
             }
 
-            return ring * fade * damping * strength;
+            return ring * fade * damping * strength * mix(1.0, directionMask, directionalSource);
           }
 
           float movingBodyWake(vec2 fromPlayer, float distanceToPlayer, float phase) {

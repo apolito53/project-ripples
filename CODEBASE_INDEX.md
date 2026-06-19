@@ -34,13 +34,13 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Avatar movement, circular arena clamp, scene-input gating, pointer lock, and
   camera follow behavior: `src/controls.ts`
 - Circular shader-displaced instanced hex field and directional movement
-  wake-front deformation, including Meltdown-calibrated honeycomb orientation,
-  lit hex caps, animated-height cell tinting, and bounded crest-specific glow:
+  wake deformation, including Meltdown-calibrated honeycomb orientation, lit
+  hex caps, animated-height cell tinting, and bounded crest-specific glow:
   `src/rippleField.ts`
 - Visual-only smooth glowing arena-edge gradient barrier: `src/arenaBarrier.ts`
 - Visible cyan/magenta spotlight fixtures, stage floor, core scene lighting,
   and player avatar visuals: `src/main.ts`
-- Lifetime-pruned pulse/wake-front source list and shader uniform writer:
+- Lifetime-pruned pulse/wake source list and shader uniform writer:
   `src/rippleSources.ts`
 - Persistent collectible Echo-column lights, bright orb lights, vertical
   diamond-style orb mist, avatar-style segmented crystal orbit trails, and
@@ -67,9 +67,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
 2. `main.ts` creates the renderer, scene, camera, bloom composer, field, particles,
    pulse lights, and glow avatar.
 3. `PlayerRig` updates planar movement and camera follow every frame.
-4. Cooldown-gated clicks and `Space` add pulse sources, while movement adds
-   sparse directional wake-front packets; Echo-zone timers add persistent
-   collectible markers instead of immediate ambient waves.
+4. Cooldown-gated clicks, `Space`, and denser movement wake spacing add ripple
+   sources; Echo-zone timers add persistent collectible markers instead of
+   immediate ambient waves.
 5. `RippleField` builds hex instances inside the circular arena using the
    active quality, hex-size, and arena-radius settings. Hex geometry is rotated
    to match the staggered lattice, and Meltdown's visible footprint is calibrated
@@ -87,8 +87,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 9. `PulseLightRig` assigns recent pulses and collected Echo detonations to
    point lights.
 10. The HUD reports FPS, instance counts, base propagation speed, voxel size,
-    arena radius, live Echo count, active pulse/wake counts, and newest source
-    front radius.
+    arena radius, live Echo count, active source count, and newest ring radius.
     A denser `F2`/pause-menu performance overlay reports frame/update/render
     timing, active particles versus resident budget, rendered wave-source
     pressure, renderer draw stats, pixel ratio, bloom state, and quality.
@@ -111,8 +110,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `src/main.ts`
 - Change particles, wake behavior, or burst count: `src/particleVeil.ts` and
   `src/main.ts`
-- Change movement wake cadence, source strength, or pulse/wake HUD counts:
-  `src/main.ts`
+- Change movement wake cadence or source strength: `src/main.ts`
 - Change propagation-speed semantics or medium parameters: `src/waveMedium.ts`,
   `src/labSettings.ts`, and `PROPAGATION_NOTES.md`
 - Change movement/camera feel or the circular player boundary: `src/controls.ts`
@@ -128,9 +126,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Keep the CPU/GPU contract small: pulse uniforms, player position, and settings
   go in; shader animation comes out. The shader still has a fixed upload budget,
   but ripple retention should be governed by per-source lifetime and input
-  cooldown rather than a tiny gameplay cap. Movement wake-front packets
-  intentionally fade faster than manual pulses so the newest-first upload order
-  does not churn through old packets during normal movement.
+  cooldown rather than a tiny gameplay cap. Dense movement wakes intentionally
+  fade faster than manual pulses so the newest-first upload order does not
+  churn through old rings during normal movement.
 - Echo zones are CPU-side gameplay markers with stacked point lights, bright
   orb lights, vertical diamond-style orb mist, segmented crystal-local orbiting
   sparkle trails, and

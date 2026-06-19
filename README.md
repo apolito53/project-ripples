@@ -60,11 +60,10 @@ avatar runs through them, then detonate into a wider pulse, a flat disc burst of
 sparks, and a short local orb-shatter effect without geometric ring markers.
 Movement behaves like a small body pushing through water: the shader forms a
 pressed fabric depression, local bow/wake displacement, and small raised rim
-around the avatar, while sparse directional wake-front packets remain in the
-field after the avatar moves on. Those packets are not little circular pulse
-rings; they capture the movement direction at stamp time and render as trailing
-fronts, with shorter lifetimes than manual pulses so normal movement stays below
-the shader's fixed upload budget.
+around the avatar, while stamped wake ripples remain in the field and propagate
+outward after the avatar moves on. Dense movement wake stamps use a shorter
+per-source lifetime than manual pulses so they can trail smoothly without
+forcing older rings to flicker through the shader's fixed upload budget.
 
 The Esc/hamburger pause menu changes quality, hex size, arena radius, ripple
 height/radius, Depth / Speed, particle density, bloom strength, and the live
@@ -76,11 +75,11 @@ radius is expressed in lab meters: `200m` preserves the original scene radius,
 while `400m` doubles it. Depth / Speed changes the medium's effective depth,
 then shows the derived propagation speed from the shallow-water-inspired
 `sqrt(g * depth)` model.
-The HUD shows that derived speed, hex diameter, arena radius, live Echo zones,
-active pulse count, active wake-front count, and the newest source's approximate
-front radius, so propagation and scale tuning have a quick visual sanity check.
+The HUD shows that derived speed, hex diameter, arena radius, active source count,
+and the newest ring's approximate radius, plus the number of live Echo zones, so
+propagation and scale tuning have a quick visual sanity check.
 The performance overlay adds a denser tuning cockpit with frame/update/render
-timing, active particles versus resident budget, rendered source pressure,
+timing, active particles versus resident budget, rendered wave-source pressure,
 draw calls, triangles, pixel ratio, bloom state, and quality mode.
 
 ## Quality Modes
@@ -146,9 +145,9 @@ Versioning:
   player-proximity glow.
 - `src/arenaBarrier.ts` owns the visual-only glowing arena-edge gradient that
   follows the live arena radius without changing collision behavior.
-- `src/rippleSources.ts` keeps the lifetime-pruned pulse and movement-wake
-  source list sent to the GPU, including per-source speed, width, damping,
-  lifetime, and direction metadata for wake-front packets.
+- `src/rippleSources.ts` keeps the lifetime-pruned pulse and movement-wake list
+  sent to the GPU, including per-source speed, width, damping, lifetime, and
+  optional direction metadata.
 - `src/debugLog.ts` owns the local diagnostic log buffer, inline JSON console
   logging, and optional batching to the `5184` debug receiver used to profile
   Echo detonations and frame spikes.
@@ -168,9 +167,9 @@ Versioning:
   instead of torus rings.
 
 The CPU decides where the player, manual pulses, persistent Echo zones, and
-movement wake-front packets are. Manual pulse input is cooldown-gated, Echo
-zones only become pulse sources after collection, sources age out by per-source
-lifetime, and propagation speed comes from the current wave medium. The GPU
-handles hex lift, stretch, tint, emissive glow, and cell footprint/height from
-the newest rendered source uniforms, with dense fields allowed to render fewer
-sources than the full gameplay source list contains.
+movement wakes are. Manual pulse input is cooldown-gated, Echo zones only become
+wave sources after collection, sources age out by per-source lifetime, and
+propagation speed comes from the current wave medium. The GPU handles hex lift,
+stretch, tint, emissive glow, and cell footprint/height from the newest rendered
+source uniforms, with dense fields allowed to render fewer sources than the
+full gameplay source list contains.
