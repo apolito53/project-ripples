@@ -58,6 +58,8 @@
 - Set avatar walk/sprint top speeds to `24 m/s` and `36 m/s`, with a 30%
   lower brake response so released movement takes longer to coast down while
   keeping menu-open braking responsive.
+- Added pause-menu walk and sprint speed sliders, with sprint constrained to at
+  least `5 m/s` faster than walk speed while tuning.
 
 ## 0.2.0-ALPHA - 2026-06-18
 

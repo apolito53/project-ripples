@@ -1,4 +1,8 @@
 import {
+  DEFAULT_PLAYER_SPEED_SETTINGS,
+  type PlayerSpeedSettings
+} from "./controls";
+import {
   ARENA_RADIUS,
   ARENA_RADIUS_MAX_METERS,
   ARENA_RADIUS_MIN_METERS,
@@ -17,6 +21,7 @@ import {
 
 export type LabSettings = {
   qualityId: QualityId;
+  playerSpeed: PlayerSpeedSettings;
   rippleHeight: number;
   rippleRadius: number;
   voxelSizeMeters: number;
@@ -30,6 +35,7 @@ export type LabSettings = {
 
 export const DEFAULT_SETTINGS: LabSettings = {
   qualityId: "pretty",
+  playerSpeed: DEFAULT_PLAYER_SPEED_SETTINGS,
   rippleHeight: 1.25,
   rippleRadius: 9,
   voxelSizeMeters: DEFAULT_VOXEL_SIZE_METERS,
@@ -58,6 +64,7 @@ export function getQualityPreset(settings: LabSettings): QualityPreset {
 export function cloneDefaultSettings(): LabSettings {
   return {
     ...DEFAULT_SETTINGS,
+    playerSpeed: { ...DEFAULT_SETTINGS.playerSpeed },
     waveMedium: { ...DEFAULT_SETTINGS.waveMedium }
   };
 }

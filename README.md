@@ -66,9 +66,11 @@ the lingering height/velocity field left behind by movement. Manual click/Space
 pulses and collected Echoes still use analytic ring sources, but ordinary
 movement no longer adds little circular wave sources while the avatar runs.
 
-The Esc/hamburger pause menu changes quality, hex size, arena radius, ripple
-height/radius, Depth / Speed, particle density, bloom strength, and the live
-performance overlay while the scene is running. Hex size treats the current
+The Esc/hamburger pause menu changes quality, hex size, arena radius, walk and
+sprint speed, ripple height/radius, Depth / Speed, particle density, bloom
+strength, and the live performance overlay while the scene is running. Sprint
+speed is clamped to at least `5 m/s` above walk speed so the two movement modes
+stay distinct while tuning. Hex size treats the current
 cell scale as `1m`, ranges from `25cm` to `2m`, and measures the regular
 hexagon's widest point-to-point diameter. Changing it rebuilds the instanced
 field after a short debounce so slider drags do not spam geometry work. Arena

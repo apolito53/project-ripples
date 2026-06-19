@@ -4,7 +4,12 @@ import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { ArenaBarrier } from "./arenaBarrier";
-import { PlayerRig } from "./controls";
+import {
+  PlayerRig,
+  PLAYER_SPEED_LIMITS,
+  getMinimumSprintSpeedMetersPerSecond,
+  normalizePlayerSpeedSettings
+} from "./controls";
 import { debugEvent, debugMeasure, roundMetric, vectorPayload, type RippleDebugPayload } from "./debugLog";
 import { EchoZoneField, type TriggeredEchoZone } from "./echoZones";
 import { cloneDefaultSettings, getQualityPreset } from "./labSettings";
@@ -36,6 +41,10 @@ const voxelSizeSlider = requireElement<HTMLInputElement>("#voxel-size-slider");
 const voxelSizeValue = requireElement<HTMLOutputElement>("#voxel-size-value");
 const arenaRadiusSlider = requireElement<HTMLInputElement>("#arena-radius-slider");
 const arenaRadiusValue = requireElement<HTMLOutputElement>("#arena-radius-value");
+const walkSpeedSlider = requireElement<HTMLInputElement>("#walk-speed-slider");
+const walkSpeedValue = requireElement<HTMLOutputElement>("#walk-speed-value");
+const sprintSpeedSlider = requireElement<HTMLInputElement>("#sprint-speed-slider");
+const sprintSpeedValue = requireElement<HTMLOutputElement>("#sprint-speed-value");
 const heightSlider = requireElement<HTMLInputElement>("#height-slider");
 const radiusSlider = requireElement<HTMLInputElement>("#radius-slider");
 const depthSlider = requireElement<HTMLInputElement>("#depth-slider");
@@ -216,6 +225,7 @@ const player = new PlayerRig({
   sampleHeight: sampleFieldHeight,
   getBoundaryRadius: () => Math.max(0, preset.fieldRadius - PLAYER_BOUNDARY_PADDING),
   onPulse: (position) => spawnPulse(position, 0.45),
+  speedSettings: settings.playerSpeed,
   isInputEnabled: areSceneInputsEnabled
 });
 previousWakePlayerPosition.copy(player.position);
@@ -569,6 +579,12 @@ function wireControls(): void {
     updateArenaRadiusValue();
     scheduleFieldRebuild();
   });
+  walkSpeedSlider.addEventListener("input", () => {
+    updatePlayerSpeedSettingsFromControls("walk");
+  });
+  sprintSpeedSlider.addEventListener("input", () => {
+    updatePlayerSpeedSettingsFromControls("sprint");
+  });
   heightSlider.addEventListener("input", () => {
     settings.rippleHeight = Number(heightSlider.value);
   });
@@ -609,6 +625,12 @@ function syncControlValues(): void {
   arenaRadiusSlider.max = String(ARENA_RADIUS_MAX_METERS);
   arenaRadiusSlider.step = "5";
   arenaRadiusSlider.value = String(settings.arenaRadiusMeters);
+  walkSpeedSlider.min = String(PLAYER_SPEED_LIMITS.walk.min);
+  walkSpeedSlider.max = String(PLAYER_SPEED_LIMITS.walk.max);
+  walkSpeedSlider.step = String(PLAYER_SPEED_LIMITS.walk.step);
+  sprintSpeedSlider.max = String(PLAYER_SPEED_LIMITS.sprint.max);
+  sprintSpeedSlider.step = String(PLAYER_SPEED_LIMITS.sprint.step);
+  syncPlayerSpeedControls();
   heightSlider.value = String(settings.rippleHeight);
   radiusSlider.value = String(settings.rippleRadius);
   depthSlider.value = String(settings.waveMedium.effectiveDepth);
@@ -809,6 +831,7 @@ function updateTuningReadouts(): void {
   updateDepthSpeedValue();
   updateVoxelSizeValue();
   updateArenaRadiusValue();
+  updatePlayerSpeedValues();
 }
 
 function updateVoxelSizeValue(): void {
@@ -821,6 +844,38 @@ function updateVoxelSizeValue(): void {
 
 function updateArenaRadiusValue(): void {
   arenaRadiusValue.textContent = `${Math.round(settings.arenaRadiusMeters)} m`;
+}
+
+function updatePlayerSpeedSettingsFromControls(changedSlider: "walk" | "sprint"): void {
+  const requestedWalkSpeed = changedSlider === "walk"
+    ? Number(walkSpeedSlider.value)
+    : settings.playerSpeed.walkSpeedMetersPerSecond;
+  const requestedSprintSpeed = Number(sprintSpeedSlider.value);
+
+  settings.playerSpeed = normalizePlayerSpeedSettings({
+    walkSpeedMetersPerSecond: requestedWalkSpeed,
+    sprintSpeedMetersPerSecond: requestedSprintSpeed
+  });
+  player.setSpeedSettings(settings.playerSpeed);
+  syncPlayerSpeedControls();
+}
+
+function syncPlayerSpeedControls(): void {
+  // Sprint keeps a live lower bound of max(20m/s, walk+5m/s). Updating the
+  // slider's min communicates the rule through the native range affordance and
+  // prevents later keyboard/assistive edits from drifting into an invalid pair.
+  const minimumSprintSpeed = getMinimumSprintSpeedMetersPerSecond(
+    settings.playerSpeed.walkSpeedMetersPerSecond
+  );
+  sprintSpeedSlider.min = String(minimumSprintSpeed);
+  walkSpeedSlider.value = String(settings.playerSpeed.walkSpeedMetersPerSecond);
+  sprintSpeedSlider.value = String(settings.playerSpeed.sprintSpeedMetersPerSecond);
+  updatePlayerSpeedValues();
+}
+
+function updatePlayerSpeedValues(): void {
+  walkSpeedValue.textContent = `${settings.playerSpeed.walkSpeedMetersPerSecond.toFixed(1)} m/s`;
+  sprintSpeedValue.textContent = `${settings.playerSpeed.sprintSpeedMetersPerSecond.toFixed(1)} m/s`;
 }
 
 function scheduleFieldRebuild(): void {

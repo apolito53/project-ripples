@@ -6,11 +6,25 @@ export type PlayerRigOptions = {
   readonly sampleHeight: (x: number, z: number) => number;
   readonly getBoundaryRadius: () => number;
   readonly onPulse: (position: THREE.Vector3) => void;
+  readonly speedSettings?: PlayerSpeedSettings;
   readonly isInputEnabled?: () => boolean;
 };
 
-const WALK_SPEED = 24;
-const SPRINT_SPEED = 36;
+export type PlayerSpeedSettings = {
+  readonly walkSpeedMetersPerSecond: number;
+  readonly sprintSpeedMetersPerSecond: number;
+};
+
+export const PLAYER_SPEED_LIMITS = {
+  walk: { min: 1, max: 30, step: 0.5 },
+  sprint: { min: 20, max: 50, step: 0.5, minimumGapFromWalk: 5 }
+} as const;
+
+export const DEFAULT_PLAYER_SPEED_SETTINGS: PlayerSpeedSettings = {
+  walkSpeedMetersPerSecond: 24,
+  sprintSpeedMetersPerSecond: 36
+};
+
 const MOVE_ACCELERATION = 7.5;
 const MOVE_COUNTER_STEER_ACCELERATION = 10.5;
 // This is an exponential response rate, so smaller values make released
@@ -36,6 +50,32 @@ const TOUCH_LOOK_RATE_X = 2.65;
 const TOUCH_LOOK_RATE_Y = 2.05;
 
 
+export function normalizePlayerSpeedSettings(settings: PlayerSpeedSettings): PlayerSpeedSettings {
+  const walkSpeedMetersPerSecond = THREE.MathUtils.clamp(
+    settings.walkSpeedMetersPerSecond,
+    PLAYER_SPEED_LIMITS.walk.min,
+    PLAYER_SPEED_LIMITS.walk.max
+  );
+  const minimumSprintSpeed = getMinimumSprintSpeedMetersPerSecond(walkSpeedMetersPerSecond);
+  const sprintSpeedMetersPerSecond = THREE.MathUtils.clamp(
+    settings.sprintSpeedMetersPerSecond,
+    minimumSprintSpeed,
+    PLAYER_SPEED_LIMITS.sprint.max
+  );
+
+  return {
+    walkSpeedMetersPerSecond,
+    sprintSpeedMetersPerSecond
+  };
+}
+
+export function getMinimumSprintSpeedMetersPerSecond(walkSpeedMetersPerSecond: number): number {
+  return Math.max(
+    PLAYER_SPEED_LIMITS.sprint.min,
+    walkSpeedMetersPerSecond + PLAYER_SPEED_LIMITS.sprint.minimumGapFromWalk
+  );
+}
+
 export class PlayerRig {
   readonly position = new THREE.Vector3(0, PLAYER_HEIGHT, 0);
   readonly velocity = new THREE.Vector3();
@@ -54,6 +94,7 @@ export class PlayerRig {
   private cameraDistance = CAMERA_DEFAULT_DISTANCE;
   private targetCameraDistance = CAMERA_DEFAULT_DISTANCE;
   private lastPulseSecond = -Infinity;
+  private speedSettings = DEFAULT_PLAYER_SPEED_SETTINGS;
   private yaw = Math.PI * 0.23;
   private pitch = 0.45;
 
@@ -64,6 +105,7 @@ export class PlayerRig {
     this.getBoundaryRadius = options.getBoundaryRadius;
     this.onPulse = options.onPulse;
     this.isInputEnabled = options.isInputEnabled ?? (() => true);
+    this.setSpeedSettings(options.speedSettings ?? DEFAULT_PLAYER_SPEED_SETTINGS);
 
     window.addEventListener("keydown", this.handleKeyDown);
     window.addEventListener("keyup", this.handleKeyUp);
@@ -107,7 +149,9 @@ export class PlayerRig {
     const hasIntent = intent.lengthSq() > 0;
     if (hasIntent) intent.normalize();
     const isSprinting = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight");
-    const targetSpeed = isSprinting ? SPRINT_SPEED : WALK_SPEED;
+    const targetSpeed = isSprinting
+      ? this.speedSettings.sprintSpeedMetersPerSecond
+      : this.speedSettings.walkSpeedMetersPerSecond;
     const targetVelocity = intent.multiplyScalar(targetSpeed);
     const hasPlanarVelocity = this.velocity.lengthSq() > STOP_EPSILON * STOP_EPSILON;
     const isCounterSteering = hasIntent && hasPlanarVelocity && targetVelocity.dot(this.velocity) < 0;
@@ -140,6 +184,13 @@ export class PlayerRig {
 
   getSpeed(): number {
     return this.velocity.length();
+  }
+
+  setSpeedSettings(settings: PlayerSpeedSettings): void {
+    // The pause-menu sliders can change both speeds in either order. Normalize
+    // here too so external callers cannot accidentally make sprint slower than
+    // the requested walk+gap rule.
+    this.speedSettings = normalizePlayerSpeedSettings(settings);
   }
 
   setMobileMoveIntent(x: number, y: number): void {
