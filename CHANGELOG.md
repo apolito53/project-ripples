@@ -33,6 +33,8 @@
   avatar while preserving the visible field dent.
 - Replaced the movement wake's reused burst emitter with a cheaper, flatter
   particle trail centered on the avatar core instead of hovering above it.
+- Split manual click/Space pulse particles into a faster, flatter burst that
+  diffuses outward instead of lingering as a vertical sparkle cylinder.
 
 ## 0.2.0-ALPHA - 2026-06-18
 

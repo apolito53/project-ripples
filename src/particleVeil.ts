@@ -11,6 +11,10 @@ const DISC_CLOUD_PARTICLE_RATIO = 0.012;
 const DISC_CLOUD_PARTICLE_MAX = 720;
 const DISC_GLITTER_PARTICLE_RATIO = 0.06;
 const DISC_GLITTER_PARTICLE_MAX = 3200;
+const PULSE_VERTICAL_LIFT = 0.18;
+const PULSE_VERTICAL_JITTER = 0.56;
+const PULSE_LIFETIME_BASE = 0.42;
+const PULSE_LIFETIME_VARIANCE = 0.66;
 const WAKE_PARTICLE_COUNT_BASE = 70;
 const WAKE_PARTICLE_COUNT_MOVEMENT_BONUS = 180;
 const WAKE_VERTICAL_LIFT = 0.14;
@@ -173,6 +177,17 @@ export class ParticleVeil {
     this.markDirty(true);
   }
 
+  spawnPulseBurst(center: THREE.Vector3, count: number, strength: number): void {
+    // Manual click/Space pulses are gameplay punctuation, not lingering fog.
+    // Emit a flatter, faster cloud so the burst diffuses across the field and
+    // fades before it can stack into a vertical cylinder of sparkles.
+    for (let burstIndex = 0; burstIndex < count; burstIndex += 1) {
+      this.emitPulseParticle(center, strength);
+    }
+
+    this.markDirty(true);
+  }
+
   spawnDiscBurst(center: THREE.Vector3, count: number, strength: number, radius: number): number {
     const intensityBudget = Math.max(0, Math.floor(count));
     if (intensityBudget <= 0) return 0;
@@ -324,6 +339,40 @@ export class ParticleVeil {
     // keeps the sparkle cloud crisp instead of sliding back into soft blobs.
     this.baseAlphas[index] = (PARTICLE_ALPHA_MIN + Math.random() * PARTICLE_ALPHA_VARIANCE) * alphaScale;
     this.baseSizes[index] = (0.45 + Math.random() * (1.05 + strength * 0.58)) * cloudScale;
+    this.alphas[index] = this.baseAlphas[index];
+    this.sizes[index] = this.baseSizes[index];
+    this.twinkles[index] = Math.random();
+    this.cloudinesses[index] = 0;
+  }
+
+  private emitPulseParticle(center: THREE.Vector3, strength: number): void {
+    const index = this.allocateParticleSlot();
+
+    const angle = Math.random() * Math.PI * 2;
+    // Start close to the field surface and spend most of the motion budget
+    // horizontally. That makes a pulse read as an expanding sparkle puff rather
+    // than a column that hangs over the click point.
+    const startRadius = Math.sqrt(Math.random()) * (0.45 + strength * 1.35);
+    const outward = 2.2 + Math.random() * (3.8 + strength * 5.2);
+    const tangent = (Math.random() - 0.5) * (0.55 + strength * 1.1);
+    const upward = (Math.random() - 0.58) * (0.12 + strength * 0.28);
+    const positionOffset = index * 3;
+    const color = pickParticleColor(Math.random());
+
+    this.positions[positionOffset] = center.x + Math.cos(angle) * startRadius;
+    this.positions[positionOffset + 1] = center.y + PULSE_VERTICAL_LIFT +
+      (Math.random() - 0.5) * PULSE_VERTICAL_JITTER;
+    this.positions[positionOffset + 2] = center.z + Math.sin(angle) * startRadius;
+    this.velocities[positionOffset] = Math.cos(angle) * outward - Math.sin(angle) * tangent;
+    this.velocities[positionOffset + 1] = upward;
+    this.velocities[positionOffset + 2] = Math.sin(angle) * outward + Math.cos(angle) * tangent;
+    this.colors[positionOffset] = color.r;
+    this.colors[positionOffset + 1] = color.g;
+    this.colors[positionOffset + 2] = color.b;
+    this.ages[index] = 0;
+    this.lifetimes[index] = PULSE_LIFETIME_BASE + Math.random() * PULSE_LIFETIME_VARIANCE;
+    this.baseAlphas[index] = (PARTICLE_ALPHA_MIN + Math.random() * PARTICLE_ALPHA_VARIANCE) * 0.92;
+    this.baseSizes[index] = 0.48 + Math.random() * (1.15 + strength * 0.52);
     this.alphas[index] = this.baseAlphas[index];
     this.sizes[index] = this.baseSizes[index];
     this.twinkles[index] = Math.random();

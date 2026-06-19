@@ -280,7 +280,7 @@ function spawnPulseParticles(position: THREE.Vector3, strength: number): void {
     preset.burstParticleCount * settings.particleDensity * (0.42 + strength * 1.7)
   ));
   if (settings.particlesEnabled) {
-    particles.spawnBurst(position, count, strength);
+    particles.spawnPulseBurst(position, count, strength);
   }
 }
 
