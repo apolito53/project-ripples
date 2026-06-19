@@ -126,6 +126,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
   sparkle trails, and
   short collection bursts. They should not become shader sources until
   collected, otherwise they turn back into ambient pulses with extra jewelry.
+  Collected Echo payloads carry both a surface wave position and an elevated
+  core-height effect position; keep that split so gameplay waves stay grounded
+  while collection particles align with the crystal burst.
   Their point lights are pooled and parked at zero intensity; do not add/remove
   point lights during Echo spawn or collection, because changing Three.js light
   counts can recompile the lit field shader during gameplay.

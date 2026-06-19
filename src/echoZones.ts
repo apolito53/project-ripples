@@ -10,6 +10,7 @@ export type EchoZoneOptions = {
 
 export type TriggeredEchoZone = {
   readonly position: THREE.Vector3;
+  readonly effectPosition: THREE.Vector3;
   readonly burstStrength: number;
   readonly discBurstRadius: number;
 };
@@ -51,26 +52,34 @@ type EchoCollectBurst = {
   readonly columnRadius: number;
   readonly baseRotation: number;
   readonly object: THREE.Group;
-  readonly flare: THREE.Mesh<THREE.IcosahedronGeometry, THREE.MeshBasicMaterial>;
+  readonly flare: THREE.Mesh<THREE.OctahedronGeometry, THREE.MeshBasicMaterial>;
   readonly mist: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>;
   readonly shards: THREE.Points<THREE.BufferGeometry, THREE.ShaderMaterial>;
+  readonly shardTrails: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   readonly shardPositions: Float32Array;
   readonly shardVelocities: Float32Array;
   readonly shardAlphas: Float32Array;
   readonly shardBaseAlphas: Float32Array;
   readonly shardSizes: Float32Array;
   readonly shardBaseSizes: Float32Array;
+  readonly shardTrailPositions: Float32Array;
+  readonly shardTrailColors: Float32Array;
+  readonly shardBaseColors: Float32Array;
   readonly burstLight: THREE.PointLight;
 };
 
 type EchoCollectBurstShards = {
   readonly points: THREE.Points<THREE.BufferGeometry, THREE.ShaderMaterial>;
+  readonly trails: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   readonly positions: Float32Array;
   readonly velocities: Float32Array;
   readonly alphas: Float32Array;
   readonly baseAlphas: Float32Array;
   readonly sizes: Float32Array;
   readonly baseSizes: Float32Array;
+  readonly trailPositions: Float32Array;
+  readonly trailColors: Float32Array;
+  readonly baseColors: Float32Array;
 };
 
 const BEAM_LIGHT_COLOR = 0x67ffe0;
@@ -84,8 +93,8 @@ const COLUMN_BASE_LIFT = 1.45;
 const ECHO_ORBIT_MOTE_COUNT = 44;
 const ECHO_ORBIT_TRAIL_SEGMENTS = 5;
 const ECHO_ORBIT_TRAIL_SECONDS = 0.42;
-const COLLECT_BURST_MOTE_COUNT = 220;
-const COLLECT_BURST_DURATION = 0.88;
+const COLLECT_BURST_MOTE_COUNT = 320;
+const COLLECT_BURST_DURATION = 1.06;
 const ECHO_COLUMN_LIGHT_POOL_SIZE = 5;
 const COLLECT_BURST_LIGHT_POOL_SIZE = 2;
 const TEMP_COLOR = new THREE.Color();
@@ -250,6 +259,10 @@ export class EchoZoneField {
 
       triggered.push({
         position: zone.position.clone(),
+        // The wave source still belongs to the field surface, but the visual
+        // pickup explosion belongs to the Echo's glowing core. Keeping both
+        // positions avoids the mismatched "ground poof plus sky burst" look.
+        effectPosition: zone.position.clone().setY(zone.position.y + COLUMN_BASE_LIFT + COLUMN_HEIGHT * 0.5),
         burstStrength: zone.burstStrength,
         discBurstRadius: zone.discBurstRadius
       });
@@ -306,17 +319,18 @@ export class EchoZoneField {
     const orbHeight = COLUMN_BASE_LIFT + COLUMN_HEIGHT * 0.5;
 
     const flare = new THREE.Mesh(
-      this.coreGeometry,
+      this.diamondGeometry,
       new THREE.MeshBasicMaterial({
         color: ORB_SHELL_COLOR,
         transparent: true,
-        opacity: 0.9,
+        opacity: 0.18,
         depthWrite: false,
         blending: THREE.AdditiveBlending
       })
     );
-    flare.name = "Echo collect core flash";
+    flare.name = "Echo collect diamond flash";
     flare.position.y = orbHeight;
+    flare.scale.set(zone.columnRadius * 0.26, zone.columnRadius * 0.96, zone.columnRadius * 0.26);
     flare.renderOrder = 7;
     object.add(flare);
 
@@ -324,7 +338,7 @@ export class EchoZoneField {
     mist.name = "Echo collect mist shock";
     mist.position.y = orbHeight;
     mist.renderOrder = 5;
-    mist.scale.set(zone.columnRadius * 1.1, zone.columnRadius * 0.82, zone.columnRadius * 1.1);
+    mist.scale.set(zone.columnRadius * 0.88, zone.columnRadius * 1.9, zone.columnRadius * 0.88);
     object.add(mist);
 
     const shardCloud = debugMeasure(
@@ -337,7 +351,7 @@ export class EchoZoneField {
       },
       4
     );
-    object.add(shardCloud.points);
+    object.add(shardCloud.trails, shardCloud.points);
 
     const burstLight = this.takeCollectBurstLight();
     burstLight.position.set(zone.position.x, zone.position.y + orbHeight, zone.position.z);
@@ -353,12 +367,16 @@ export class EchoZoneField {
       flare,
       mist,
       shards: shardCloud.points,
+      shardTrails: shardCloud.trails,
       shardPositions: shardCloud.positions,
       shardVelocities: shardCloud.velocities,
       shardAlphas: shardCloud.alphas,
       shardBaseAlphas: shardCloud.baseAlphas,
       shardSizes: shardCloud.sizes,
       shardBaseSizes: shardCloud.baseSizes,
+      shardTrailPositions: shardCloud.trailPositions,
+      shardTrailColors: shardCloud.trailColors,
+      shardBaseColors: shardCloud.baseColors,
       burstLight
     });
 
@@ -389,23 +407,32 @@ export class EchoZoneField {
       const flash = fade * fade;
       const orbHeight = COLUMN_BASE_LIFT + COLUMN_HEIGHT * 0.5;
 
-      // The burst is now light-and-particle led instead of torus-led. The mist,
-      // flare, shards, and real point light keep the detonation readable without
-      // drawing graphic rings that clash with the rest of the field.
+      // The burst is now a vertical crystal pop instead of a prototype-looking
+      // blob. A faceted flash, soft mist, arcing motes, and trails all share
+      // the Echo core height so collection reads as one coherent event.
       burst.object.rotation.y = burst.baseRotation + age * 2.15 + progress * 0.55;
-      burst.flare.position.y = orbHeight + easeOut * 0.35;
-      burst.flare.scale.setScalar(0.9 + easeOut * 4.2);
-      burst.flare.material.opacity = 0.86 * flash;
+      burst.flare.position.y = orbHeight + easeOut * 0.62;
+      burst.flare.rotation.y = age * 3.2;
+      burst.flare.rotation.z = Math.sin(age * 5.4) * 0.16;
+      // Keep the shell as a faceted flash, not the whole effect. The actual
+      // beauty should come from mist, elevated poof, and arcing trails.
+      burst.flare.scale.set(
+        burst.columnRadius * (0.28 + easeOut * 1.26),
+        burst.columnRadius * (0.98 + easeOut * 2.35),
+        burst.columnRadius * (0.28 + easeOut * 1.26)
+      );
+      burst.flare.material.opacity = 0.18 * Math.pow(fade, 1.18);
 
       burst.mist.rotation.y = -age * 1.2;
+      burst.mist.rotation.x = Math.sin(age * 2.15) * 0.16;
       burst.mist.scale.set(
-        burst.columnRadius * (1.1 + easeOut * 3.7),
-        burst.columnRadius * (0.82 + easeOut * 1.55),
-        burst.columnRadius * (1.1 + easeOut * 3.7)
+        burst.columnRadius * (0.88 + easeOut * 2.45),
+        burst.columnRadius * (1.9 + easeOut * 3.35),
+        burst.columnRadius * (0.88 + easeOut * 2.45)
       );
       burst.mist.material.uniforms.uTime.value = age * 1.9;
       burst.mist.material.uniforms.uPulse.value = 1;
-      burst.mist.material.uniforms.uOpacity.value = 0.66 * fade;
+      burst.mist.material.uniforms.uOpacity.value = 0.46 * Math.pow(fade, 0.9);
 
       burst.burstLight.intensity = 7.8 * flash;
       burst.burstLight.distance = 10 + easeOut * 18;
@@ -451,6 +478,8 @@ export class EchoZoneField {
     burst.mist.material.dispose();
     burst.shards.geometry.dispose();
     burst.shards.material.dispose();
+    burst.shardTrails.geometry.dispose();
+    burst.shardTrails.material.dispose();
     this.releaseCollectBurstLight(burst.burstLight);
     debugEvent("echo.collect", "Disposed Echo collection burst", {
       activeBurstsAfter: this.collectBursts.length,
@@ -551,6 +580,9 @@ function createCollectBurstShards(columnRadius: number, orbHeight: number): Echo
   const positions = new Float32Array(COLLECT_BURST_MOTE_COUNT * 3);
   const velocities = new Float32Array(COLLECT_BURST_MOTE_COUNT * 3);
   const colors = new Float32Array(COLLECT_BURST_MOTE_COUNT * 3);
+  const trailPositions = new Float32Array(COLLECT_BURST_MOTE_COUNT * 6);
+  const trailColors = new Float32Array(COLLECT_BURST_MOTE_COUNT * 6);
+  const baseColors = new Float32Array(COLLECT_BURST_MOTE_COUNT * 3);
   const alphas = new Float32Array(COLLECT_BURST_MOTE_COUNT);
   const baseAlphas = new Float32Array(COLLECT_BURST_MOTE_COUNT);
   const sizes = new Float32Array(COLLECT_BURST_MOTE_COUNT);
@@ -561,26 +593,34 @@ function createCollectBurstShards(columnRadius: number, orbHeight: number): Echo
     const offset = index * 3;
     const angle = Math.random() * Math.PI * 2;
     const spread = Math.random();
-    const horizontalSpeed = columnRadius * (3.2 + Math.random() * 5.6) * (0.42 + spread * 0.8);
-    const verticalSpeed = -0.55 + Math.random() * 5.8;
+    const horizontalSpeed = columnRadius * (2.8 + Math.random() * 6.7) * (0.38 + spread * 0.94);
+    const verticalSpeed = (Math.random() - 0.35) * 5.8 + spread * 2.25;
+    const tangentSpeed = (Math.random() - 0.5) * columnRadius * (2.2 + spread * 3.2);
     const color = pickSparkleColor(Math.random());
+    const radialX = Math.cos(angle);
+    const radialZ = Math.sin(angle);
+    const tangentX = -radialZ;
+    const tangentZ = radialX;
 
     // Shards start close to the orb instead of at the ground. The slight
     // random offset prevents the first frame from looking like one solid point.
     positions[offset] = (Math.random() - 0.5) * columnRadius * 0.28;
     positions[offset + 1] = orbHeight + (Math.random() - 0.5) * 0.34;
     positions[offset + 2] = (Math.random() - 0.5) * columnRadius * 0.28;
-    velocities[offset] = Math.cos(angle) * horizontalSpeed;
+    velocities[offset] = radialX * horizontalSpeed + tangentX * tangentSpeed;
     velocities[offset + 1] = verticalSpeed;
-    velocities[offset + 2] = Math.sin(angle) * horizontalSpeed;
+    velocities[offset + 2] = radialZ * horizontalSpeed + tangentZ * tangentSpeed;
 
     colors[offset] = color.r;
     colors[offset + 1] = color.g;
     colors[offset + 2] = color.b;
-    baseAlphas[index] = 0.48 + Math.random() * 0.42;
+    baseColors[offset] = color.r;
+    baseColors[offset + 1] = color.g;
+    baseColors[offset + 2] = color.b;
+    baseAlphas[index] = 0.42 + Math.random() * 0.4;
     alphas[index] = baseAlphas[index];
-    baseSizes[index] = 0.86 + Math.random() * 1.25;
-    sizes[index] = baseSizes[index] * 1.35;
+    baseSizes[index] = 0.72 + Math.random() * 1.05;
+    sizes[index] = baseSizes[index] * 1.5;
     twinkles[index] = Math.random();
   }
 
@@ -596,41 +636,93 @@ function createCollectBurstShards(columnRadius: number, orbHeight: number): Echo
   points.frustumCulled = false;
   points.renderOrder = 9;
 
+  const trailGeometry = new THREE.BufferGeometry();
+  trailGeometry.setAttribute("position", createDynamicAttribute(trailPositions, 3));
+  trailGeometry.setAttribute("color", createDynamicAttribute(trailColors, 3));
+
+  const trails = new THREE.LineSegments(
+    trailGeometry,
+    new THREE.LineBasicMaterial({
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.28,
+      depthTest: false,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    })
+  );
+  trails.name = "Echo collect burst mote trails";
+  trails.frustumCulled = false;
+  trails.renderOrder = 8;
+
   return {
     points,
+    trails,
     positions,
     velocities,
     alphas,
     baseAlphas,
     sizes,
-    baseSizes
+    baseSizes,
+    trailPositions,
+    trailColors,
+    baseColors
   };
 }
 
 function updateCollectBurstShards(burst: EchoCollectBurst, age: number, progress: number): void {
   const fade = 1 - progress;
-  const gravity = 5.6;
-  const drag = 1 - progress * 0.24;
+  const gravity = 3.8;
+  const drag = 1 - progress * 0.2;
   const orbHeight = COLUMN_BASE_LIFT + COLUMN_HEIGHT * 0.5;
+  const trailSeconds = 0.055 + progress * 0.075;
 
   burst.shards.material.uniforms.uTime.value = age * 1.8;
+  burst.shardTrails.material.opacity = 0.32 * Math.pow(fade, 0.85);
 
   for (let index = 0; index < COLLECT_BURST_MOTE_COUNT; index += 1) {
     const offset = index * 3;
+    const trailOffset = index * 6;
     const drift = age * drag;
 
-    // The shard spray is a local-space mini explosion: outward velocity plus
-    // a little gravity so motes arc down into the larger disc burst below.
-    burst.shardPositions[offset] = burst.shardVelocities[offset] * drift;
-    burst.shardPositions[offset + 1] = orbHeight + burst.shardVelocities[offset + 1] * age - gravity * age * age;
-    burst.shardPositions[offset + 2] = burst.shardVelocities[offset + 2] * drift;
-    burst.shardAlphas[index] = burst.shardBaseAlphas[index] * Math.pow(fade, 1.35);
-    burst.shardSizes[index] = burst.shardBaseSizes[index] * (0.8 + fade * 0.72);
+    // Each mote leaves a short bright segment behind its current arcing path.
+    // It reads closer to an energy petal burst than to the older one-frame
+    // sprinkle of points, while still being cheap packed buffer writes.
+    const currentX = burst.shardVelocities[offset] * drift;
+    const currentY = orbHeight + burst.shardVelocities[offset + 1] * age - gravity * age * age;
+    const currentZ = burst.shardVelocities[offset + 2] * drift;
+    const previousX = currentX - burst.shardVelocities[offset] * trailSeconds;
+    const previousY = currentY - (burst.shardVelocities[offset + 1] - gravity * age * 1.8) * trailSeconds;
+    const previousZ = currentZ - burst.shardVelocities[offset + 2] * trailSeconds;
+    const colorOffset = index * 3;
+    const trailDim = Math.pow(fade, 1.2) * 0.22;
+    const trailBright = Math.pow(fade, 0.75);
+
+    burst.shardPositions[offset] = currentX;
+    burst.shardPositions[offset + 1] = currentY;
+    burst.shardPositions[offset + 2] = currentZ;
+    burst.shardAlphas[index] = burst.shardBaseAlphas[index] * Math.pow(fade, 1.08);
+    burst.shardSizes[index] = burst.shardBaseSizes[index] * (0.72 + fade * 0.82);
+
+    burst.shardTrailPositions[trailOffset] = previousX;
+    burst.shardTrailPositions[trailOffset + 1] = previousY;
+    burst.shardTrailPositions[trailOffset + 2] = previousZ;
+    burst.shardTrailPositions[trailOffset + 3] = currentX;
+    burst.shardTrailPositions[trailOffset + 4] = currentY;
+    burst.shardTrailPositions[trailOffset + 5] = currentZ;
+    burst.shardTrailColors[trailOffset] = burst.shardBaseColors[colorOffset] * trailDim;
+    burst.shardTrailColors[trailOffset + 1] = burst.shardBaseColors[colorOffset + 1] * trailDim;
+    burst.shardTrailColors[trailOffset + 2] = burst.shardBaseColors[colorOffset + 2] * trailDim;
+    burst.shardTrailColors[trailOffset + 3] = burst.shardBaseColors[colorOffset] * trailBright;
+    burst.shardTrailColors[trailOffset + 4] = burst.shardBaseColors[colorOffset + 1] * trailBright;
+    burst.shardTrailColors[trailOffset + 5] = burst.shardBaseColors[colorOffset + 2] * trailBright;
   }
 
   burst.shards.geometry.attributes.position.needsUpdate = true;
   burst.shards.geometry.attributes.aAlpha.needsUpdate = true;
   burst.shards.geometry.attributes.aSize.needsUpdate = true;
+  burst.shardTrails.geometry.attributes.position.needsUpdate = true;
+  burst.shardTrails.geometry.attributes.color.needsUpdate = true;
 }
 
 function createOrbMistMaterial(): THREE.ShaderMaterial {

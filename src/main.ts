@@ -450,6 +450,7 @@ function triggerEchoZone(echo: TriggeredEchoZone, time: number): void {
   const detonationStartedAt = performance.now();
   const position = echo.position.clone();
   position.y = sampleFieldHeight(position.x, position.z) + 0.45;
+  const effectPosition = echo.effectPosition.clone();
 
   // Echoes are map pickups, but once collected they become ordinary pulse
   // sources so the shader, lights, and HUD can reuse the existing wave path.
@@ -485,13 +486,19 @@ function triggerEchoZone(echo: TriggeredEchoZone, time: number): void {
       particleBudget: preset.particleBudget,
       quality: preset.id,
       particleDensity: roundMetric(settings.particleDensity),
-      discBurstRadius: echo.discBurstRadius
+      discBurstRadius: echo.discBurstRadius,
+      effectPosition: vectorPayload(effectPosition)
     };
     debugMeasure(
       "echo.collect",
-      "Spawned Echo poof-disc particles",
+      "Spawned elevated Echo poof-disc particles",
       () => {
-        emittedParticleCount = particles.spawnDiscBurst(position, particleCount, echo.burstStrength, echo.discBurstRadius);
+        emittedParticleCount = particles.spawnDiscBurst(
+          effectPosition,
+          particleCount,
+          echo.burstStrength,
+          echo.discBurstRadius
+        );
         particleLogPayload.emittedParticleCount = emittedParticleCount;
       },
       particleLogPayload,
@@ -503,6 +510,7 @@ function triggerEchoZone(echo: TriggeredEchoZone, time: number): void {
     rawParticleBudget: rawParticleCount,
     cappedParticleBudget: particleCount,
     emittedParticleCount,
+    effectPosition: vectorPayload(effectPosition),
     activeParticlesAfter: particles.getActiveCount(),
     activeVisualBursts: echoZones.getCollectBurstCount(),
     activeRippleSources: rippleSources.getActiveSources(time).length

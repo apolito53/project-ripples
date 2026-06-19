@@ -327,7 +327,7 @@ export class ParticleVeil {
     const color = pickDiscCloudColor(Math.random());
 
     this.positions[positionOffset] = center.x + Math.cos(angle) * radius;
-    this.positions[positionOffset + 1] = center.y + 0.18 + (Math.random() - 0.5) * 0.18;
+    this.positions[positionOffset + 1] = center.y + (Math.random() - 0.48) * 0.7;
     this.positions[positionOffset + 2] = center.z + Math.sin(angle) * radius;
     this.velocities[positionOffset] = Math.cos(angle) * outward - Math.sin(angle) * tangent;
     this.velocities[positionOffset + 1] = lift;
@@ -336,9 +336,9 @@ export class ParticleVeil {
     this.colors[positionOffset + 1] = color.g;
     this.colors[positionOffset + 2] = color.b;
     this.ages[index] = 0;
-    this.lifetimes[index] = 0.48 + Math.random() * 0.72;
-    this.baseAlphas[index] = 0.045 + Math.random() * 0.075;
-    this.baseSizes[index] = 5.8 + Math.random() * (8.2 + strength * 3.8);
+    this.lifetimes[index] = 0.52 + Math.random() * 0.78;
+    this.baseAlphas[index] = 0.052 + Math.random() * 0.082;
+    this.baseSizes[index] = 6.8 + Math.random() * (9.4 + strength * 4.2);
     this.alphas[index] = this.baseAlphas[index];
     this.sizes[index] = this.baseSizes[index];
     this.twinkles[index] = Math.random();
@@ -361,7 +361,7 @@ export class ParticleVeil {
     const color = pickParticleColor(Math.random());
 
     this.positions[positionOffset] = center.x + Math.cos(angle) * radius;
-    this.positions[positionOffset + 1] = center.y + 0.34 + (Math.random() - 0.5) * 0.22;
+    this.positions[positionOffset + 1] = center.y + (Math.random() - 0.48) * 0.62;
     this.positions[positionOffset + 2] = center.z + Math.sin(angle) * radius;
     this.velocities[positionOffset] = Math.cos(angle) * outward - Math.sin(angle) * tangent;
     this.velocities[positionOffset + 1] = lift;

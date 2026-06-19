@@ -23,6 +23,10 @@
 - Pooled Echo column and collection-flash point lights so collecting or spawning
   Echoes moves existing lights instead of changing Three.js light counts and
   forcing large render-side shader recompiles.
+- Moved Echo poof-disc particles up to the crystal core height and upgraded the
+  collection burst into a taller diamond flash with arcing mote trails, so the
+  run-through effect reads as one polished elevated burst instead of a surface
+  poof plus an older prototype flash.
 
 ## 0.2.0-ALPHA - 2026-06-18
 
