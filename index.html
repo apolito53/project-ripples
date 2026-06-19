@@ -48,6 +48,10 @@
               </select>
             </label>
             <label class="control-row">
+              <span>Perf Overlay</span>
+              <button id="perf-overlay-toggle" class="effect-toggle effect-toggle--wide" type="button" aria-pressed="true">On</button>
+            </label>
+            <label class="control-row">
               <span>Hex Size</span>
               <div class="range-with-value">
                 <input id="voxel-size-slider" type="range" min="0.25" max="2" step="0.05" value="1" />
@@ -103,6 +107,23 @@
           <pre id="changelog-content" class="changelog-content"></pre>
         </section>
       </div>
+
+      <aside id="perf-overlay" class="perf-overlay" aria-label="Performance overlay">
+        <div class="perf-overlay__header">
+          <span>Perf</span>
+          <span id="perf-overlay-quality">Pretty</span>
+        </div>
+        <dl class="perf-grid">
+          <div><dt>Frame</dt><dd id="perf-frame">-- ms</dd></div>
+          <div><dt>Update</dt><dd id="perf-update">-- ms</dd></div>
+          <div><dt>Render</dt><dd id="perf-render">-- ms</dd></div>
+          <div><dt>FPS</dt><dd id="perf-fps">--</dd></div>
+          <div><dt>Hexes</dt><dd id="perf-hexes">--</dd></div>
+          <div><dt>Particles</dt><dd id="perf-particles">--</dd></div>
+          <div><dt>Waves</dt><dd id="perf-waves">--</dd></div>
+          <div class="perf-grid__wide"><dt>Renderer</dt><dd id="perf-renderer">--</dd></div>
+        </dl>
+      </aside>
 
       <div id="mobile-controls" class="mobile-controls" aria-label="Mobile touch controls" hidden>
         <div class="touch-stick touch-stick--move" data-stick="move" aria-label="Move joystick">

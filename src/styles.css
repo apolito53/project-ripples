@@ -80,6 +80,83 @@ canvas {
   color: rgba(158, 255, 231, 0.62);
 }
 
+.perf-overlay {
+  position: fixed;
+  left: max(18px, calc(env(safe-area-inset-left) + 18px));
+  bottom: max(18px, calc(env(safe-area-inset-bottom) + 18px));
+  z-index: 3;
+  width: min(380px, calc(100vw - 36px));
+  border: 1px solid rgba(142, 218, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(3, 10, 18, 0.66);
+  box-shadow:
+    0 18px 54px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  color: rgba(237, 247, 255, 0.78);
+  pointer-events: none;
+  text-shadow: 0 1px 14px rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(10px);
+}
+
+.perf-overlay[hidden] {
+  display: none;
+}
+
+.perf-overlay__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid rgba(142, 218, 255, 0.12);
+  padding: 8px 10px 7px;
+  color: rgba(158, 255, 231, 0.82);
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0;
+}
+
+.perf-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px 10px;
+  margin: 0;
+  padding: 8px 10px 10px;
+}
+
+.perf-grid div {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 8px;
+  min-width: 0;
+  align-items: baseline;
+}
+
+.perf-grid__wide {
+  grid-column: 1 / -1;
+}
+
+.perf-grid dt,
+.perf-grid dd {
+  margin: 0;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.65;
+  white-space: nowrap;
+}
+
+.perf-grid dt {
+  color: rgba(237, 247, 255, 0.48);
+  font-weight: 850;
+}
+
+.perf-grid dd {
+  overflow: hidden;
+  color: rgba(237, 247, 255, 0.78);
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-weight: 800;
+  text-overflow: ellipsis;
+}
+
 .scene-menu-backdrop,
 .changelog-backdrop {
   position: fixed;
@@ -287,6 +364,17 @@ input[type="range"] {
 
   .range-with-value {
     grid-template-columns: minmax(0, 1fr) 68px;
+  }
+
+  .perf-overlay {
+    right: 12px;
+    bottom: max(12px, calc(env(safe-area-inset-bottom) + 12px));
+    left: 12px;
+    width: auto;
+  }
+
+  .perf-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -561,6 +649,10 @@ input[type="range"] {
   border-color: rgba(237, 247, 255, 0.18);
   background: rgba(2, 8, 15, 0.66);
   color: rgba(237, 247, 255, 0.54);
+}
+
+.effect-toggle--wide {
+  width: min(120px, 100%);
 }
 
 .slider-with-toggle input:disabled {

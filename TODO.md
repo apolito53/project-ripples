@@ -17,9 +17,6 @@ concrete follow-ups that we actually intend to revisit.
   The cube field now fills the circular arena and the player is clamped inside
   it, but the boundary could use a visible rim, edge fade, collision feedback,
   or pulse shimmer so it feels intentional instead of invisible.
-- Add a small debug/perf overlay.
-  Useful readings: frame time, draw mode, hex count, active particle count,
-  resident particle budget, pixel ratio, bloom state, and quality preset.
 - Decide how this lab plugs into `voxel-sandbox-engine`.
   Keep this project standalone for now. Later, harvest visual patterns, shader
   tricks, or control ideas instead of merging the lab directly into the engine.
@@ -54,3 +51,6 @@ concrete follow-ups that we actually intend to revisit.
 - Capped particle budgets back to the x10 Meltdown scale after the x100 stress
   pass became too brute-force for the intended sparkle-cloud look.
 - Published the standalone project to GitHub as `project-ripples`.
+- Added a small `F2`/pause-menu performance overlay with frame timing, render
+  pressure, active particles, resident budgets, wave-source pressure, pixel
+  ratio, bloom state, and quality preset.

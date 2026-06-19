@@ -43,6 +43,7 @@ const particleSlider = requireElement<HTMLInputElement>("#particle-slider");
 const particleToggle = requireElement<HTMLButtonElement>("#particle-toggle");
 const bloomSlider = requireElement<HTMLInputElement>("#bloom-slider");
 const bloomToggle = requireElement<HTMLButtonElement>("#bloom-toggle");
+const perfOverlayToggle = requireElement<HTMLButtonElement>("#perf-overlay-toggle");
 const menuToggle = requireElement<HTMLButtonElement>("#menu-toggle");
 const sceneMenuBackdrop = requireElement<HTMLDivElement>("#scene-menu-backdrop");
 const sceneMenu = requireElement<HTMLElement>("#scene-menu");
@@ -54,6 +55,16 @@ const changelogClose = requireElement<HTMLButtonElement>("#changelog-close");
 const changelogContent = requireElement<HTMLPreElement>("#changelog-content");
 const mobileControls = requireElement<HTMLDivElement>("#mobile-controls");
 const pulseButton = requireElement<HTMLButtonElement>("#pulse-button");
+const perfOverlay = requireElement<HTMLElement>("#perf-overlay");
+const perfOverlayQuality = requireElement<HTMLElement>("#perf-overlay-quality");
+const perfFrame = requireElement<HTMLElement>("#perf-frame");
+const perfUpdate = requireElement<HTMLElement>("#perf-update");
+const perfRender = requireElement<HTMLElement>("#perf-render");
+const perfFps = requireElement<HTMLElement>("#perf-fps");
+const perfHexes = requireElement<HTMLElement>("#perf-hexes");
+const perfParticles = requireElement<HTMLElement>("#perf-particles");
+const perfWaves = requireElement<HTMLElement>("#perf-waves");
+const perfRenderer = requireElement<HTMLElement>("#perf-renderer");
 const APP_VERSION = `v${packageMetadata.version}`;
 const PLAYER_BOUNDARY_PADDING = 1.1;
 const ECHO_ZONE_MAX_ACTIVE = 5;
@@ -148,6 +159,9 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.72;
 renderer.setClearColor(0x020409, 1);
+// Postprocessing uses multiple internal renders. Manual info resets let the
+// perf overlay report the whole frame instead of only the final composer pass.
+renderer.info.autoReset = false;
 app.append(renderer.domElement);
 
 const scene = new THREE.Scene();
@@ -167,6 +181,7 @@ let echoDebugLastFrameLogAt = -Infinity;
 let lastGlobalFrameHitchLogAt = -Infinity;
 let lastFrameUpdateMs = 0;
 let lastFrameRenderMs = 0;
+let lastRawDeltaMs = 0;
 let fieldRebuildTimeoutId = 0;
 const lastMovementRipplePosition = new THREE.Vector3(Infinity, 0, Infinity);
 const movementDirection = new THREE.Vector3();
@@ -177,6 +192,7 @@ const mobileQuery = window.matchMedia("(pointer: coarse), (hover: none)");
 const activeTouchSticks = new Map<number, TouchStickState>();
 let menuVisible = false;
 let changelogVisible = false;
+let perfOverlayVisible = true;
 let pointerLockWasActive = false;
 
 type TouchStickKind = "move" | "look";
@@ -240,6 +256,7 @@ function animate(): void {
   const rawDelta = clock.getDelta();
   const delta = Math.min(rawDelta, 1 / 24);
   const time = clock.elapsedTime;
+  lastRawDeltaMs = rawDelta * 1000;
   const frameStartedAt = performance.now();
   player.update(delta);
   const playerSpeed = player.getSpeed();
@@ -265,17 +282,17 @@ function animate(): void {
     0.28 + effectiveBloomStrength * 0.42,
     getBasePropagationSpeedMetersPerSecond(settings.waveMedium)
   );
-  updateStats(delta, time);
-
   bloomPass.strength = effectiveBloomStrength;
   const renderStartedAt = performance.now();
   lastFrameUpdateMs = renderStartedAt - frameStartedAt;
+  renderer.info.reset();
   if (effectiveBloomStrength > 0.02) {
     composer.render();
   } else {
     renderer.render(scene, camera);
   }
   lastFrameRenderMs = performance.now() - renderStartedAt;
+  updateStats(delta, time);
   logGlobalFrameHitch(time, delta, rawDelta, frameStartedAt);
   logEchoDetonationFrame(time, delta, frameStartedAt);
 }
@@ -620,6 +637,9 @@ function wireControls(): void {
     settings.bloomEnabled = !settings.bloomEnabled;
     updateEffectToggle(bloomToggle, settings.bloomEnabled, bloomSlider);
   });
+  perfOverlayToggle.addEventListener("click", () => {
+    setPerfOverlayVisible(!perfOverlayVisible);
+  });
 }
 
 function syncControlValues(): void {
@@ -640,6 +660,7 @@ function syncControlValues(): void {
   particles.setEnabled(settings.particlesEnabled);
   bloomSlider.value = String(settings.bloomStrength);
   updateEffectToggle(bloomToggle, settings.bloomEnabled, bloomSlider);
+  setPerfOverlayVisible(perfOverlayVisible);
 }
 
 function areSceneInputsEnabled(): boolean {
@@ -655,12 +676,29 @@ function getEffectiveRenderSettings(): typeof settings {
 }
 
 function updateEffectToggle(button: HTMLButtonElement, enabled: boolean, slider: HTMLInputElement): void {
-  button.textContent = enabled ? "On" : "Off";
-  button.setAttribute("aria-pressed", String(enabled));
+  updateBinaryToggle(button, enabled);
   slider.disabled = !enabled;
 }
 
+function updateBinaryToggle(button: HTMLButtonElement, enabled: boolean): void {
+  button.textContent = enabled ? "On" : "Off";
+  button.setAttribute("aria-pressed", String(enabled));
+}
+
+function setPerfOverlayVisible(visible: boolean): void {
+  perfOverlayVisible = visible;
+  perfOverlay.hidden = !visible;
+  updateBinaryToggle(perfOverlayToggle, visible);
+}
+
 function handleGlobalKeyDown(event: KeyboardEvent): void {
+  if (event.code === "F2") {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    setPerfOverlayVisible(!perfOverlayVisible);
+    return;
+  }
+
   if (event.code !== "Escape") return;
 
   // Esc is the one global UI key for the lab. Capture it before the movement
@@ -1480,6 +1518,27 @@ function updateStats(delta: number, time: number): void {
   fpsAccumulatorSeconds = 0;
   statsLine.textContent = `${Math.round(measuredFps)} fps | ${rippleField.getInstanceCount().toLocaleString()} hexes | ${preset.particleBudget.toLocaleString()} particles`;
   mediumLine.textContent = `${basePropagationSpeed.toFixed(1)} m/s | ${settings.waveMedium.effectiveDepth.toFixed(1)}m depth | ${formatVoxelSize(settings.voxelSizeMeters)} hex dia | ${settings.arenaRadiusMeters.toFixed(0)}m arena | ${echoZones.getActiveCount()} echoes | ${activeSources.length} waves | newest ${newestRingRadius.toFixed(1)}m`;
+  updatePerfOverlay(activeSources.length);
+}
+
+function updatePerfOverlay(activeSourceCount: number): void {
+  const renderedSourceCount = rippleField.getRenderedRippleSourceCount();
+  const renderedSourceLimit = rippleField.getRenderedRippleSourceLimit();
+  const activeParticleCount = particles.getActiveCount();
+  const drawCalls = renderer.info.render.calls;
+  const triangles = renderer.info.render.triangles;
+
+  // Keep the overlay data cheap and human-readable. These values are sampled on
+  // the same cadence as the HUD, not every frame, so it can stay on while tuning.
+  perfOverlayQuality.textContent = preset.label;
+  perfFrame.textContent = `${(lastFrameUpdateMs + lastFrameRenderMs).toFixed(1)} ms`;
+  perfUpdate.textContent = `${lastFrameUpdateMs.toFixed(1)} ms`;
+  perfRender.textContent = `${lastFrameRenderMs.toFixed(1)} ms`;
+  perfFps.textContent = `${Math.round(measuredFps)} | raw ${lastRawDeltaMs.toFixed(1)} ms`;
+  perfHexes.textContent = formatCompactCount(rippleField.getInstanceCount());
+  perfParticles.textContent = `${formatCompactCount(activeParticleCount)}/${formatCompactCount(preset.particleBudget)}`;
+  perfWaves.textContent = `${activeSourceCount} | GPU ${renderedSourceCount}/${renderedSourceLimit}`;
+  perfRenderer.textContent = `${drawCalls}c | ${formatCompactCount(triangles)} tri | ${getPixelRatio().toFixed(2)}x`;
 }
 
 function logEchoDetonationFrame(time: number, delta: number, frameStartedAt: number): void {
@@ -1557,6 +1616,13 @@ function formatVoxelSize(sizeMeters: number): string {
   return sizeMeters < 1
     ? `${Math.round(sizeMeters * 100)}cm`
     : `${sizeMeters.toFixed(2)}m`;
+}
+
+function formatCompactCount(value: number): string {
+  const absolute = Math.abs(value);
+  if (absolute >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}m`;
+  if (absolute >= 10_000) return `${(value / 1_000).toFixed(1)}k`;
+  return Math.round(value).toLocaleString();
 }
 
 function resize(): void {

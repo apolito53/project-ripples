@@ -43,6 +43,10 @@
 - Replaced the visible light-source plasma spheres with layered camera-facing
   billboard fog plus a small local point glow, making the fixtures read more
   like glowy plasma emitters than opaque 3D props.
+- Added a small live performance overlay with frame/update/render timing,
+  active versus resident particle counts, rendered wave-source pressure,
+  renderer draw stats, pixel ratio, quality state, an `F2` shortcut, and a
+  pause-menu toggle.
 
 ## 0.2.0-ALPHA - 2026-06-18
 

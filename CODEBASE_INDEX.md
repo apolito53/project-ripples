@@ -26,7 +26,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 
 ## Fast Lookup
 
-- HTML shell, pause menu, changelog dialog, and tuning controls: `index.html`
+- HTML shell, pause menu, changelog dialog, performance overlay, and tuning
+  controls: `index.html`
 - Visual styling and overlay layout: `src/styles.css`
 - App bootstrap, Three.js scene, render loop, quality wiring, and postprocessing:
   `src/main.ts`
@@ -87,6 +88,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
    point lights.
 10. The HUD reports FPS, instance counts, base propagation speed, voxel size,
     arena radius, live Echo count, active source count, and newest ring radius.
+    A denser `F2`/pause-menu performance overlay reports frame/update/render
+    timing, active particles versus resident budget, rendered wave-source
+    pressure, renderer draw stats, pixel ratio, bloom state, and quality.
 11. Esc or the hamburger button opens the centered pause menu, which owns
     tuning controls, a Resume action, and a version changelog button.
 12. The scene renders through bloom when bloom strength is above zero.
@@ -111,6 +115,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `src/labSettings.ts`, and `PROPAGATION_NOTES.md`
 - Change movement/camera feel or the circular player boundary: `src/controls.ts`
 - Change pause-menu layout, changelog behavior, or tuning labels:
+  `index.html`, `src/styles.css`, and `src/main.ts`
+- Change the live performance overlay or its `F2` toggle:
   `index.html`, `src/styles.css`, and `src/main.ts`
 
 ## Sharp Edges
