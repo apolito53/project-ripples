@@ -403,16 +403,29 @@ function createWakeMaterial(uniforms: WakeFieldUniforms): THREE.ShaderMaterial {
           smoothstep(0.015, 0.12, motionDistance);
         float centerDistance = segmentDistance(worldPosition, uPlayerPrevious, uPlayerCurrent);
         float centerBrush = exp(-pow(centerDistance / max(0.2, uBrushRadius), 2.0));
+        float alongMotion = dot(worldPosition - uPlayerCurrent, direction);
         float lateral = abs((worldPosition.x - uPlayerCurrent.x) * direction.y -
           (worldPosition.y - uPlayerCurrent.y) * direction.x);
         float shoulder = exp(-pow((lateral - uShoulderOffset) / max(0.14, uBrushRadius * 0.22), 2.0)) *
           exp(-pow(centerDistance / max(0.35, uBrushRadius * 1.65), 2.0));
-        float stern = smoothstep(0.2, 1.0, dot(worldPosition - uPlayerCurrent, -direction));
+        float sternDistance = max(0.0, -alongMotion);
+        float freshWake = 1.0 - smoothstep(uBrushRadius * 1.25, uBrushRadius * 3.8, sternDistance);
+        float stern = smoothstep(0.2, 1.0, sternDistance) * freshWake;
+        float bowRidge = exp(-pow((alongMotion - uBrushRadius * 0.58) / max(0.18, uBrushRadius * 0.32), 2.0)) *
+          exp(-pow(lateral / max(0.24, uBrushRadius * 0.62), 2.0));
         float injection = moving * uInjectionStrength;
 
-        height += injection * (-centerBrush * 0.82 + shoulder * stern * 0.42);
-        velocity += injection * (-centerBrush * 1.15 + shoulder * stern * 0.62);
-        crest = max(crest * max(0.0, 1.0 - safeDelta * 1.4), moving * (centerBrush * 0.12 + shoulder * 0.75));
+        float shoulderCrest = shoulder * stern;
+        float crestBrush = shoulderCrest * 1.0 + bowRidge * 0.62;
+        float heightBrush = shoulderCrest * 0.34 + bowRidge * 0.2;
+        float troughBrush = centerBrush * 0.22;
+        height += injection * (heightBrush - troughBrush);
+        velocity += injection * (crestBrush * 0.7 - troughBrush * 0.32);
+        // Store a separate crest/foam channel for bloom. Height can stay
+        // physically modest while this channel tells the lit hex shader where
+        // the fresh wavefront should bloom. It decays faster than height so the
+        // calmer water behind the player settles instead of glowing as a slab.
+        crest = max(crest * max(0.0, 1.0 - safeDelta * 2.05), moving * (crestBrush * 1.4 + centerBrush * 0.04));
 
         float arenaMask = 1.0 - smoothstep(uFieldRadius * 0.96, uFieldRadius, length(worldPosition));
         height *= arenaMask;

@@ -52,6 +52,9 @@
   without increasing the analytic pulse source count.
 - Added wake diagnostics and overlay readouts for wake texture mode, size, pass
   cost, and fallback state.
+- Rebalanced GPU wake injection toward raised shoulder/bow crests with a softer
+  center trough, so movement trails read as visible wave fronts instead of dark
+  pressure grooves.
 
 ## 0.2.0-ALPHA - 2026-06-18
 

@@ -353,6 +353,7 @@ export class RippleField {
           vec3 wakeSample = sampleWakeField(cellPosition);
           float wakeTextureWave = wakeSample.r * uWakeStrength;
           float wakeTextureGlow = wakeSample.b * uWakeStrength;
+          float wakeCrestEnergy = clamp(wakeTextureGlow * 1.95 + max(wakeTextureWave, 0.0) * 0.28, 0.0, 1.0);
           float sourceWave = 0.0;
 
           for (int index = 0; index < ${MAX_SHADER_RIPPLE_SOURCES}; index += 1) {
@@ -378,11 +379,11 @@ export class RippleField {
           // fronts bloom. This avoids globally brightening the whole field when
           // multiple sources overlap.
           float crestGlow = clamp(max(shelteredSourceWave, 0.0) * 1.18 + max(flowWave, 0.0) * 0.34 +
-            max(wakeTextureWave, 0.0) * 0.92 + wakeTextureGlow * 0.62, 0.0, 0.9);
+            wakeCrestEnergy * 1.28, 0.0, 0.98);
           float lift = (-pressureDepression + rimLift + shelteredSourceWave * 0.92 + flowWave * 0.42 +
             wakeTextureWave * 0.95) * uRippleHeight;
           float glow = clamp(proximity * (0.04 + shimmer * 0.08) + pressureRim * 0.08 +
-            shelteredSourceWave * 0.2 + flowWave * 0.08 + abs(wakeTextureWave) * 0.08 + wakeTextureGlow * 0.16, 0.0, 0.46);
+            shelteredSourceWave * 0.2 + flowWave * 0.08 + max(wakeTextureWave, 0.0) * 0.06 + wakeCrestEnergy * 0.48, 0.0, 0.62);
           float voxelScale = clamp(uVoxelSize, 0.25, 2.0);
           float tileHeight = max(0.02, (${BASE_TILE_HEIGHT.toFixed(2)} + pressureRim * 0.16 + shelteredSourceWave * 0.44 +
             flowWave * 0.18 + max(wakeTextureWave, 0.0) * 0.22 - bodyPressure * 0.009) * voxelScale);
