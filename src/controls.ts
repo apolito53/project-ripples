@@ -9,11 +9,13 @@ export type PlayerRigOptions = {
   readonly isInputEnabled?: () => boolean;
 };
 
-const WALK_SPEED = 10.5;
-const SPRINT_SPEED = 20.8;
+const WALK_SPEED = 24;
+const SPRINT_SPEED = 36;
 const MOVE_ACCELERATION = 7.5;
 const MOVE_COUNTER_STEER_ACCELERATION = 10.5;
-const MOVE_BRAKE = 4.8;
+// This is an exponential response rate, so smaller values make released
+// movement coast longer before settling to a stop.
+const MOVE_BRAKE = 3.36;
 const MENU_BRAKE = 18;
 const STOP_EPSILON = 0.05;
 const CAMERA_DEFAULT_DISTANCE = 15;

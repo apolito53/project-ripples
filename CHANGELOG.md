@@ -55,8 +55,9 @@
 - Rebalanced GPU wake injection toward raised shoulder/bow crests with a softer
   center trough, so movement trails read as visible wave fronts instead of dark
   pressure grooves.
-- Added heavier avatar momentum, increased walk speed by 25%, and increased
-  sprint top speed by 50% while keeping menu-open braking responsive.
+- Set avatar walk/sprint top speeds to `24 m/s` and `36 m/s`, with a 30%
+  lower brake response so released movement takes longer to coast down while
+  keeping menu-open braking responsive.
 
 ## 0.2.0-ALPHA - 2026-06-18
 
