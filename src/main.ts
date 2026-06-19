@@ -861,9 +861,8 @@ function updatePlayerSpeedSettingsFromControls(changedSlider: "walk" | "sprint")
 }
 
 function syncPlayerSpeedControls(): void {
-  // Sprint keeps a live lower bound of max(20m/s, walk+5m/s). Updating the
-  // slider's min communicates the rule through the native range affordance and
-  // prevents later keyboard/assistive edits from drifting into an invalid pair.
+  // These rows are hidden for now, but keeping the DOM state valid means we can
+  // unhide them later without relearning this exact constraint dance.
   const minimumSprintSpeed = getMinimumSprintSpeedMetersPerSecond(
     settings.playerSpeed.walkSpeedMetersPerSecond
   );

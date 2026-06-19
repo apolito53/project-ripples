@@ -59,18 +59,17 @@ core-local orbiting motes, and segmented fading trails. They wait until the
 avatar runs through them, then detonate into a wider pulse, a flat disc burst of
 sparks, and a short local orb-shatter effect without geometric ring markers.
 Movement has acceleration, braking, and a little carried momentum instead of
-snapping instantly to full speed. It behaves like a small body pushing through
-water: the shader forms a pressed fabric depression, local bow/wake displacement,
-and small raised rim around the avatar, while a dedicated GPU wake texture stores
-the lingering height/velocity field left behind by movement. Manual click/Space
-pulses and collected Echoes still use analytic ring sources, but ordinary
-movement no longer adds little circular wave sources while the avatar runs.
+snapping instantly to full speed. Walk defaults to `10 m/s` and sprint defaults
+to `37 m/s`. It behaves like a small body pushing through water: the shader
+forms a pressed fabric depression, local bow/wake displacement, and small raised
+rim around the avatar, while a dedicated GPU wake texture stores the lingering
+height/velocity field left behind by movement. Manual click/Space pulses and
+collected Echoes still use analytic ring sources, but ordinary movement no
+longer adds little circular wave sources while the avatar runs.
 
-The Esc/hamburger pause menu changes quality, hex size, arena radius, walk and
-sprint speed, ripple height/radius, Depth / Speed, particle density, bloom
-strength, and the live performance overlay while the scene is running. Sprint
-speed is clamped to at least `5 m/s` above walk speed so the two movement modes
-stay distinct while tuning. Hex size treats the current
+The Esc/hamburger pause menu changes quality, hex size, arena radius, ripple
+height/radius, Depth / Speed, particle density, bloom strength, and the live
+performance overlay while the scene is running. Hex size treats the current
 cell scale as `1m`, ranges from `25cm` to `2m`, and measures the regular
 hexagon's widest point-to-point diameter. Changing it rebuilds the instanced
 field after a short debounce so slider drags do not spam geometry work. Arena

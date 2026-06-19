@@ -55,11 +55,11 @@
 - Rebalanced GPU wake injection toward raised shoulder/bow crests with a softer
   center trough, so movement trails read as visible wave fronts instead of dark
   pressure grooves.
-- Set avatar walk/sprint top speeds to `24 m/s` and `36 m/s`, with a 30%
+- Set avatar walk/sprint top speeds to `10 m/s` and `37 m/s`, with a 30%
   lower brake response so released movement takes longer to coast down while
   keeping menu-open braking responsive.
-- Added pause-menu walk and sprint speed sliders, with sprint constrained to at
-  least `5 m/s` faster than walk speed while tuning.
+- Hid the pause-menu walk/sprint speed sliders after settling on defaults while
+  keeping the controls wired for future tuning.
 
 ## 0.2.0-ALPHA - 2026-06-18
 

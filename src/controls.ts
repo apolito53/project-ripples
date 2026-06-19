@@ -21,8 +21,8 @@ export const PLAYER_SPEED_LIMITS = {
 } as const;
 
 export const DEFAULT_PLAYER_SPEED_SETTINGS: PlayerSpeedSettings = {
-  walkSpeedMetersPerSecond: 24,
-  sprintSpeedMetersPerSecond: 36
+  walkSpeedMetersPerSecond: 10,
+  sprintSpeedMetersPerSecond: 37
 };
 
 const MOVE_ACCELERATION = 7.5;
@@ -187,9 +187,8 @@ export class PlayerRig {
   }
 
   setSpeedSettings(settings: PlayerSpeedSettings): void {
-    // The pause-menu sliders can change both speeds in either order. Normalize
-    // here too so external callers cannot accidentally make sprint slower than
-    // the requested walk+gap rule.
+    // Keep the hidden speed controls and any future callers honest: sprint
+    // should remain meaningfully faster even while the visible UI is simplified.
     this.speedSettings = normalizePlayerSpeedSettings(settings);
   }
 

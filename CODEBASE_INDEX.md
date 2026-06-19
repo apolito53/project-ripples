@@ -31,8 +31,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Visual styling and overlay layout: `src/styles.css`
 - App bootstrap, Three.js scene, render loop, quality wiring, and postprocessing:
   `src/main.ts`
-- Momentum-based avatar movement, player speed limits, circular arena clamp,
-  scene-input gating, pointer lock, and camera follow behavior:
+- Momentum-based avatar movement, hidden speed-tuning defaults, circular arena
+  clamp, scene-input gating, pointer lock, and camera follow behavior:
   `src/controls.ts`
 - Circular shader-displaced instanced hex field, including sampled GPU movement
   wake displacement, Meltdown-calibrated honeycomb orientation, lit hex caps,
@@ -98,8 +98,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
     pressure, wake texture mode/pass cost, renderer draw stats, pixel ratio,
     bloom state, and quality.
 11. Esc or the hamburger button opens the centered pause menu, which owns
-    tuning controls, player walk/sprint speed sliders, a Resume action, and a
-    version changelog button.
+    tuning controls, a Resume action, and a version changelog button.
+    Hidden walk/sprint speed rows remain wired for future tuning, but are not
+    currently exposed in the visible menu.
 12. The scene renders through bloom when bloom strength is above zero.
 
 ## Common Change Targets
@@ -122,8 +123,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Change pulse source strength or cooldown: `src/main.ts`
 - Change propagation-speed semantics or medium parameters: `src/waveMedium.ts`,
   `src/labSettings.ts`, and `PROPAGATION_NOTES.md`
-- Change momentum, speed slider limits, movement/camera feel, or the circular
-  player boundary: `src/controls.ts`, `src/labSettings.ts`, and `src/main.ts`
+- Change momentum, hidden speed defaults/limits, movement/camera feel, or the
+  circular player boundary: `src/controls.ts`, `src/labSettings.ts`, and
+  `src/main.ts`
 - Change pause-menu layout, changelog behavior, or tuning labels:
   `index.html`, `src/styles.css`, and `src/main.ts`
 - Change the live performance overlay or its `F2` toggle:
