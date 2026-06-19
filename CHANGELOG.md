@@ -27,6 +27,8 @@
   collection burst into a taller diamond flash with arcing mote trails, so the
   run-through effect reads as one polished elevated burst instead of a surface
   poof plus an older prototype flash.
+- Softened the player pressure depression so nearby hexes still dip under the
+  avatar without burying it as deeply in the field.
 
 ## 0.2.0-ALPHA - 2026-06-18
 

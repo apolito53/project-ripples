@@ -324,9 +324,11 @@ export class RippleField {
           // The player presses into the field now. The center becomes a trough,
           // while a small rim and movement wake keep the surface feeling like a
           // responsive fabric instead of a flat hole punched through the grid.
-          float pressureDepression = bodyPressure * (0.82 + shimmer * 0.22 + movementPush * 0.28);
+          // Keep the depression modest so the avatar disturbs the field without
+          // looking like it is being swallowed by the surrounding hexes.
+          float pressureDepression = bodyPressure * (0.70 + shimmer * 0.18 + movementPush * 0.23);
           float rimLift = pressureRim * (0.16 + shimmer * 0.14 + movementPush * 0.1);
-          float shelteredSourceWave = sourceWave * (1.0 - bodyPressure * 0.5);
+          float shelteredSourceWave = sourceWave * (1.0 - bodyPressure * 0.44);
           // Crest glow is separate from generic ripple glow so only raised wave
           // fronts bloom. This avoids globally brightening the whole field when
           // multiple sources overlap.
@@ -334,7 +336,7 @@ export class RippleField {
           float lift = (-pressureDepression + rimLift + shelteredSourceWave * 0.92 + flowWave * 0.58) * uRippleHeight;
           float glow = clamp(proximity * (0.04 + shimmer * 0.08) + pressureRim * 0.08 + shelteredSourceWave * 0.2 + flowWave * 0.1, 0.0, 0.46);
           float voxelScale = clamp(uVoxelSize, 0.25, 2.0);
-          float tileHeight = max(0.02, (${BASE_TILE_HEIGHT.toFixed(2)} + pressureRim * 0.16 + shelteredSourceWave * 0.44 + flowWave * 0.22 - bodyPressure * 0.025) * voxelScale);
+          float tileHeight = max(0.02, (${BASE_TILE_HEIGHT.toFixed(2)} + pressureRim * 0.16 + shelteredSourceWave * 0.44 + flowWave * 0.22 - bodyPressure * 0.018) * voxelScale);
           float footprint = (${HEX_TILE_DIAMETER.toFixed(2)} + glow * 0.05) * voxelScale;
           float visualHeight = instanceFieldPosition.y + lift + tileHeight;
           float heightWhiteness = smoothstep(-0.75, 3.05, visualHeight);
