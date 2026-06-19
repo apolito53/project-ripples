@@ -126,10 +126,14 @@ type AvatarOrbitTrails = {
   readonly tilts: Float32Array;
 };
 
-type VisibleDirectionalLightSource = {
+type SceneLightSource = {
   readonly object: THREE.Group;
+  readonly light: THREE.SpotLight;
+  readonly target: THREE.Object3D;
   readonly horizontalDirection: THREE.Vector3;
   readonly heightScale: number;
+  readonly intensity: number;
+  readonly distanceScale: number;
 };
 
 const renderer = new THREE.WebGLRenderer({
@@ -164,7 +168,7 @@ const lastMovementRipplePosition = new THREE.Vector3(Infinity, 0, Infinity);
 const movementDirection = new THREE.Vector3();
 const movementShoulder = new THREE.Vector3();
 const movementPerpendicular = new THREE.Vector3();
-const visibleDirectionalLightSources: VisibleDirectionalLightSource[] = [];
+const sceneLightSources: SceneLightSource[] = [];
 const mobileQuery = window.matchMedia("(pointer: coarse), (hover: none)");
 const activeTouchSticks = new Map<number, TouchStickState>();
 let menuVisible = false;
@@ -875,18 +879,15 @@ function applyQualityPreset(nextPreset: QualityPreset, initial: boolean): void {
 }
 
 function updateShadowResolution(size: number, fieldRadius: number): void {
-  const shadowBounds = fieldRadius + 8;
-  for (const child of scene.children) {
-    if (!(child instanceof THREE.DirectionalLight)) continue;
-    child.castShadow = size > 0;
-    child.shadow.mapSize.set(Math.max(1, size), Math.max(1, size));
-    child.shadow.camera.near = 1;
-    child.shadow.camera.far = Math.max(180, fieldRadius * 2.4);
-    child.shadow.camera.left = -shadowBounds;
-    child.shadow.camera.right = shadowBounds;
-    child.shadow.camera.top = shadowBounds;
-    child.shadow.camera.bottom = -shadowBounds;
-    child.shadow.needsUpdate = true;
+  const mapSize = Math.max(1, size);
+  const shadowDistance = Math.max(180, fieldRadius * 2.7);
+
+  for (const source of sceneLightSources) {
+    source.light.castShadow = size > 0;
+    source.light.shadow.mapSize.set(mapSize, mapSize);
+    source.light.shadow.camera.near = 1;
+    source.light.shadow.camera.far = shadowDistance;
+    source.light.shadow.needsUpdate = true;
   }
 }
 
@@ -894,42 +895,43 @@ function createLighting(): void {
   const ambient = new THREE.HemisphereLight(0x87ccff, 0x06111a, 0.82);
   scene.add(ambient);
 
-  const key = new THREE.DirectionalLight(0xbcecff, 2.2);
-  key.name = "Soft cyan key light";
-  key.position.set(-24, 38, 18);
-  scene.add(key);
-  const keyMarker = createVisibleDirectionalLightSource(
-    "Visible cyan key light source",
-    key.position,
+  const keySource = createSceneLightSource(
+    "Cyan key source fixture",
+    "Cyan key source spotlight",
+    new THREE.Vector3(-24, 38, 18),
     KEY_LIGHT_SOURCE_COLOR,
     1.25,
-    0.26
+    0.34,
+    330,
+    2.75
   );
-  visibleDirectionalLightSources.push(keyMarker);
-  scene.add(keyMarker.object);
+  sceneLightSources.push(keySource);
+  scene.add(keySource.object, keySource.target);
 
-  const rim = new THREE.DirectionalLight(0xff7de7, 1.1);
-  rim.name = "Magenta rim light";
-  rim.position.set(30, 18, -24);
-  scene.add(rim);
-  const rimMarker = createVisibleDirectionalLightSource(
-    "Visible magenta rim light source",
-    rim.position,
+  const rimSource = createSceneLightSource(
+    "Magenta rim source fixture",
+    "Magenta rim source spotlight",
+    new THREE.Vector3(30, 18, -24),
     RIM_LIGHT_SOURCE_COLOR,
     0.92,
-    0.2
+    0.27,
+    150,
+    2.25
   );
-  visibleDirectionalLightSources.push(rimMarker);
-  scene.add(rimMarker.object);
+  sceneLightSources.push(rimSource);
+  scene.add(rimSource.object, rimSource.target);
 }
 
-function createVisibleDirectionalLightSource(
+function createSceneLightSource(
   name: string,
+  lightName: string,
   position: THREE.Vector3,
   colorHex: number,
   scale: number,
-  heightScale: number
-): VisibleDirectionalLightSource {
+  heightScale: number,
+  intensity: number,
+  distanceScale: number
+): SceneLightSource {
   const color = new THREE.Color(colorHex);
   const object = new THREE.Group();
   object.name = name;
@@ -938,11 +940,9 @@ function createVisibleDirectionalLightSource(
   if (horizontalDirection.lengthSq() <= 0.0001) horizontalDirection.set(1, 0, 0);
   horizontalDirection.normalize();
 
-  // Directional lights are abstract in Three.js, which made the arena shadows
-  // feel like they came from nowhere. These markers are visible art only:
-  // no real light, no shadows, just a readable source in the sky. The actual
-  // position gets projected onto the current arena horizon below so the marker
-  // stays findable when the arena-radius slider changes.
+  // These fixtures are the actual key/rim sources now. The mesh gives the
+  // player something visible to read, while the co-located spotlight does the
+  // illumination and shadow work from the same point in space.
   const core = new THREE.Mesh(
     new THREE.IcosahedronGeometry(0.95 * scale, 2),
     new THREE.MeshBasicMaterial({
@@ -990,18 +990,35 @@ function createVisibleDirectionalLightSource(
   glint.renderOrder = 5;
   object.add(glint);
 
-  return { object, horizontalDirection, heightScale };
+  const light = new THREE.SpotLight(colorHex, intensity, 1, 1.08, 0.74, 1.18);
+  light.name = lightName;
+  light.position.set(0, 0, 0);
+  light.shadow.bias = -0.00018;
+  light.shadow.normalBias = 0.018;
+  object.add(light);
+
+  const target = new THREE.Object3D();
+  target.name = `${name} aim target`;
+  target.position.set(0, 0.35, 0);
+  light.target = target;
+
+  return { object, light, target, horizontalDirection, heightScale, intensity, distanceScale };
 }
 
-function updateVisibleDirectionalLightSources(nextPreset: QualityPreset): void {
-  const horizonRadius = nextPreset.fieldRadius * 0.66;
+function updateSceneLightSources(nextPreset: QualityPreset): void {
+  const horizonRadius = nextPreset.fieldRadius * 0.72;
 
-  for (const source of visibleDirectionalLightSources) {
+  for (const source of sceneLightSources) {
     source.object.position.set(
       source.horizontalDirection.x * horizonRadius,
-      THREE.MathUtils.clamp(nextPreset.fieldRadius * source.heightScale, 13, 30),
+      THREE.MathUtils.clamp(nextPreset.fieldRadius * source.heightScale, 18, 56),
       source.horizontalDirection.z * horizonRadius
     );
+    source.target.position.set(0, 0.35, 0);
+    source.light.intensity = source.intensity;
+    source.light.distance = Math.max(150, nextPreset.fieldRadius * source.distanceScale);
+    source.light.shadow.camera.far = Math.max(180, nextPreset.fieldRadius * 2.7);
+    source.light.shadow.needsUpdate = true;
   }
 }
 
@@ -1029,7 +1046,7 @@ function updateStageFloor(nextPreset: QualityPreset): void {
   const floorRadius = nextPreset.fieldRadius + nextPreset.tileSpacing * 0.5;
   stageFloor.scale.set(floorRadius, floorRadius, 1);
   arenaBarrier.setRadius(floorRadius);
-  updateVisibleDirectionalLightSources(nextPreset);
+  updateSceneLightSources(nextPreset);
 }
 
 function createAvatar(): {

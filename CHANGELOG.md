@@ -35,8 +35,8 @@
   particle trail centered on the avatar core instead of hovering above it.
 - Split manual click/Space pulse particles into a faster, flatter burst that
   diffuses outward instead of lingering as a vertical sparkle cylinder.
-- Added visible emissive markers for the cyan key and magenta rim directional
-  lights so their shadow/reflection sources are readable in the arena.
+- Converted the cyan key and magenta rim lighting into visible spotlight
+  fixtures so the source models actually cast the arena light and shadows.
 
 ## 0.2.0-ALPHA - 2026-06-18
 

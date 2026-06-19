@@ -37,6 +37,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
   hex caps, animated-height cell tinting, and bounded crest-specific glow:
   `src/rippleField.ts`
 - Visual-only smooth glowing arena-edge gradient barrier: `src/arenaBarrier.ts`
+- Visible cyan/magenta spotlight fixtures, stage floor, core scene lighting,
+  and player avatar visuals: `src/main.ts`
 - Lifetime-pruned pulse/wake source list and shader uniform writer:
   `src/rippleSources.ts`
 - Persistent collectible Echo-column lights, bright orb lights, vertical
