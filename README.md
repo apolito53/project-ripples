@@ -7,7 +7,7 @@ This is intentionally separate from `voxel-sandbox-engine`. The goal is to make
 a polished visual lab first, then borrow patterns or ideas later if they deserve
 to graduate into the main voxel engine.
 
-Current version: `v0.2.0-ALPHA`.
+Current version: `v0.3.0-ALPHA`.
 
 ## Quick Start
 
@@ -134,7 +134,7 @@ Project planning:
 Versioning:
 
 - While the project is still experimental, release tags use alpha prerelease
-  labels. The current baseline is `v0.2.0-ALPHA`.
+  labels. The current baseline is `v0.3.0-ALPHA`.
 
 ## Design Notes
 

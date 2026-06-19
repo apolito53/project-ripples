@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.0-ALPHA - 2026-06-19
+
 ### Changed
 
 - Moved scene tuning controls into a centered Esc/hamburger pause menu with a
