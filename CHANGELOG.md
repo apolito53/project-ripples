@@ -29,6 +29,8 @@
   poof plus an older prototype flash.
 - Softened the player pressure depression so nearby hexes still dip under the
   avatar without burying it as deeply in the field.
+- Halved the player pressure depth again for a lighter footprint around the
+  avatar while preserving the visible field dent.
 
 ## 0.2.0-ALPHA - 2026-06-18
 
