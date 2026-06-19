@@ -130,10 +130,14 @@ type SceneLightSource = {
   readonly object: THREE.Group;
   readonly light: THREE.SpotLight;
   readonly target: THREE.Object3D;
+  readonly plasmaVisual: THREE.Group;
+  readonly plasmaMaterial: THREE.ShaderMaterial;
+  readonly haloMaterials: readonly THREE.ShaderMaterial[];
   readonly horizontalDirection: THREE.Vector3;
   readonly heightScale: number;
   readonly intensity: number;
   readonly distanceScale: number;
+  readonly phaseOffset: number;
 };
 
 const renderer = new THREE.WebGLRenderer({
@@ -246,6 +250,7 @@ function animate(): void {
   }
   maybeSpawnMovementRipple(time, playerSpeed);
   arenaBarrier.update(time);
+  updateSceneLightSourceVisuals(time);
   echoZones.update(time);
   collectEchoZones(time);
   maybeSpawnEchoZone(time);
@@ -933,6 +938,7 @@ function createSceneLightSource(
   distanceScale: number
 ): SceneLightSource {
   const color = new THREE.Color(colorHex);
+  const hotColor = color.clone().lerp(new THREE.Color(0xffffff), 0.72);
   const object = new THREE.Group();
   object.name = name;
 
@@ -943,52 +949,52 @@ function createSceneLightSource(
   // These fixtures are the actual key/rim sources now. The mesh gives the
   // player something visible to read, while the co-located spotlight does the
   // illumination and shadow work from the same point in space.
+  const plasmaVisual = new THREE.Group();
+  plasmaVisual.name = `${name} plasma ball visual`;
+  object.add(plasmaVisual);
+
+  const plasmaMaterial = createPlasmaSourceMaterial(color, hotColor);
   const core = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(0.95 * scale, 2),
-    new THREE.MeshBasicMaterial({
-      color,
-      transparent: true,
-      opacity: 0.96,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      toneMapped: false
-    })
+    new THREE.SphereGeometry(1.1 * scale, 48, 32),
+    plasmaMaterial
   );
-  core.name = `${name} bright core`;
+  core.name = `${name} animated plasma core`;
   core.renderOrder = 4;
-  object.add(core);
+  plasmaVisual.add(core);
 
-  const halo = new THREE.Mesh(
-    new THREE.SphereGeometry(3.15 * scale, 32, 16),
+  const innerHaloMaterial = createPlasmaHaloMaterial(color, 0.42, 1.35);
+  const outerHaloMaterial = createPlasmaHaloMaterial(color, 0.22, 0.72);
+
+  const innerHalo = new THREE.Mesh(
+    new THREE.SphereGeometry(2.15 * scale, 40, 20),
+    innerHaloMaterial
+  );
+  innerHalo.name = `${name} inner plasma halo`;
+  innerHalo.renderOrder = 3;
+  plasmaVisual.add(innerHalo);
+
+  const outerHalo = new THREE.Mesh(
+    new THREE.SphereGeometry(4.15 * scale, 40, 20),
+    outerHaloMaterial
+  );
+  outerHalo.name = `${name} outer plasma bloom`;
+  outerHalo.renderOrder = 2;
+  plasmaVisual.add(outerHalo);
+
+  const hotCenter = new THREE.Mesh(
+    new THREE.SphereGeometry(0.46 * scale, 28, 16),
     new THREE.MeshBasicMaterial({
-      color,
+      color: hotColor,
       transparent: true,
-      opacity: 0.16,
+      opacity: 0.82,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       toneMapped: false
     })
   );
-  halo.name = `${name} soft halo`;
-  halo.renderOrder = 3;
-  object.add(halo);
-
-  const glint = new THREE.Mesh(
-    new THREE.OctahedronGeometry(1.65 * scale, 0),
-    new THREE.MeshBasicMaterial({
-      color: color.clone().lerp(new THREE.Color(0xffffff), 0.34),
-      transparent: true,
-      opacity: 0.34,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      wireframe: true,
-      toneMapped: false
-    })
-  );
-  glint.name = `${name} faceted glint`;
-  glint.rotation.set(0.35, 0.2, 0.7);
-  glint.renderOrder = 5;
-  object.add(glint);
+  hotCenter.name = `${name} hot white plasma center`;
+  hotCenter.renderOrder = 5;
+  plasmaVisual.add(hotCenter);
 
   const light = new THREE.SpotLight(colorHex, intensity, 1, 1.08, 0.74, 1.18);
   light.name = lightName;
@@ -1002,7 +1008,140 @@ function createSceneLightSource(
   target.position.set(0, 0.35, 0);
   light.target = target;
 
-  return { object, light, target, horizontalDirection, heightScale, intensity, distanceScale };
+  return {
+    object,
+    light,
+    target,
+    plasmaVisual,
+    plasmaMaterial,
+    haloMaterials: [innerHaloMaterial, outerHaloMaterial],
+    horizontalDirection,
+    heightScale,
+    intensity,
+    distanceScale,
+    phaseOffset: position.length() * 0.037
+  };
+}
+
+function createPlasmaSourceMaterial(color: THREE.Color, hotColor: THREE.Color): THREE.ShaderMaterial {
+  // The core needs to read as energy, not geometry. This small shader fakes
+  // plasma filaments with layered sine fields in local-sphere space and pushes
+  // the result through additive bloom-friendly color.
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+    uniforms: {
+      uTime: { value: 0 },
+      uColor: { value: color.clone() },
+      uHotColor: { value: hotColor.clone() }
+    },
+    vertexShader: `
+      varying vec3 vLocalPosition;
+      varying vec3 vViewNormal;
+
+      void main() {
+        vLocalPosition = position;
+        vViewNormal = normalize(normalMatrix * normal);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform vec3 uColor;
+      uniform vec3 uHotColor;
+      varying vec3 vLocalPosition;
+      varying vec3 vViewNormal;
+
+      void main() {
+        vec3 p = normalize(vLocalPosition);
+        float filamentField =
+          sin(p.x * 13.0 + p.y * 5.5 + uTime * 2.4) +
+          sin(p.y * 15.0 - p.z * 6.0 - uTime * 1.9) +
+          sin((p.x + p.z) * 12.0 + p.y * 3.0 + uTime * 3.1);
+        float filaments = smoothstep(1.05, 2.35, filamentField);
+        float hotBand = smoothstep(0.62, 1.0, filaments);
+        float rim = pow(1.0 - abs(vViewNormal.z), 1.35);
+        float pulse = 0.88 + 0.12 * sin(uTime * 4.2 + p.y * 6.0);
+        vec3 plasma = mix(uColor * 1.7, uHotColor * 4.2, hotBand);
+        float alpha = clamp((0.46 + filaments * 0.36 + rim * 0.32) * pulse, 0.0, 1.0);
+
+        gl_FragColor = vec4(plasma, alpha);
+      }
+    `
+  });
+}
+
+function createPlasmaHaloMaterial(
+  color: THREE.Color,
+  opacity: number,
+  shimmerSpeed: number
+): THREE.ShaderMaterial {
+  // Halo shells are transparent at the face and brighter near the rim, which
+  // gives us a volumetric glow impression without another expensive pass.
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    depthTest: true,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+    uniforms: {
+      uTime: { value: 0 },
+      uColor: { value: color.clone() },
+      uOpacity: { value: opacity },
+      uShimmerSpeed: { value: shimmerSpeed }
+    },
+    vertexShader: `
+      varying vec3 vLocalPosition;
+      varying vec3 vViewNormal;
+
+      void main() {
+        vLocalPosition = position;
+        vViewNormal = normalize(normalMatrix * normal);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform vec3 uColor;
+      uniform float uOpacity;
+      uniform float uShimmerSpeed;
+      varying vec3 vLocalPosition;
+      varying vec3 vViewNormal;
+
+      void main() {
+        vec3 p = normalize(vLocalPosition);
+        float rim = pow(1.0 - abs(vViewNormal.z), 2.35);
+        float veil = smoothstep(0.08, 0.95, rim);
+        float shimmer = 0.82 + 0.18 * sin(uTime * uShimmerSpeed + p.x * 7.0 + p.y * 5.0);
+        float alpha = uOpacity * veil * shimmer;
+        if (alpha < 0.002) discard;
+
+        gl_FragColor = vec4(uColor * (1.5 + rim * 3.2), alpha);
+      }
+    `
+  });
+}
+
+function updateSceneLightSourceVisuals(time: number): void {
+  for (const source of sceneLightSources) {
+    const localTime = time + source.phaseOffset;
+    source.plasmaMaterial.uniforms.uTime.value = localTime;
+    for (const material of source.haloMaterials) {
+      material.uniforms.uTime.value = localTime;
+    }
+
+    // Rotate and breathe only the visual shell; the attached spotlight stays at
+    // the same source position and keeps aiming at the field center.
+    source.plasmaVisual.rotation.set(
+      Math.sin(localTime * 0.31) * 0.08,
+      localTime * 0.18,
+      Math.cos(localTime * 0.27) * 0.06
+    );
+    source.plasmaVisual.scale.setScalar(1 + Math.sin(localTime * 2.4) * 0.035);
+  }
 }
 
 function updateSceneLightSources(nextPreset: QualityPreset): void {

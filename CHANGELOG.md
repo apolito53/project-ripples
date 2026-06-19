@@ -37,6 +37,9 @@
   diffuses outward instead of lingering as a vertical sparkle cylinder.
 - Converted the cyan key and magenta rim lighting into visible spotlight
   fixtures so the source models actually cast the arena light and shadows.
+- Reworked those visible spotlight fixtures into animated plasma balls with
+  shader filaments, rim-glow halo shells, and attached real spotlights so they
+  read as actual light sources instead of strange floating geometry.
 
 ## 0.2.0-ALPHA - 2026-06-18
 
