@@ -9,11 +9,13 @@ export type PlayerRigOptions = {
   readonly isInputEnabled?: () => boolean;
 };
 
-const WALK_SPEED = 8.4;
-const SPRINT_MULTIPLIER = 1.65;
-const MOVE_ACCELERATION = 16;
-const MOVE_BRAKE = 22;
-const STOP_EPSILON = 0.035;
+const WALK_SPEED = 10.5;
+const SPRINT_SPEED = 20.8;
+const MOVE_ACCELERATION = 7.5;
+const MOVE_COUNTER_STEER_ACCELERATION = 10.5;
+const MOVE_BRAKE = 4.8;
+const MENU_BRAKE = 18;
+const STOP_EPSILON = 0.05;
 const CAMERA_DEFAULT_DISTANCE = 15;
 const CAMERA_DISTANCE_RANGE = { min: 7.5, max: 34 };
 const CAMERA_TARGET_HEIGHT = 0.58;
@@ -102,9 +104,19 @@ export class PlayerRig {
 
     const hasIntent = intent.lengthSq() > 0;
     if (hasIntent) intent.normalize();
-    const speed = WALK_SPEED * (this.keys.has("ShiftLeft") || this.keys.has("ShiftRight") ? SPRINT_MULTIPLIER : 1);
-    const targetVelocity = intent.multiplyScalar(speed);
-    const response = hasIntent ? MOVE_ACCELERATION : MOVE_BRAKE;
+    const isSprinting = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight");
+    const targetSpeed = isSprinting ? SPRINT_SPEED : WALK_SPEED;
+    const targetVelocity = intent.multiplyScalar(targetSpeed);
+    const hasPlanarVelocity = this.velocity.lengthSq() > STOP_EPSILON * STOP_EPSILON;
+    const isCounterSteering = hasIntent && hasPlanarVelocity && targetVelocity.dot(this.velocity) < 0;
+    const response = hasIntent
+      ? (isCounterSteering ? MOVE_COUNTER_STEER_ACCELERATION : MOVE_ACCELERATION)
+      : (inputEnabled ? MOVE_BRAKE : MENU_BRAKE);
+
+    // Movement is intentionally inertial now: input defines the velocity we are
+    // trying to reach, while acceleration/brake response decides how much of
+    // that change happens this frame. Counter-steering stays a little snappier
+    // so the avatar feels weighty without becoming a runaway sled.
     this.velocity.lerp(targetVelocity, 1 - Math.exp(-delta * response));
     if (!hasIntent && this.velocity.lengthSq() < STOP_EPSILON * STOP_EPSILON) {
       this.velocity.set(0, 0, 0);

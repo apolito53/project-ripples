@@ -34,7 +34,7 @@ Open `http://127.0.0.1:5183`.
 - `Mouse wheel` zooms the follow camera in and out.
 - `+` / `-` zoom in and out; `0` resets the camera distance.
 - `Space` drops a pulse in front of the avatar.
-- `Shift` increases movement speed.
+- `Shift` sprints with momentum.
 - `F2` shows or hides the live performance overlay.
 - `Esc` releases pointer lock and opens/closes the pause menu.
 - The pause menu's version pill opens the in-app changelog.
@@ -58,12 +58,13 @@ a bright inner orb, a vertically stretched diamond-shaped glow cloud, faster
 core-local orbiting motes, and segmented fading trails. They wait until the
 avatar runs through them, then detonate into a wider pulse, a flat disc burst of
 sparks, and a short local orb-shatter effect without geometric ring markers.
-Movement behaves like a small body pushing through water: the shader forms a
-pressed fabric depression, local bow/wake displacement, and small raised rim
-around the avatar, while a dedicated GPU wake texture stores the lingering
-height/velocity field left behind by movement. Manual click/Space pulses and
-collected Echoes still use analytic ring sources, but ordinary movement no
-longer adds little circular wave sources while the avatar runs.
+Movement has acceleration, braking, and a little carried momentum instead of
+snapping instantly to full speed. It behaves like a small body pushing through
+water: the shader forms a pressed fabric depression, local bow/wake displacement,
+and small raised rim around the avatar, while a dedicated GPU wake texture stores
+the lingering height/velocity field left behind by movement. Manual click/Space
+pulses and collected Echoes still use analytic ring sources, but ordinary
+movement no longer adds little circular wave sources while the avatar runs.
 
 The Esc/hamburger pause menu changes quality, hex size, arena radius, ripple
 height/radius, Depth / Speed, particle density, bloom strength, and the live

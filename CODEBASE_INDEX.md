@@ -31,8 +31,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Visual styling and overlay layout: `src/styles.css`
 - App bootstrap, Three.js scene, render loop, quality wiring, and postprocessing:
   `src/main.ts`
-- Avatar movement, circular arena clamp, scene-input gating, pointer lock, and
-  camera follow behavior: `src/controls.ts`
+- Momentum-based avatar movement, circular arena clamp, scene-input gating,
+  pointer lock, and camera follow behavior: `src/controls.ts`
 - Circular shader-displaced instanced hex field, including sampled GPU movement
   wake displacement, Meltdown-calibrated honeycomb orientation, lit hex caps,
   animated-height cell tinting, and bounded crest-specific glow:
@@ -68,7 +68,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 1. `index.html` loads `src/main.ts`.
 2. `main.ts` creates the renderer, scene, camera, bloom composer, field, particles,
    pulse lights, and glow avatar.
-3. `PlayerRig` updates planar movement and camera follow every frame.
+3. `PlayerRig` updates momentum-based planar movement and camera follow every
+   frame.
 4. Cooldown-gated clicks and `Space` add analytic pulse sources; avatar movement
    writes a continuous wake influence into a GPU height/velocity texture instead
    of adding little circular source stamps. Echo-zone timers add persistent
@@ -119,7 +120,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Change pulse source strength or cooldown: `src/main.ts`
 - Change propagation-speed semantics or medium parameters: `src/waveMedium.ts`,
   `src/labSettings.ts`, and `PROPAGATION_NOTES.md`
-- Change movement/camera feel or the circular player boundary: `src/controls.ts`
+- Change momentum, movement/camera feel, or the circular player boundary:
+  `src/controls.ts`
 - Change pause-menu layout, changelog behavior, or tuning labels:
   `index.html`, `src/styles.css`, and `src/main.ts`
 - Change the live performance overlay or its `F2` toggle:
