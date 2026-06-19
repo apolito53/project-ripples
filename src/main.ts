@@ -129,10 +129,10 @@ type AvatarOrbitTrails = {
 type SceneLightSource = {
   readonly object: THREE.Group;
   readonly light: THREE.SpotLight;
+  readonly fillLight: THREE.PointLight;
   readonly target: THREE.Object3D;
   readonly plasmaVisual: THREE.Group;
-  readonly plasmaMaterial: THREE.ShaderMaterial;
-  readonly haloMaterials: readonly THREE.ShaderMaterial[];
+  readonly billboardMaterials: readonly THREE.ShaderMaterial[];
   readonly horizontalDirection: THREE.Vector3;
   readonly heightScale: number;
   readonly intensity: number;
@@ -946,55 +946,62 @@ function createSceneLightSource(
   if (horizontalDirection.lengthSq() <= 0.0001) horizontalDirection.set(1, 0, 0);
   horizontalDirection.normalize();
 
-  // These fixtures are the actual key/rim sources now. The mesh gives the
-  // player something visible to read, while the co-located spotlight does the
-  // illumination and shadow work from the same point in space.
+  // These fixtures are the actual key/rim sources. The visible part is now a
+  // layered billboard impostor: flat shader cards that always face the camera,
+  // overlap into a soft glow volume, and sit on top of real light objects.
   const plasmaVisual = new THREE.Group();
-  plasmaVisual.name = `${name} plasma ball visual`;
+  plasmaVisual.name = `${name} billboard plasma volume`;
   object.add(plasmaVisual);
 
-  const plasmaMaterial = createPlasmaSourceMaterial(color, hotColor);
-  const core = new THREE.Mesh(
-    new THREE.SphereGeometry(1.1 * scale, 48, 32),
-    plasmaMaterial
-  );
-  core.name = `${name} animated plasma core`;
-  core.renderOrder = 4;
-  plasmaVisual.add(core);
+  const billboardMaterials: THREE.ShaderMaterial[] = [];
+  const billboardGeometry = new THREE.PlaneGeometry(1, 1);
+  const billboardLayers = [
+    {
+      name: "outer fog bloom",
+      size: 8.8,
+      opacity: 0.36,
+      coreRadius: 0.18,
+      fogPower: 1.15,
+      filamentStrength: 0.18,
+      timeScale: 0.46,
+      depthOffset: -0.04,
+      renderOrder: 2
+    },
+    {
+      name: "middle plasma haze",
+      size: 5.2,
+      opacity: 0.58,
+      coreRadius: 0.24,
+      fogPower: 1.55,
+      filamentStrength: 0.36,
+      timeScale: 0.78,
+      depthOffset: 0,
+      renderOrder: 3
+    },
+    {
+      name: "hot inner corona",
+      size: 2.25,
+      opacity: 0.86,
+      coreRadius: 0.42,
+      fogPower: 2.25,
+      filamentStrength: 0.62,
+      timeScale: 1.14,
+      depthOffset: 0.04,
+      renderOrder: 4
+    }
+  ] as const;
 
-  const innerHaloMaterial = createPlasmaHaloMaterial(color, 0.42, 1.35);
-  const outerHaloMaterial = createPlasmaHaloMaterial(color, 0.22, 0.72);
-
-  const innerHalo = new THREE.Mesh(
-    new THREE.SphereGeometry(2.15 * scale, 40, 20),
-    innerHaloMaterial
-  );
-  innerHalo.name = `${name} inner plasma halo`;
-  innerHalo.renderOrder = 3;
-  plasmaVisual.add(innerHalo);
-
-  const outerHalo = new THREE.Mesh(
-    new THREE.SphereGeometry(4.15 * scale, 40, 20),
-    outerHaloMaterial
-  );
-  outerHalo.name = `${name} outer plasma bloom`;
-  outerHalo.renderOrder = 2;
-  plasmaVisual.add(outerHalo);
-
-  const hotCenter = new THREE.Mesh(
-    new THREE.SphereGeometry(0.46 * scale, 28, 16),
-    new THREE.MeshBasicMaterial({
-      color: hotColor,
-      transparent: true,
-      opacity: 0.82,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      toneMapped: false
-    })
-  );
-  hotCenter.name = `${name} hot white plasma center`;
-  hotCenter.renderOrder = 5;
-  plasmaVisual.add(hotCenter);
+  for (const layer of billboardLayers) {
+    const material = createPlasmaBillboardMaterial(color, hotColor, layer);
+    const billboard = new THREE.Mesh(billboardGeometry, material);
+    billboard.name = `${name} ${layer.name} billboard`;
+    billboard.scale.setScalar(layer.size * scale);
+    billboard.position.z = layer.depthOffset * scale;
+    billboard.renderOrder = layer.renderOrder;
+    billboard.frustumCulled = false;
+    plasmaVisual.add(billboard);
+    billboardMaterials.push(material);
+  }
 
   const light = new THREE.SpotLight(colorHex, intensity, 1, 1.08, 0.74, 1.18);
   light.name = lightName;
@@ -1002,6 +1009,11 @@ function createSceneLightSource(
   light.shadow.bias = -0.00018;
   light.shadow.normalBias = 0.018;
   object.add(light);
+
+  const fillLight = new THREE.PointLight(colorHex, intensity * 0.018, 42 * scale, 1.9);
+  fillLight.name = `${name} local plasma glow`;
+  fillLight.castShadow = false;
+  object.add(fillLight);
 
   const target = new THREE.Object3D();
   target.name = `${name} aim target`;
@@ -1011,10 +1023,10 @@ function createSceneLightSource(
   return {
     object,
     light,
+    fillLight,
     target,
     plasmaVisual,
-    plasmaMaterial,
-    haloMaterials: [innerHaloMaterial, outerHaloMaterial],
+    billboardMaterials,
     horizontalDirection,
     heightScale,
     intensity,
@@ -1023,27 +1035,41 @@ function createSceneLightSource(
   };
 }
 
-function createPlasmaSourceMaterial(color: THREE.Color, hotColor: THREE.Color): THREE.ShaderMaterial {
-  // The core needs to read as energy, not geometry. This small shader fakes
-  // plasma filaments with layered sine fields in local-sphere space and pushes
-  // the result through additive bloom-friendly color.
+function createPlasmaBillboardMaterial(
+  color: THREE.Color,
+  hotColor: THREE.Color,
+  layer: {
+    readonly opacity: number;
+    readonly coreRadius: number;
+    readonly fogPower: number;
+    readonly filamentStrength: number;
+    readonly timeScale: number;
+  }
+): THREE.ShaderMaterial {
+  // This is the practical "volumetric" cheat: radial fog and animated plasma
+  // filaments in screen-facing UV space. Multiple layers stack into a glow
+  // cloud while keeping the light count and geometry count tiny.
   return new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
+    depthTest: false,
     blending: THREE.AdditiveBlending,
     toneMapped: false,
     uniforms: {
       uTime: { value: 0 },
       uColor: { value: color.clone() },
-      uHotColor: { value: hotColor.clone() }
+      uHotColor: { value: hotColor.clone() },
+      uOpacity: { value: layer.opacity },
+      uCoreRadius: { value: layer.coreRadius },
+      uFogPower: { value: layer.fogPower },
+      uFilamentStrength: { value: layer.filamentStrength },
+      uTimeScale: { value: layer.timeScale }
     },
     vertexShader: `
-      varying vec3 vLocalPosition;
-      varying vec3 vViewNormal;
+      varying vec2 vUv;
 
       void main() {
-        vLocalPosition = position;
-        vViewNormal = normalize(normalMatrix * normal);
+        vUv = uv;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }
     `,
@@ -1051,75 +1077,33 @@ function createPlasmaSourceMaterial(color: THREE.Color, hotColor: THREE.Color): 
       uniform float uTime;
       uniform vec3 uColor;
       uniform vec3 uHotColor;
-      varying vec3 vLocalPosition;
-      varying vec3 vViewNormal;
-
-      void main() {
-        vec3 p = normalize(vLocalPosition);
-        float filamentField =
-          sin(p.x * 13.0 + p.y * 5.5 + uTime * 2.4) +
-          sin(p.y * 15.0 - p.z * 6.0 - uTime * 1.9) +
-          sin((p.x + p.z) * 12.0 + p.y * 3.0 + uTime * 3.1);
-        float filaments = smoothstep(1.05, 2.35, filamentField);
-        float hotBand = smoothstep(0.62, 1.0, filaments);
-        float rim = pow(1.0 - abs(vViewNormal.z), 1.35);
-        float pulse = 0.88 + 0.12 * sin(uTime * 4.2 + p.y * 6.0);
-        vec3 plasma = mix(uColor * 1.7, uHotColor * 4.2, hotBand);
-        float alpha = clamp((0.46 + filaments * 0.36 + rim * 0.32) * pulse, 0.0, 1.0);
-
-        gl_FragColor = vec4(plasma, alpha);
-      }
-    `
-  });
-}
-
-function createPlasmaHaloMaterial(
-  color: THREE.Color,
-  opacity: number,
-  shimmerSpeed: number
-): THREE.ShaderMaterial {
-  // Halo shells are transparent at the face and brighter near the rim, which
-  // gives us a volumetric glow impression without another expensive pass.
-  return new THREE.ShaderMaterial({
-    transparent: true,
-    depthWrite: false,
-    depthTest: true,
-    blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
-    toneMapped: false,
-    uniforms: {
-      uTime: { value: 0 },
-      uColor: { value: color.clone() },
-      uOpacity: { value: opacity },
-      uShimmerSpeed: { value: shimmerSpeed }
-    },
-    vertexShader: `
-      varying vec3 vLocalPosition;
-      varying vec3 vViewNormal;
-
-      void main() {
-        vLocalPosition = position;
-        vViewNormal = normalize(normalMatrix * normal);
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform float uTime;
-      uniform vec3 uColor;
       uniform float uOpacity;
-      uniform float uShimmerSpeed;
-      varying vec3 vLocalPosition;
-      varying vec3 vViewNormal;
+      uniform float uCoreRadius;
+      uniform float uFogPower;
+      uniform float uFilamentStrength;
+      uniform float uTimeScale;
+      varying vec2 vUv;
 
       void main() {
-        vec3 p = normalize(vLocalPosition);
-        float rim = pow(1.0 - abs(vViewNormal.z), 2.35);
-        float veil = smoothstep(0.08, 0.95, rim);
-        float shimmer = 0.82 + 0.18 * sin(uTime * uShimmerSpeed + p.x * 7.0 + p.y * 5.0);
-        float alpha = uOpacity * veil * shimmer;
+        vec2 centeredUv = vUv - vec2(0.5);
+        float radius = length(centeredUv) * 2.0;
+        float angle = atan(centeredUv.y, centeredUv.x);
+        float time = uTime * uTimeScale;
+
+        float fog = exp(-pow(radius * 1.42, uFogPower + 1.0));
+        float edgeFade = smoothstep(1.0, 0.18, radius);
+        float core = smoothstep(uCoreRadius, 0.0, radius);
+        float filamentA = sin(angle * 7.0 + radius * 9.0 - time * 1.8);
+        float filamentB = sin(centeredUv.x * 18.0 - centeredUv.y * 11.0 + time * 2.4);
+        float filamentC = sin((centeredUv.x + centeredUv.y) * 15.0 + time * 3.1);
+        float filaments = smoothstep(1.05, 2.25, filamentA + filamentB + filamentC);
+        float breath = 0.88 + 0.12 * sin(time * 3.4 + radius * 5.0);
+        float alpha = (fog * 0.72 + core * 0.6 + filaments * uFilamentStrength) *
+          edgeFade * uOpacity * breath;
         if (alpha < 0.002) discard;
 
-        gl_FragColor = vec4(uColor * (1.5 + rim * 3.2), alpha);
+        vec3 color = mix(uColor * 1.45, uHotColor * 4.6, clamp(core + filaments * 0.65, 0.0, 1.0));
+        gl_FragColor = vec4(color, alpha);
       }
     `
   });
@@ -1128,18 +1112,14 @@ function createPlasmaHaloMaterial(
 function updateSceneLightSourceVisuals(time: number): void {
   for (const source of sceneLightSources) {
     const localTime = time + source.phaseOffset;
-    source.plasmaMaterial.uniforms.uTime.value = localTime;
-    for (const material of source.haloMaterials) {
+    for (const material of source.billboardMaterials) {
       material.uniforms.uTime.value = localTime;
     }
 
-    // Rotate and breathe only the visual shell; the attached spotlight stays at
-    // the same source position and keeps aiming at the field center.
-    source.plasmaVisual.rotation.set(
-      Math.sin(localTime * 0.31) * 0.08,
-      localTime * 0.18,
-      Math.cos(localTime * 0.27) * 0.06
-    );
+    // The impostor planes face the camera every frame. The actual SpotLight and
+    // PointLight are siblings, so this visual billboard trick never changes the
+    // direction or position of the real illumination.
+    source.plasmaVisual.quaternion.copy(camera.quaternion);
     source.plasmaVisual.scale.setScalar(1 + Math.sin(localTime * 2.4) * 0.035);
   }
 }
@@ -1158,6 +1138,8 @@ function updateSceneLightSources(nextPreset: QualityPreset): void {
     source.light.distance = Math.max(150, nextPreset.fieldRadius * source.distanceScale);
     source.light.shadow.camera.far = Math.max(180, nextPreset.fieldRadius * 2.7);
     source.light.shadow.needsUpdate = true;
+    source.fillLight.intensity = source.intensity * 0.018;
+    source.fillLight.distance = Math.max(28, nextPreset.fieldRadius * 0.34);
   }
 }
 

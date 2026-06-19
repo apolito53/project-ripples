@@ -40,6 +40,9 @@
 - Reworked those visible spotlight fixtures into animated plasma balls with
   shader filaments, rim-glow halo shells, and attached real spotlights so they
   read as actual light sources instead of strange floating geometry.
+- Replaced the visible light-source plasma spheres with layered camera-facing
+  billboard fog plus a small local point glow, making the fixtures read more
+  like glowy plasma emitters than opaque 3D props.
 
 ## 0.2.0-ALPHA - 2026-06-18
 
