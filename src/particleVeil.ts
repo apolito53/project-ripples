@@ -11,6 +11,11 @@ const DISC_CLOUD_PARTICLE_RATIO = 0.012;
 const DISC_CLOUD_PARTICLE_MAX = 720;
 const DISC_GLITTER_PARTICLE_RATIO = 0.06;
 const DISC_GLITTER_PARTICLE_MAX = 3200;
+const WAKE_PARTICLE_COUNT_BASE = 70;
+const WAKE_PARTICLE_COUNT_MOVEMENT_BONUS = 180;
+const WAKE_VERTICAL_LIFT = 0.14;
+const WAKE_VERTICAL_JITTER_BASE = 0.44;
+const WAKE_VERTICAL_JITTER_MOVEMENT_BONUS = 0.34;
 
 export class ParticleVeil {
   readonly points: THREE.Points;
@@ -215,7 +220,18 @@ export class ParticleVeil {
 
   spawnWake(center: THREE.Vector3, movementStrength: number): void {
     if (movementStrength <= 0.08 || Math.random() > movementStrength * 0.55) return;
-    this.spawnBurst(center, 140 + Math.floor(movementStrength * 360), 0.12 + movementStrength * 0.16);
+
+    // Movement wakes are emitted constantly while the player runs, so they get
+    // a dedicated cheaper shape instead of borrowing the taller burst cloud.
+    // The count is roughly half of the previous generic burst path, and the
+    // Y scatter stays centered on the avatar core instead of hovering above it.
+    const count = WAKE_PARTICLE_COUNT_BASE + Math.floor(movementStrength * WAKE_PARTICLE_COUNT_MOVEMENT_BONUS);
+    const strength = 0.12 + movementStrength * 0.16;
+    for (let wakeIndex = 0; wakeIndex < count; wakeIndex += 1) {
+      this.emitWakeParticle(center, strength, movementStrength);
+    }
+
+    this.markDirty(true);
   }
 
   update(delta: number): void {
@@ -308,6 +324,42 @@ export class ParticleVeil {
     // keeps the sparkle cloud crisp instead of sliding back into soft blobs.
     this.baseAlphas[index] = (PARTICLE_ALPHA_MIN + Math.random() * PARTICLE_ALPHA_VARIANCE) * alphaScale;
     this.baseSizes[index] = (0.45 + Math.random() * (1.05 + strength * 0.58)) * cloudScale;
+    this.alphas[index] = this.baseAlphas[index];
+    this.sizes[index] = this.baseSizes[index];
+    this.twinkles[index] = Math.random();
+    this.cloudinesses[index] = 0;
+  }
+
+  private emitWakeParticle(center: THREE.Vector3, strength: number, movementStrength: number): void {
+    const index = this.allocateParticleSlot();
+
+    const angle = Math.random() * Math.PI * 2;
+    // Wake motes should read like light being shed from the moving avatar, not
+    // a tall fog wall. Keep the horizontal throw broad enough to trail behind
+    // the player over time, but make the vertical band much tighter.
+    const cloudRadius = 0.72 + movementStrength * 2.15;
+    const radius = Math.sqrt(Math.random()) * cloudRadius;
+    const heightJitter = (Math.random() - 0.5) *
+      (WAKE_VERTICAL_JITTER_BASE + movementStrength * WAKE_VERTICAL_JITTER_MOVEMENT_BONUS);
+    const outward = 0.18 + Math.random() * (0.48 + movementStrength * 0.72);
+    const tangent = (Math.random() - 0.5) * (0.34 + movementStrength * 0.62);
+    const upward = (Math.random() - 0.48) * (0.1 + movementStrength * 0.24);
+    const positionOffset = index * 3;
+    const color = pickParticleColor(Math.random());
+
+    this.positions[positionOffset] = center.x + Math.cos(angle) * radius;
+    this.positions[positionOffset + 1] = center.y + WAKE_VERTICAL_LIFT + heightJitter;
+    this.positions[positionOffset + 2] = center.z + Math.sin(angle) * radius;
+    this.velocities[positionOffset] = Math.cos(angle) * outward - Math.sin(angle) * tangent;
+    this.velocities[positionOffset + 1] = upward;
+    this.velocities[positionOffset + 2] = Math.sin(angle) * outward + Math.cos(angle) * tangent;
+    this.colors[positionOffset] = color.r;
+    this.colors[positionOffset + 1] = color.g;
+    this.colors[positionOffset + 2] = color.b;
+    this.ages[index] = 0;
+    this.lifetimes[index] = 0.68 + Math.random() * 1.12;
+    this.baseAlphas[index] = (PARTICLE_ALPHA_MIN + Math.random() * PARTICLE_ALPHA_VARIANCE) * 0.86;
+    this.baseSizes[index] = 0.42 + Math.random() * (0.92 + strength * 0.38);
     this.alphas[index] = this.baseAlphas[index];
     this.sizes[index] = this.baseSizes[index];
     this.twinkles[index] = Math.random();
