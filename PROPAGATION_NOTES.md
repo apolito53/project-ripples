@@ -11,19 +11,20 @@ less arbitrary and more like a coherent medium.
   `front = age * basePropagationSpeed * sourceSpeedMultiplier`.
 - `basePropagationSpeed` is derived in `src/waveMedium.ts` using the
   shallow-water-inspired relationship `sqrt(gravity * effectiveDepth)`.
-- `RIPPLE_WIDTH` is still the default ring thickness, but each source can now
-  scale width, damping, speed, and optional travel direction.
+- `RIPPLE_WIDTH` is still the default ring thickness, and each pulse source can
+  scale width, damping, and speed.
 - The moving avatar has two effects:
   - an immediate velocity-shaped bow/wake deformation in the shader;
-  - emitted wake sources behind the avatar that reuse the same analytic ring
-    propagation as manual and ambient pulses.
+  - a ping-pong GPU wake texture in `src/wakeField.ts` that stores lingering
+    movement height, velocity, and crest/glow as a continuous field.
 - Particles still have their own fake propagation:
   - burst particles move by their own particle velocities;
 - pulse-light radius now follows the same base propagation speed, scaled down so
   the light supports the ring instead of drowning it.
 
-The short version: propagation is now a physically inspired analytic model. It
-is still not an emergent fluid/heightfield simulation.
+The short version: manual/Echo pulses remain physically inspired analytic rings,
+while movement wake now uses a lightweight GPU heightfield so walking no longer
+creates a trail of little circular wave sources.
 
 ## Research Notes
 
@@ -71,7 +72,7 @@ is still not an emergent fluid/heightfield simulation.
    Then derive base propagation speed from the medium, starting with
    `sqrt(gravity * effectiveDepth)` for a shallow-water-inspired mode.
 
-3. Give each source explicit propagation metadata. Done.
+3. Give each pulse source explicit propagation metadata. Done.
    Pack or parallel-upload:
    - position
    - start time
@@ -79,8 +80,8 @@ is still not an emergent fluid/heightfield simulation.
    - speed multiplier
    - wavelength/ring width
    - damping multiplier
-   Manual pulses, ambient pulses, and movement wakes can then share the same
-   medium while still feeling different.
+   Manual pulses and Echo detonation pulses share the same medium while
+   movement wake uses the separate wake texture.
 
 4. Make the shader equation read like a wave model. Partially done.
    Replaced the old `front = age * uWaveSpeed` plus linear fade with:
@@ -88,10 +89,12 @@ is still not an emergent fluid/heightfield simulation.
    - amplitude falloff from damping and distance;
    - optional dispersion widening/phase offset for longer-lived waves.
 
-5. Treat movement wake as an oriented source family. Done.
-   Keep the immediate bow/wake deformation, but make emitted wake sources carry
-   direction and object-speed metadata. That lets the shader shape lingering
-   wakes around the path rather than pretending every wake is a circular splash.
+5. Treat movement wake as a continuous field. Done.
+   Keep the immediate bow/wake deformation local to the avatar, but feed
+   movement into a ping-pong GPU texture instead of `RippleSourceStore`. The
+   wake update shader propagates height/velocity with damping, injects an
+   elongated capsule brush along the avatar's previous-to-current path, and
+   exposes crest/glow data for the hex shader.
 
 6. Add a debug propagation overlay. Done.
    Show base propagation speed, source count, effective depth, damping, and the
@@ -99,9 +102,9 @@ is still not an emergent fluid/heightfield simulation.
    gives us a quick sanity check: if speed is `9 m/s`, the ring should be about
    nine meters out after one second.
 
-7. Defer full heightfield simulation.
-   A real 2D wave or shallow-water solver would be the next level: ping-pong
-   height/velocity textures on the GPU, respect CFL, and sample that texture in
-   the cube shader. That is more physically honest, but heavier and more complex.
-   For this visual lab, a physically informed analytic model is the right next
-   step before we earn that headache.
+7. Add the GPU wake texture without making every pulse a fluid sim. Done.
+   The movement wake uses fixed-size quality-dependent render targets and a
+   CFL-clamped update step. Manual pulses stay analytic because they are large,
+   intentional effects that benefit from crisp controllable fronts. This keeps
+   the expensive continuous field focused on the avatar motion that actually
+   needs world-fixed memory.

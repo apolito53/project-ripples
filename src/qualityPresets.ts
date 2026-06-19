@@ -11,6 +11,7 @@ export type QualityPreset = {
   readonly shadowMapSize: number;
   readonly pulseLightCount: number;
   readonly fogDensity: number;
+  readonly wakeTextureSize: number;
 };
 
 // Internal scene units are kept on the original art scale, while the UI now
@@ -38,7 +39,8 @@ export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
     bloomStrength: 0,
     shadowMapSize: 0,
     pulseLightCount: 0,
-    fogDensity: 0.018
+    fogDensity: 0.018,
+    wakeTextureSize: 256
   },
   pretty: {
     id: "pretty",
@@ -50,7 +52,8 @@ export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
     bloomStrength: 0.14,
     shadowMapSize: 1024,
     pulseLightCount: 3,
-    fogDensity: 0.016
+    fogDensity: 0.016,
+    wakeTextureSize: 384
   },
   showoff: {
     id: "showoff",
@@ -62,7 +65,8 @@ export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
     bloomStrength: 0.24,
     shadowMapSize: 2048,
     pulseLightCount: 5,
-    fogDensity: 0.013
+    fogDensity: 0.013,
+    wakeTextureSize: 512
   },
   meltdown: {
     id: "meltdown",
@@ -74,7 +78,8 @@ export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
     bloomStrength: 0.38,
     shadowMapSize: 4096,
     pulseLightCount: 8,
-    fogDensity: 0.01
+    fogDensity: 0.01,
+    wakeTextureSize: 768
   }
 };
 

@@ -60,10 +60,10 @@ avatar runs through them, then detonate into a wider pulse, a flat disc burst of
 sparks, and a short local orb-shatter effect without geometric ring markers.
 Movement behaves like a small body pushing through water: the shader forms a
 pressed fabric depression, local bow/wake displacement, and small raised rim
-around the avatar, while stamped wake ripples remain in the field and propagate
-outward after the avatar moves on. Dense movement wake stamps use a shorter
-per-source lifetime than manual pulses so they can trail smoothly without
-forcing older rings to flicker through the shader's fixed upload budget.
+around the avatar, while a dedicated GPU wake texture stores the lingering
+height/velocity field left behind by movement. Manual click/Space pulses and
+collected Echoes still use analytic ring sources, but ordinary movement no
+longer adds little circular wave sources while the avatar runs.
 
 The Esc/hamburger pause menu changes quality, hex size, arena radius, ripple
 height/radius, Depth / Speed, particle density, bloom strength, and the live
@@ -75,12 +75,13 @@ radius is expressed in lab meters: `200m` preserves the original scene radius,
 while `400m` doubles it. Depth / Speed changes the medium's effective depth,
 then shows the derived propagation speed from the shallow-water-inspired
 `sqrt(g * depth)` model.
-The HUD shows that derived speed, hex diameter, arena radius, active source count,
-and the newest ring's approximate radius, plus the number of live Echo zones, so
+The HUD shows that derived speed, hex diameter, arena radius, active pulse count,
+and the newest pulse's approximate radius, plus the number of live Echo zones, so
 propagation and scale tuning have a quick visual sanity check.
 The performance overlay adds a denser tuning cockpit with frame/update/render
-timing, active particles versus resident budget, rendered wave-source pressure,
-draw calls, triangles, pixel ratio, bloom state, and quality mode.
+timing, active particles versus resident budget, rendered pulse-source pressure,
+GPU wake texture mode/pass cost, draw calls, triangles, pixel ratio, bloom state,
+and quality mode.
 
 ## Quality Modes
 
@@ -136,8 +137,9 @@ Versioning:
 ## Design Notes
 
 - `src/rippleField.ts` owns the circular shader-displaced instanced hex field,
-  including the directional bow/wake deformation around the moving avatar and
-  shader-side hex footprint/height scaling. It now renders only the lit cap
+  including the local bow deformation around the moving avatar, sampled GPU
+  wake texture displacement, and shader-side hex footprint/height scaling. It
+  now renders only the lit cap
   surface, calibrates Meltdown into an interlocked honeycomb without increasing
   its old instance density, then tints cells by animated height so raised caps
   push toward white while troughs stay darker. Wave crests have their own glow
@@ -145,9 +147,11 @@ Versioning:
   player-proximity glow.
 - `src/arenaBarrier.ts` owns the visual-only glowing arena-edge gradient that
   follows the live arena radius without changing collision behavior.
-- `src/rippleSources.ts` keeps the lifetime-pruned pulse and movement-wake list
-  sent to the GPU, including per-source speed, width, damping, lifetime, and
-  optional direction metadata.
+- `src/wakeField.ts` owns the ping-pong GPU wake heightfield for movement,
+  including capability fallback, quality-sized render targets, and sampled
+  `wake.*` diagnostics.
+- `src/rippleSources.ts` keeps the lifetime-pruned manual/Echo pulse list sent
+  to the GPU, including per-source speed, width, damping, and lifetime.
 - `src/debugLog.ts` owns the local diagnostic log buffer, inline JSON console
   logging, and optional batching to the `5184` debug receiver used to profile
   Echo detonations and frame spikes.
@@ -166,10 +170,11 @@ Versioning:
   visuals in `src/main.ts` use orbiting motes and segmented additive trails
   instead of torus rings.
 
-The CPU decides where the player, manual pulses, persistent Echo zones, and
-movement wakes are. Manual pulse input is cooldown-gated, Echo zones only become
-wave sources after collection, sources age out by per-source lifetime, and
-propagation speed comes from the current wave medium. The GPU handles hex lift,
-stretch, tint, emissive glow, and cell footprint/height from the newest rendered
-source uniforms, with dense fields allowed to render fewer sources than the
-full gameplay source list contains.
+The CPU decides where the player, manual pulses, and persistent Echo zones are.
+Manual pulse input is cooldown-gated, Echo zones only become pulse sources after
+collection, and pulse sources age out by per-source lifetime. Movement wake is
+fed into a small GPU height/velocity texture instead of the pulse source list.
+The GPU handles wake propagation, hex lift, stretch, tint, emissive glow, and
+cell footprint/height from the wake texture plus the newest rendered pulse
+uniforms, with dense fields allowed to render fewer pulse sources than the full
+gameplay source list contains.

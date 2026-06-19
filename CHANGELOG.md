@@ -47,6 +47,11 @@
   active versus resident particle counts, rendered wave-source pressure,
   renderer draw stats, pixel ratio, quality state, an `F2` shortcut, and a
   pause-menu toggle.
+- Replaced movement wake source stamping with a dedicated ping-pong GPU wake
+  field, so avatar movement leaves continuous world-fixed height/velocity memory
+  without increasing the analytic pulse source count.
+- Added wake diagnostics and overlay readouts for wake texture mode, size, pass
+  cost, and fallback state.
 
 ## 0.2.0-ALPHA - 2026-06-18
 

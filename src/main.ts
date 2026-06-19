@@ -22,6 +22,7 @@ import { RippleField } from "./rippleField";
 import { RippleSourceStore, type RippleSourceOptions } from "./rippleSources";
 import "./styles.css";
 import { sampleFieldHeight } from "./terrain";
+import { WakeField } from "./wakeField";
 import { getBasePropagationSpeedMetersPerSecond } from "./waveMedium";
 import changelogMarkdown from "../CHANGELOG.md?raw";
 import packageMetadata from "../package.json";
@@ -64,6 +65,7 @@ const perfFps = requireElement<HTMLElement>("#perf-fps");
 const perfHexes = requireElement<HTMLElement>("#perf-hexes");
 const perfParticles = requireElement<HTMLElement>("#perf-particles");
 const perfWaves = requireElement<HTMLElement>("#perf-waves");
+const perfWake = requireElement<HTMLElement>("#perf-wake");
 const perfRenderer = requireElement<HTMLElement>("#perf-renderer");
 const APP_VERSION = `v${packageMetadata.version}`;
 const PLAYER_BOUNDARY_PADDING = 1.1;
@@ -86,18 +88,6 @@ const GLOBAL_FRAME_HITCH_MS = 45;
 const GLOBAL_FRAME_HITCH_LOG_INTERVAL_SECONDS = 0.75;
 const GLOBAL_FRAME_HITCH_WARMUP_SECONDS = 1;
 const FIELD_REBUILD_DEBOUNCE_MS = 180;
-const MOVEMENT_RIPPLE_MIN_SPEED = 2.2;
-const MOVEMENT_RIPPLE_MIN_DISTANCE = 0.9;
-const MOVEMENT_RIPPLE_INTERVAL_SECONDS = 0.22;
-const MOVEMENT_RIPPLE_MIN_STRENGTH = 0.05;
-const MOVEMENT_RIPPLE_MAX_STRENGTH = 0.12;
-// Movement wakes are emitted frequently, so they fade sooner than manual
-// pulses. That keeps normal motion below the fixed shader upload budget and
-// prevents old rings from swapping in and out as newer wake stamps appear.
-const MOVEMENT_RIPPLE_LIFETIME_SECONDS = 2.8;
-const MOVEMENT_RIPPLE_STERN_OFFSET = 0.9;
-const MOVEMENT_RIPPLE_SHOULDER_OFFSET = 1.15;
-const MOVEMENT_RIPPLE_SHOULDER_BACKSET = 1.95;
 const MANUAL_PULSE_OPTIONS: RippleSourceOptions = {
   kind: "pulse",
   speedMultiplier: 1,
@@ -174,8 +164,6 @@ let frameCount = 0;
 let fpsAccumulatorSeconds = 0;
 let measuredFps = 60;
 let nextEchoZoneAt = 0.8;
-let lastMovementRippleAt = -Infinity;
-let movementWakeSide = 1;
 let echoDebugFrameWatchUntil = -Infinity;
 let echoDebugLastFrameLogAt = -Infinity;
 let lastGlobalFrameHitchLogAt = -Infinity;
@@ -183,10 +171,7 @@ let lastFrameUpdateMs = 0;
 let lastFrameRenderMs = 0;
 let lastRawDeltaMs = 0;
 let fieldRebuildTimeoutId = 0;
-const lastMovementRipplePosition = new THREE.Vector3(Infinity, 0, Infinity);
-const movementDirection = new THREE.Vector3();
-const movementShoulder = new THREE.Vector3();
-const movementPerpendicular = new THREE.Vector3();
+const previousWakePlayerPosition = new THREE.Vector3();
 const sceneLightSources: SceneLightSource[] = [];
 const mobileQuery = window.matchMedia("(pointer: coarse), (hover: none)");
 const activeTouchSticks = new Map<number, TouchStickState>();
@@ -217,7 +202,8 @@ composer.addPass(outputPass);
 
 const rippleSources = new RippleSourceStore();
 const echoZones = new EchoZoneField(scene);
-const rippleField = new RippleField(scene, preset);
+const wakeField = new WakeField(renderer, preset);
+const rippleField = new RippleField(scene, preset, wakeField.supportsVertexTextureSampling());
 let particles = new ParticleVeil(scene, preset.particleBudget, getPixelRatio());
 let pulseLights = new PulseLightRig(scene, preset.pulseLightCount);
 
@@ -232,6 +218,7 @@ const player = new PlayerRig({
   onPulse: (position) => spawnPulse(position, 0.45),
   isInputEnabled: areSceneInputsEnabled
 });
+previousWakePlayerPosition.copy(player.position);
 
 createLighting();
 const stageFloor = createStageFloor();
@@ -241,6 +228,7 @@ wireControls();
 updateTuningReadouts();
 applyQualityPreset(preset, true);
 resize();
+prewarmRenderPipelines();
 window.addEventListener("resize", resize);
 window.visualViewport?.addEventListener("resize", resize);
 window.visualViewport?.addEventListener("scroll", resize);
@@ -265,7 +253,6 @@ function animate(): void {
     particles.spawnAura(player.position, delta, playerSpeed / 18);
     particles.spawnWake(player.position, playerSpeed / 18);
   }
-  maybeSpawnMovementRipple(time, playerSpeed);
   arenaBarrier.update(time);
   updateSceneLightSourceVisuals(time);
   echoZones.update(time);
@@ -274,7 +261,6 @@ function animate(): void {
   if (settings.particlesEnabled) {
     particles.update(delta);
   }
-  rippleField.update(time, getEffectiveRenderSettings(), preset, rippleSources, player.position, player.velocity, playerSpeed);
   const effectiveBloomStrength = getEffectiveBloomStrength();
   pulseLights.update(
     rippleSources.getActiveLightSources(time),
@@ -286,12 +272,39 @@ function animate(): void {
   const renderStartedAt = performance.now();
   lastFrameUpdateMs = renderStartedAt - frameStartedAt;
   renderer.info.reset();
+  wakeField.render({
+    time,
+    delta,
+    fieldRadius: preset.fieldRadius,
+    playerPosition: player.position,
+    previousPlayerPosition: previousWakePlayerPosition,
+    playerVelocity: player.velocity,
+    playerSpeed,
+    waveMedium: settings.waveMedium,
+    activeRippleSourceCount: rippleSources.getActiveSources(time).length,
+    renderedRippleSourceCount: rippleField.getRenderedRippleSourceCount(),
+    hexCount: rippleField.getInstanceCount(),
+    qualityId: preset.id
+  });
+  const wakeMetrics = wakeField.getMetrics();
+  rippleField.update(
+    time,
+    getEffectiveRenderSettings(),
+    preset,
+    rippleSources,
+    player.position,
+    player.velocity,
+    playerSpeed,
+    wakeField.getTexture(),
+    wakeMetrics
+  );
   if (effectiveBloomStrength > 0.02) {
     composer.render();
   } else {
     renderer.render(scene, camera);
   }
   lastFrameRenderMs = performance.now() - renderStartedAt;
+  previousWakePlayerPosition.copy(player.position);
   updateStats(delta, time);
   logGlobalFrameHitch(time, delta, rawDelta, frameStartedAt);
   logEchoDetonationFrame(time, delta, frameStartedAt);
@@ -317,62 +330,6 @@ function spawnPulseParticles(position: THREE.Vector3, strength: number): void {
   if (settings.particlesEnabled) {
     particles.spawnPulseBurst(position, count, strength);
   }
-}
-
-function maybeSpawnMovementRipple(time: number, playerSpeed: number): void {
-  if (playerSpeed < MOVEMENT_RIPPLE_MIN_SPEED) return;
-  if (time - lastMovementRippleAt < MOVEMENT_RIPPLE_INTERVAL_SECONDS) return;
-
-  const distanceFromLastWake = Math.hypot(
-    player.position.x - lastMovementRipplePosition.x,
-    player.position.z - lastMovementRipplePosition.z
-  );
-  if (distanceFromLastWake < MOVEMENT_RIPPLE_MIN_DISTANCE) return;
-
-  const movementRatio = THREE.MathUtils.clamp(playerSpeed / 18, 0, 1);
-  const strength = THREE.MathUtils.lerp(
-    MOVEMENT_RIPPLE_MIN_STRENGTH,
-    MOVEMENT_RIPPLE_MAX_STRENGTH,
-    movementRatio
-  );
-
-  movementDirection.copy(player.velocity).setY(0).normalize();
-  movementPerpendicular.set(-movementDirection.z, 0, movementDirection.x);
-
-  // A moving body in water leaves more than one perfect circle. We drop a stern
-  // source directly behind the avatar, plus an alternating shoulder source that
-  // builds a soft V wake without doubling both sides every frame.
-  const stern = player.position.clone().addScaledVector(
-    movementDirection,
-    -MOVEMENT_RIPPLE_STERN_OFFSET
-  );
-  addMovementWakeSource(stern, time, strength);
-
-  movementShoulder.copy(player.position)
-    .addScaledVector(movementDirection, -MOVEMENT_RIPPLE_SHOULDER_BACKSET)
-    .addScaledVector(movementPerpendicular, MOVEMENT_RIPPLE_SHOULDER_OFFSET * movementWakeSide);
-  addMovementWakeSource(movementShoulder, time, strength * 0.72);
-  movementWakeSide *= -1;
-
-  lastMovementRippleAt = time;
-  lastMovementRipplePosition.copy(player.position);
-}
-
-function addMovementWakeSource(position: THREE.Vector3, time: number, strength: number): void {
-  position.y = sampleFieldHeight(position.x, position.z) + 0.4;
-
-  // Movement wakes feed the terrain shader only. No burst particles, no point
-  // lights: just lingering displacement, like water remembering the body that
-  // passed through it. These sources intentionally do not carry direction now:
-  // once a wake is stamped into the field, it should stay put instead of aiming
-  // around like a flashlight beam as the player changes direction.
-  rippleSources.add(position, time, strength, {
-    kind: "wake",
-    speedMultiplier: settings.waveMedium.wakeSpeedMultiplier,
-    widthMultiplier: 1.45,
-    dampingMultiplier: 0.72,
-    lifetimeSeconds: MOVEMENT_RIPPLE_LIFETIME_SECONDS
-  });
 }
 
 function seedEchoZones(time: number): void {
@@ -887,11 +844,14 @@ function cancelScheduledFieldRebuild(): void {
 function rebuildFieldGeometry(nextPreset: QualityPreset): void {
   const rebuildStartedAt = performance.now();
   rippleField.rebuild(nextPreset);
+  wakeField.reset("field-rebuild");
   updateStageFloor(nextPreset);
   updateShadowResolution(nextPreset.shadowMapSize, nextPreset.fieldRadius);
   resize();
+  prewarmRenderPipelines();
 
   const durationMs = performance.now() - rebuildStartedAt;
+  const wakeMetrics = wakeField.getMetrics();
   debugEvent("field.rebuild", "Rebuilt hex tile field geometry", {
     durationMs: roundMetric(durationMs),
     quality: nextPreset.id,
@@ -899,7 +859,9 @@ function rebuildFieldGeometry(nextPreset: QualityPreset): void {
     hexDiameterMeters: roundMetric(settings.voxelSizeMeters),
     arenaRadiusMeters: roundMetric(settings.arenaRadiusMeters),
     sceneRadius: roundMetric(nextPreset.fieldRadius),
-    tileSpacing: roundMetric(nextPreset.tileSpacing)
+    tileSpacing: roundMetric(nextPreset.tileSpacing),
+    wakeMode: wakeMetrics.mode,
+    wakeTextureSize: wakeMetrics.textureSize
   }, durationMs > GLOBAL_FRAME_HITCH_MS ? "warn" : "info");
 }
 
@@ -911,14 +873,39 @@ function applyQualityPreset(nextPreset: QualityPreset, initial: boolean): void {
   bloomPass.strength = getEffectiveBloomStrength();
 
   if (!initial) {
+    wakeField.resizeForPreset(nextPreset, "quality");
     rebuildFieldGeometry(nextPreset);
     particles = particles.resizeBudget(scene, nextPreset.particleBudget, getPixelRatio());
     pulseLights = pulseLights.resize(scene, nextPreset.pulseLightCount);
+    prewarmRenderPipelines();
   }
 
   updateStageFloor(nextPreset);
   updateShadowResolution(nextPreset.shadowMapSize, nextPreset.fieldRadius);
   resize();
+}
+
+function prewarmRenderPipelines(): void {
+  const time = clock.elapsedTime;
+
+  // Keep startup/rebuild hitches out of the first visible gameplay frame by
+  // compiling the field material and running a neutral wake pass immediately
+  // after target allocation. The player positions match, so no wake is stamped.
+  wakeField.prewarm({
+    time,
+    delta: 0,
+    fieldRadius: preset.fieldRadius,
+    playerPosition: player.position,
+    previousPlayerPosition: player.position,
+    playerVelocity: player.velocity,
+    playerSpeed: 0,
+    waveMedium: settings.waveMedium,
+    activeRippleSourceCount: rippleSources.getActiveSources(time).length,
+    renderedRippleSourceCount: rippleField.getRenderedRippleSourceCount(),
+    hexCount: rippleField.getInstanceCount(),
+    qualityId: preset.id
+  });
+  renderer.compile(scene, camera);
 }
 
 function updateShadowResolution(size: number, fieldRadius: number): void {
@@ -1517,7 +1504,7 @@ function updateStats(delta: number, time: number): void {
   frameCount = 0;
   fpsAccumulatorSeconds = 0;
   statsLine.textContent = `${Math.round(measuredFps)} fps | ${rippleField.getInstanceCount().toLocaleString()} hexes | ${preset.particleBudget.toLocaleString()} particles`;
-  mediumLine.textContent = `${basePropagationSpeed.toFixed(1)} m/s | ${settings.waveMedium.effectiveDepth.toFixed(1)}m depth | ${formatVoxelSize(settings.voxelSizeMeters)} hex dia | ${settings.arenaRadiusMeters.toFixed(0)}m arena | ${echoZones.getActiveCount()} echoes | ${activeSources.length} waves | newest ${newestRingRadius.toFixed(1)}m`;
+  mediumLine.textContent = `${basePropagationSpeed.toFixed(1)} m/s | ${settings.waveMedium.effectiveDepth.toFixed(1)}m depth | ${formatVoxelSize(settings.voxelSizeMeters)} hex dia | ${settings.arenaRadiusMeters.toFixed(0)}m arena | ${echoZones.getActiveCount()} echoes | ${activeSources.length} pulses | newest ${newestRingRadius.toFixed(1)}m`;
   updatePerfOverlay(activeSources.length);
 }
 
@@ -1527,6 +1514,7 @@ function updatePerfOverlay(activeSourceCount: number): void {
   const activeParticleCount = particles.getActiveCount();
   const drawCalls = renderer.info.render.calls;
   const triangles = renderer.info.render.triangles;
+  const wakeMetrics = wakeField.getMetrics();
 
   // Keep the overlay data cheap and human-readable. These values are sampled on
   // the same cadence as the HUD, not every frame, so it can stay on while tuning.
@@ -1538,6 +1526,7 @@ function updatePerfOverlay(activeSourceCount: number): void {
   perfHexes.textContent = formatCompactCount(rippleField.getInstanceCount());
   perfParticles.textContent = `${formatCompactCount(activeParticleCount)}/${formatCompactCount(preset.particleBudget)}`;
   perfWaves.textContent = `${activeSourceCount} | GPU ${renderedSourceCount}/${renderedSourceLimit}`;
+  perfWake.textContent = `${wakeMetrics.mode} | ${wakeMetrics.textureSize}px | ${wakeMetrics.passMs.toFixed(1)} ms`;
   perfRenderer.textContent = `${drawCalls}c | ${formatCompactCount(triangles)} tri | ${getPixelRatio().toFixed(2)}x`;
 }
 
@@ -1585,6 +1574,7 @@ function logGlobalFrameHitch(time: number, delta: number, rawDelta: number, fram
 
   lastGlobalFrameHitchLogAt = time;
   const activeSources = rippleSources.getActiveSources(time);
+  const wakeMetrics = wakeField.getMetrics();
   debugEvent("frame.hitch", "Global frame hitch", {
     time: roundMetric(time),
     frameMs: roundMetric(frameMs),
@@ -1600,6 +1590,11 @@ function logGlobalFrameHitch(time: number, delta: number, rawDelta: number, fram
     activeRippleSources: activeSources.length,
     renderedRippleSources: rippleField.getRenderedRippleSourceCount(),
     renderedRippleSourceLimit: rippleField.getRenderedRippleSourceLimit(),
+    wakeMode: wakeMetrics.mode,
+    wakePassMs: roundMetric(wakeMetrics.passMs),
+    wakeTextureSize: wakeMetrics.textureSize,
+    wakeFallbackReason: wakeMetrics.fallbackReason,
+    movementWakeSourceAddsSinceLastHitch: wakeMetrics.movementSourceAddsSinceLastFrame,
     quality: preset.id,
     hexDiameterMeters: roundMetric(settings.voxelSizeMeters),
     arenaRadiusMeters: roundMetric(settings.arenaRadiusMeters),

@@ -1,6 +1,6 @@
 # Codebase Index
 
-Last reviewed: 2026-06-18
+Last reviewed: 2026-06-19
 
 Purpose: compact map for the standalone ripple-field visual lab.
 
@@ -33,14 +33,16 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `src/main.ts`
 - Avatar movement, circular arena clamp, scene-input gating, pointer lock, and
   camera follow behavior: `src/controls.ts`
-- Circular shader-displaced instanced hex field and directional movement
-  wake deformation, including Meltdown-calibrated honeycomb orientation, lit
-  hex caps, animated-height cell tinting, and bounded crest-specific glow:
+- Circular shader-displaced instanced hex field, including sampled GPU movement
+  wake displacement, Meltdown-calibrated honeycomb orientation, lit hex caps,
+  animated-height cell tinting, and bounded crest-specific glow:
   `src/rippleField.ts`
+- Ping-pong GPU movement wake heightfield, fallback texture, quality-sized
+  render targets, and `wake.*` diagnostics: `src/wakeField.ts`
 - Visual-only smooth glowing arena-edge gradient barrier: `src/arenaBarrier.ts`
 - Visible cyan/magenta spotlight fixtures, stage floor, core scene lighting,
   and player avatar visuals: `src/main.ts`
-- Lifetime-pruned pulse/wake source list and shader uniform writer:
+- Lifetime-pruned manual/Echo pulse source list and shader uniform writer:
   `src/rippleSources.ts`
 - Persistent collectible Echo-column lights, bright orb lights, vertical
   diamond-style orb mist, avatar-style segmented crystal orbit trails, and
@@ -67,18 +69,19 @@ Purpose: compact map for the standalone ripple-field visual lab.
 2. `main.ts` creates the renderer, scene, camera, bloom composer, field, particles,
    pulse lights, and glow avatar.
 3. `PlayerRig` updates planar movement and camera follow every frame.
-4. Cooldown-gated clicks, `Space`, and denser movement wake spacing add ripple
-   sources; Echo-zone timers add persistent collectible markers instead of
-   immediate ambient waves.
+4. Cooldown-gated clicks and `Space` add analytic pulse sources; avatar movement
+   writes a continuous wake influence into a GPU height/velocity texture instead
+   of adding little circular source stamps. Echo-zone timers add persistent
+   collectible markers instead of immediate ambient waves.
 5. `RippleField` builds hex instances inside the circular arena using the
    active quality, hex-size, and arena-radius settings. Hex geometry is rotated
    to match the staggered lattice, and Meltdown's visible footprint is calibrated
    to read as an interlocked honeycomb while preserving its previous density.
-   The field then sends active source/metadata/lifetime uniforms plus
-   wave-medium and cell-scale values to the shaders; cell matrices stay static
-   while the GPU animates lit cap height, lift/stretch/glow, crest bloom, and
-   height-based tinting. The old per-cell shaft mesh has been removed to keep
-   the geometry path simpler before the sphere work.
+   The field then sends active pulse source/metadata/lifetime uniforms plus the
+   wake texture, wave-medium, and cell-scale values to the shaders; cell matrices
+   stay static while the GPU animates lit cap height, lift/stretch/glow, crest
+   bloom, movement wake memory, and height-based tinting. The old per-cell shaft
+   mesh has been removed to keep the geometry path simpler before the sphere work.
 6. `ArenaBarrier` draws a visual-only smooth glowing gradient curtain at the
    arena radius so the map edge is visible without changing collision logic.
 7. `EchoZoneField` animates live Echo markers and reports run-through triggers.
@@ -87,10 +90,11 @@ Purpose: compact map for the standalone ripple-field visual lab.
 9. `PulseLightRig` assigns recent pulses and collected Echo detonations to
    point lights.
 10. The HUD reports FPS, instance counts, base propagation speed, voxel size,
-    arena radius, live Echo count, active source count, and newest ring radius.
+    arena radius, live Echo count, active pulse count, and newest pulse radius.
     A denser `F2`/pause-menu performance overlay reports frame/update/render
-    timing, active particles versus resident budget, rendered wave-source
-    pressure, renderer draw stats, pixel ratio, bloom state, and quality.
+    timing, active particles versus resident budget, rendered pulse-source
+    pressure, wake texture mode/pass cost, renderer draw stats, pixel ratio,
+    bloom state, and quality.
 11. Esc or the hamburger button opens the centered pause menu, which owns
     tuning controls, a Resume action, and a version changelog button.
 12. The scene renders through bloom when bloom strength is above zero.
@@ -104,13 +108,15 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Change ripple math, hex shape, directional water-like movement response,
   animated-height tint, crest glow, or generic proximity glow:
   `src/rippleField.ts`
+- Change continuous GPU movement wake propagation, wake texture size, fallback,
+  or wake diagnostics: `src/wakeField.ts` and `src/qualityPresets.ts`
 - Change Echo-zone spawn count, trigger radius, column visuals, or collection
   behavior: `src/echoZones.ts` and `src/main.ts`
 - Change avatar marker motes, long orbit trails, lights, or shell visuals:
   `src/main.ts`
 - Change particles, wake behavior, or burst count: `src/particleVeil.ts` and
   `src/main.ts`
-- Change movement wake cadence or source strength: `src/main.ts`
+- Change pulse source strength or cooldown: `src/main.ts`
 - Change propagation-speed semantics or medium parameters: `src/waveMedium.ts`,
   `src/labSettings.ts`, and `PROPAGATION_NOTES.md`
 - Change movement/camera feel or the circular player boundary: `src/controls.ts`
@@ -123,12 +129,12 @@ Purpose: compact map for the standalone ripple-field visual lab.
 
 - The field is a visual lab, not voxel terrain. Do not add save data or chunk
   loading here unless the project deliberately changes shape.
-- Keep the CPU/GPU contract small: pulse uniforms, player position, and settings
-  go in; shader animation comes out. The shader still has a fixed upload budget,
-  but ripple retention should be governed by per-source lifetime and input
-  cooldown rather than a tiny gameplay cap. Dense movement wakes intentionally
-  fade faster than manual pulses so the newest-first upload order does not
-  churn through old rings during normal movement.
+- Keep the CPU/GPU contract small: pulse uniforms, player position, wake texture,
+  and settings go in; shader animation comes out. Movement wake must not add
+  entries to `RippleSourceStore`; that store is for manual and Echo pulses only.
+  The shader still has a fixed pulse upload budget, but pulse retention should
+  be governed by per-source lifetime and input cooldown rather than a tiny
+  gameplay cap.
 - Echo zones are CPU-side gameplay markers with stacked point lights, bright
   orb lights, vertical diamond-style orb mist, segmented crystal-local orbiting
   sparkle trails, and
@@ -148,6 +154,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
   because Chrome automation collapses object arguments.
   When `npm.cmd run debug:logs` is listening, the browser also batches records
   to `127.0.0.1:5184` and appends JSONL under `logs/`.
+- `WakeField` allocates render targets only at startup and quality changes, not
+  during normal movement. If movement increases `activeRippleSources`, the new
+  wake path has regressed back into source stamping.
 - `ParticleVeil` keeps active motes packed into the leading buffer range and
   sets Three.js draw/update ranges from `activeCount`; preserve that shape when
   changing particle lifetimes or replacement behavior, or dead budget slots will

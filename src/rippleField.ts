@@ -3,6 +3,7 @@ import type { LabSettings } from "./labSettings";
 import type { QualityPreset } from "./qualityPresets";
 import { MAX_SHADER_RIPPLE_SOURCES, type RippleSourceStore } from "./rippleSources";
 import { sampleFieldHeight } from "./terrain";
+import type { WakeFieldMetrics } from "./wakeField";
 import { getBasePropagationSpeedMetersPerSecond } from "./waveMedium";
 
 const HEX_TILE_DIAMETER = 0.89;
@@ -30,6 +31,10 @@ type RippleShaderUniforms = {
   readonly uMediumDamping: Uniform<number>;
   readonly uMediumDispersion: Uniform<number>;
   readonly uBloomMood: Uniform<number>;
+  readonly uWakeTexture: Uniform<THREE.Texture>;
+  readonly uWakeFieldRadius: Uniform<number>;
+  readonly uWakeStrength: Uniform<number>;
+  readonly uWakeTextureEncoding: Uniform<number>;
   readonly uRippleCount: Uniform<number>;
   readonly uRipples: Uniform<THREE.Vector4[]>;
   readonly uRippleMetadata: Uniform<THREE.Vector4[]>;
@@ -44,13 +49,14 @@ type RippleShader = {
 
 export class RippleField {
   readonly object = new THREE.Group();
+  private readonly noOpWakeTexture = createNoOpWakeTexture();
   private readonly rippleUniforms = Array.from(
     { length: MAX_SHADER_RIPPLE_SOURCES },
     () => new THREE.Vector4(0, 0, -999, 0)
   );
   private readonly rippleMetadataUniforms = Array.from(
     { length: MAX_SHADER_RIPPLE_SOURCES },
-    () => new THREE.Vector4(1, 1, 1, -99)
+    () => new THREE.Vector4(1, 1, 1, 0)
   );
   private readonly rippleLifetimeUniforms = new Float32Array(MAX_SHADER_RIPPLE_SOURCES);
   private capMesh: THREE.InstancedMesh | null = null;
@@ -61,7 +67,11 @@ export class RippleField {
   private renderedRippleSourceCount = 0;
   private renderedRippleSourceLimit = MAX_SHADER_RIPPLE_SOURCES;
 
-  constructor(scene: THREE.Scene, preset: QualityPreset) {
+  constructor(
+    scene: THREE.Scene,
+    preset: QualityPreset,
+    private readonly supportsWakeTextureSampling = true
+  ) {
     this.object.name = "Shader ripple hex field";
     scene.add(this.object);
     this.rebuild(preset);
@@ -138,7 +148,9 @@ export class RippleField {
     sources: RippleSourceStore,
     playerPosition: THREE.Vector3,
     playerVelocity: THREE.Vector3,
-    playerSpeed: number
+    playerSpeed: number,
+    wakeTexture: THREE.Texture,
+    wakeMetrics: WakeFieldMetrics
   ): void {
     if (!this.capShader) return;
 
@@ -161,6 +173,8 @@ export class RippleField {
       playerPosition,
       playerVelocity,
       playerSpeed,
+      wakeTexture,
+      wakeMetrics,
       basePropagationSpeed,
       activeCount
     );
@@ -180,6 +194,7 @@ export class RippleField {
 
   dispose(): void {
     this.disposeMesh();
+    this.noOpWakeTexture.dispose();
     this.object.removeFromParent();
   }
 
@@ -191,6 +206,34 @@ export class RippleField {
       emissive: 0x06131d,
       emissiveIntensity: 0.28
     });
+    const wakeTextureUniform = this.supportsWakeTextureSampling
+      ? "uniform sampler2D uWakeTexture;"
+      : "";
+    const wakeTextureSampler = this.supportsWakeTextureSampling
+      ? `
+          vec4 decodeWakeSample(vec4 wakeSample) {
+            if (uWakeTextureEncoding > 0.5) {
+              return vec4(wakeSample.rg * 2.0 - 1.0, wakeSample.b, wakeSample.a);
+            }
+            return wakeSample;
+          }
+
+          vec3 sampleWakeField(vec2 cellPosition) {
+            vec2 wakeUv = cellPosition / max(0.001, uWakeFieldRadius * 2.0) + vec2(0.5);
+            float inside = step(0.0, wakeUv.x) * step(wakeUv.x, 1.0) *
+              step(0.0, wakeUv.y) * step(wakeUv.y, 1.0);
+            vec4 wakeSample = decodeWakeSample(texture2D(uWakeTexture, clamp(wakeUv, vec2(0.0), vec2(1.0))));
+            return wakeSample.rgb * inside;
+          }
+        `
+      : `
+          vec3 sampleWakeField(vec2 cellPosition) {
+            // Some very old or low-power WebGL paths report zero vertex texture
+            // units. Keep the material alive there by compiling out the actual
+            // texture fetch while preserving the JS-side uniform contract.
+            return vec3(0.0);
+          }
+        `;
 
     material.onBeforeCompile = (shader) => {
       const rippleShader = shader as unknown as RippleShader;
@@ -206,6 +249,10 @@ export class RippleField {
       shader.uniforms.uMediumDamping = { value: 0.16 };
       shader.uniforms.uMediumDispersion = { value: 0.22 };
       shader.uniforms.uBloomMood = { value: 1 };
+      shader.uniforms.uWakeTexture = { value: this.noOpWakeTexture };
+      shader.uniforms.uWakeFieldRadius = { value: 92 };
+      shader.uniforms.uWakeStrength = { value: 0 };
+      shader.uniforms.uWakeTextureEncoding = { value: 1 };
       shader.uniforms.uRippleCount = { value: 0 };
       shader.uniforms.uRipples = { value: this.rippleUniforms };
       shader.uniforms.uRippleMetadata = { value: this.rippleMetadataUniforms };
@@ -226,6 +273,10 @@ export class RippleField {
           uniform float uMediumDamping;
           uniform float uMediumDispersion;
           uniform float uBloomMood;
+          ${wakeTextureUniform}
+          uniform float uWakeFieldRadius;
+          uniform float uWakeStrength;
+          uniform float uWakeTextureEncoding;
           uniform int uRippleCount;
           uniform vec4 uRipples[${MAX_SHADER_RIPPLE_SOURCES}];
           uniform vec4 uRippleMetadata[${MAX_SHADER_RIPPLE_SOURCES}];
@@ -253,21 +304,11 @@ export class RippleField {
             float fade = max(0.0, 1.0 - age / fadeLifetime);
             float damping = exp(-age * uMediumDamping * max(0.05, metadata.z)) *
               exp(-distanceToCell * uMediumDamping * max(0.05, metadata.z) * 0.018);
-            float directionalSource = step(-10.0, metadata.w);
-            float directionMask = 1.0;
 
-            if (directionalSource > 0.5 && distanceToCell > 0.001) {
-              vec2 direction = vec2(cos(metadata.w), sin(metadata.w));
-              vec2 radial = (cellPosition - origin) / distanceToCell;
-              float behind = smoothstep(-0.15, 0.78, dot(radial, -direction));
-              float lateral = abs(radial.x * direction.y - radial.y * direction.x);
-              float centerTrail = exp(-pow(lateral / 0.42, 2.0)) * 0.34;
-              float shoulderTrail = exp(-pow((lateral - 0.52) / 0.24, 2.0)) * 0.72;
-              directionMask = clamp(behind * (0.25 + centerTrail + shoulderTrail), 0.0, 1.0);
-            }
-
-            return ring * fade * damping * strength * mix(1.0, directionMask, directionalSource);
+            return ring * fade * damping * strength;
           }
+
+          ${wakeTextureSampler}
 
           float movingBodyWake(vec2 fromPlayer, float distanceToPlayer, float phase) {
             float speed = length(uPlayerVelocity);
@@ -282,9 +323,9 @@ export class RippleField {
             float sideways = abs(radial.x * direction.y - radial.y * direction.x);
 
             // Treat the avatar like a small hull, but keep this response local.
-            // Lingering wake belongs to emitted source stamps; if the immediate
-            // field stretches too far, it rotates with velocity and reads like a
-            // flashlight beam instead of water/fabric that was disturbed.
+            // Lingering wake now lives in the world-fixed wake texture; if this
+            // immediate field stretches too far, it rotates with velocity and
+            // reads like a flashlight beam instead of disturbed water/fabric.
             float bowBand = exp(-pow((distanceToPlayer - 1.75) / 1.05, 2.0));
             float bow = smoothstep(0.12, 0.94, ahead) * bowBand;
             float behind = smoothstep(0.08, 0.92, -ahead);
@@ -309,6 +350,9 @@ export class RippleField {
           float movementPush = clamp(uPlayerSpeed / 16.0, 0.0, 1.0);
           float shimmer = sin(uTime * 5.8 - playerDistance * 2.15 + instancePhase) * 0.5 + 0.5;
           float flowWave = movingBodyWake(fromPlayer, playerDistance, instancePhase);
+          vec3 wakeSample = sampleWakeField(cellPosition);
+          float wakeTextureWave = wakeSample.r * uWakeStrength;
+          float wakeTextureGlow = wakeSample.b * uWakeStrength;
           float sourceWave = 0.0;
 
           for (int index = 0; index < ${MAX_SHADER_RIPPLE_SOURCES}; index += 1) {
@@ -322,8 +366,8 @@ export class RippleField {
           }
 
           // The player presses into the field now. The center becomes a trough,
-          // while a small rim and movement wake keep the surface feeling like a
-          // responsive fabric instead of a flat hole punched through the grid.
+          // while a small rim, local bow wave, and sampled wake texture keep the
+          // surface feeling like responsive fabric instead of a flat hole.
           // Keep the depression modest so the avatar disturbs the field without
           // looking like it is being swallowed by the surrounding hexes. The
           // current pressure depth is intentionally half of the previous tune.
@@ -333,11 +377,15 @@ export class RippleField {
           // Crest glow is separate from generic ripple glow so only raised wave
           // fronts bloom. This avoids globally brightening the whole field when
           // multiple sources overlap.
-          float crestGlow = clamp(max(shelteredSourceWave, 0.0) * 1.18 + max(flowWave, 0.0) * 0.34, 0.0, 0.9);
-          float lift = (-pressureDepression + rimLift + shelteredSourceWave * 0.92 + flowWave * 0.58) * uRippleHeight;
-          float glow = clamp(proximity * (0.04 + shimmer * 0.08) + pressureRim * 0.08 + shelteredSourceWave * 0.2 + flowWave * 0.1, 0.0, 0.46);
+          float crestGlow = clamp(max(shelteredSourceWave, 0.0) * 1.18 + max(flowWave, 0.0) * 0.34 +
+            max(wakeTextureWave, 0.0) * 0.92 + wakeTextureGlow * 0.62, 0.0, 0.9);
+          float lift = (-pressureDepression + rimLift + shelteredSourceWave * 0.92 + flowWave * 0.42 +
+            wakeTextureWave * 0.95) * uRippleHeight;
+          float glow = clamp(proximity * (0.04 + shimmer * 0.08) + pressureRim * 0.08 +
+            shelteredSourceWave * 0.2 + flowWave * 0.08 + abs(wakeTextureWave) * 0.08 + wakeTextureGlow * 0.16, 0.0, 0.46);
           float voxelScale = clamp(uVoxelSize, 0.25, 2.0);
-          float tileHeight = max(0.02, (${BASE_TILE_HEIGHT.toFixed(2)} + pressureRim * 0.16 + shelteredSourceWave * 0.44 + flowWave * 0.22 - bodyPressure * 0.009) * voxelScale);
+          float tileHeight = max(0.02, (${BASE_TILE_HEIGHT.toFixed(2)} + pressureRim * 0.16 + shelteredSourceWave * 0.44 +
+            flowWave * 0.18 + max(wakeTextureWave, 0.0) * 0.22 - bodyPressure * 0.009) * voxelScale);
           float footprint = (${HEX_TILE_DIAMETER.toFixed(2)} + glow * 0.05) * voxelScale;
           float visualHeight = instanceFieldPosition.y + lift + tileHeight;
           float heightWhiteness = smoothstep(-0.75, 3.05, visualHeight);
@@ -386,7 +434,8 @@ export class RippleField {
         );
     };
 
-    material.customProgramCacheKey = () => "ripple-field-hex-cap-shader-v1";
+    material.customProgramCacheKey = () =>
+      `ripple-field-hex-cap-shader-v3-${this.supportsWakeTextureSampling ? "wake" : "no-wake"}`;
     return material;
   }
 
@@ -398,6 +447,8 @@ export class RippleField {
     playerPosition: THREE.Vector3,
     playerVelocity: THREE.Vector3,
     playerSpeed: number,
+    wakeTexture: THREE.Texture,
+    wakeMetrics: WakeFieldMetrics,
     basePropagationSpeed: number,
     activeCount: number
   ): void {
@@ -414,6 +465,10 @@ export class RippleField {
     shader.uniforms.uMediumDamping.value = settings.waveMedium.damping;
     shader.uniforms.uMediumDispersion.value = settings.waveMedium.dispersion;
     shader.uniforms.uBloomMood.value = settings.bloomEnabled ? Math.max(settings.bloomStrength, preset.bloomStrength) : 0;
+    shader.uniforms.uWakeTexture.value = wakeTexture;
+    shader.uniforms.uWakeFieldRadius.value = preset.fieldRadius;
+    shader.uniforms.uWakeStrength.value = wakeMetrics.mode === "noop" ? 0 : 1;
+    shader.uniforms.uWakeTextureEncoding.value = wakeMetrics.mode === "gpu-half-float" ? 0 : 1;
     shader.uniforms.uRippleCount.value = activeCount;
   }
 
@@ -450,6 +505,16 @@ function createTerrainTint(x: number, y: number, z: number): THREE.Color {
     .lerp(accent, Math.max(0, y) * 0.035)
     .lerp(high, terrainWhiteness);
   return color;
+}
+
+function createNoOpWakeTexture(): THREE.DataTexture {
+  // The normal wake-capable shader always receives a texture binding. In
+  // encoded mode, 128/128 decodes to zero height and zero velocity, which makes
+  // this a harmless placeholder for no-op and startup frames.
+  const texture = new THREE.DataTexture(new Uint8Array([128, 128, 0, 255]), 1, 1, THREE.RGBAFormat);
+  texture.name = "No-op field wake texture";
+  texture.needsUpdate = true;
+  return texture;
 }
 
 function smoothstep(edge0: number, edge1: number, value: number): number {

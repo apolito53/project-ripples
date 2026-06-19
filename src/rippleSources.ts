@@ -2,14 +2,12 @@ import * as THREE from "three";
 
 // WebGL needs a fixed-size uniform array for ripple uploads. This is now a
 // renderer budget, not the gameplay rule that decides when a ripple disappears.
-// Manual pulse cooldown, movement-wake spacing, and lifetime pruning should keep
-// normal play below it while still allowing several overlapping propagating waves.
+// Manual pulse cooldown, Echo collection cadence, and lifetime pruning should
+// keep normal play below it while still allowing overlapping propagating waves.
 export const MAX_SHADER_RIPPLE_SOURCES = 32;
 export const RIPPLE_LIFETIME_SECONDS = 7.5;
 
-export type RippleSourceKind = "pulse" | "wake";
-
-const CIRCULAR_SOURCE_DIRECTION = -99;
+export type RippleSourceKind = "pulse";
 
 export type RippleSourceOptions = {
   readonly kind?: RippleSourceKind;
@@ -17,7 +15,6 @@ export type RippleSourceOptions = {
   readonly widthMultiplier?: number;
   readonly dampingMultiplier?: number;
   readonly lifetimeSeconds?: number;
-  readonly direction?: THREE.Vector3;
 };
 
 export type RippleSource = {
@@ -29,7 +26,6 @@ export type RippleSource = {
   readonly widthMultiplier: number;
   readonly dampingMultiplier: number;
   readonly lifetimeSeconds: number;
-  readonly directionAngle: number;
   readonly hue: number;
 };
 
@@ -44,9 +40,6 @@ export class RippleSourceStore {
   ): RippleSource {
     this.pruneExpired(startTime);
     const normalizedOptions = typeof options === "string" ? { kind: options } : options;
-    const directionAngle = normalizedOptions.direction
-      ? Math.atan2(normalizedOptions.direction.z, normalizedOptions.direction.x)
-      : CIRCULAR_SOURCE_DIRECTION;
 
     const source: RippleSource = {
       position: position.clone(),
@@ -57,7 +50,6 @@ export class RippleSourceStore {
       widthMultiplier: finiteOrDefault(normalizedOptions.widthMultiplier, 1),
       dampingMultiplier: finiteOrDefault(normalizedOptions.dampingMultiplier, 1),
       lifetimeSeconds: finiteOrDefault(normalizedOptions.lifetimeSeconds, RIPPLE_LIFETIME_SECONDS),
-      directionAngle: finiteOrDefault(directionAngle, CIRCULAR_SOURCE_DIRECTION),
       hue: (startTime * 0.08 + this.sources.length * 0.17) % 1
     };
 
@@ -90,15 +82,15 @@ export class RippleSourceStore {
 
       // Uniform layout is deliberately small but no longer arbitrary:
       // - target: x/z position, birth time, amplitude
-      // - metadata: speed, width, damping, and optional travel direction
-      // - lifetime: source-specific fade horizon so dense wakes can age out
-      //   before the fixed WebGL upload budget starts swapping rings around.
+      // - metadata: speed, width, damping, and a reserved slot
+      // - lifetime: source-specific fade horizon so the fixed WebGL upload
+      //   budget never decides when a pulse actually dies.
       target[writtenCount].set(source.position.x, source.position.z, source.startTime, source.strength);
       metadataTarget[writtenCount].set(
         finiteOrDefault(source.speedMultiplier, 1),
         finiteOrDefault(source.widthMultiplier, 1),
         finiteOrDefault(source.dampingMultiplier, 1),
-        finiteOrDefault(source.directionAngle, CIRCULAR_SOURCE_DIRECTION)
+        0
       );
       lifetimeTarget[writtenCount] = finiteOrDefault(source.lifetimeSeconds, RIPPLE_LIFETIME_SECONDS);
       writtenCount += 1;
@@ -109,7 +101,7 @@ export class RippleSourceStore {
     // debugging and can leak visual state if the count ever changes mid-frame.
     for (let index = writtenCount; index < target.length; index += 1) {
       target[index].set(0, 0, -999, 0);
-      metadataTarget[index].set(1, 1, 1, CIRCULAR_SOURCE_DIRECTION);
+      metadataTarget[index].set(1, 1, 1, 0);
       lifetimeTarget[index] = RIPPLE_LIFETIME_SECONDS;
     }
 
