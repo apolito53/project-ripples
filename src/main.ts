@@ -96,8 +96,6 @@ const MOVEMENT_RIPPLE_MAX_STRENGTH = 0.12;
 // prevents old rings from swapping in and out as newer wake stamps appear.
 const MOVEMENT_RIPPLE_LIFETIME_SECONDS = 2.8;
 const MOVEMENT_RIPPLE_STERN_OFFSET = 0.9;
-const MOVEMENT_RIPPLE_SHOULDER_OFFSET = 1.15;
-const MOVEMENT_RIPPLE_SHOULDER_BACKSET = 1.95;
 const MANUAL_PULSE_OPTIONS: RippleSourceOptions = {
   kind: "pulse",
   speedMultiplier: 1,
@@ -175,7 +173,6 @@ let fpsAccumulatorSeconds = 0;
 let measuredFps = 60;
 let nextEchoZoneAt = 0.8;
 let lastMovementRippleAt = -Infinity;
-let movementWakeSide = 1;
 let echoDebugFrameWatchUntil = -Infinity;
 let echoDebugLastFrameLogAt = -Infinity;
 let lastGlobalFrameHitchLogAt = -Infinity;
@@ -185,8 +182,6 @@ let lastRawDeltaMs = 0;
 let fieldRebuildTimeoutId = 0;
 const lastMovementRipplePosition = new THREE.Vector3(Infinity, 0, Infinity);
 const movementDirection = new THREE.Vector3();
-const movementShoulder = new THREE.Vector3();
-const movementPerpendicular = new THREE.Vector3();
 const sceneLightSources: SceneLightSource[] = [];
 const mobileQuery = window.matchMedia("(pointer: coarse), (hover: none)");
 const activeTouchSticks = new Map<number, TouchStickState>();
@@ -337,41 +332,40 @@ function maybeSpawnMovementRipple(time: number, playerSpeed: number): void {
   );
 
   movementDirection.copy(player.velocity).setY(0).normalize();
-  movementPerpendicular.set(-movementDirection.z, 0, movementDirection.x);
 
-  // A moving body in water leaves more than one perfect circle. We drop a stern
-  // source directly behind the avatar, plus an alternating shoulder source that
-  // builds a soft V wake without doubling both sides every frame.
+  // Movement should read as one continuous wake front, not as a trail of little
+  // circular splashes. We still stamp sparse analytic sources for persistence,
+  // but each source now carries the movement direction so the shader renders it
+  // as a wake-front packet behind the avatar instead of a full ring.
   const stern = player.position.clone().addScaledVector(
     movementDirection,
     -MOVEMENT_RIPPLE_STERN_OFFSET
   );
-  addMovementWakeSource(stern, time, strength);
-
-  movementShoulder.copy(player.position)
-    .addScaledVector(movementDirection, -MOVEMENT_RIPPLE_SHOULDER_BACKSET)
-    .addScaledVector(movementPerpendicular, MOVEMENT_RIPPLE_SHOULDER_OFFSET * movementWakeSide);
-  addMovementWakeSource(movementShoulder, time, strength * 0.72);
-  movementWakeSide *= -1;
+  addMovementWakeSource(stern, time, strength, movementDirection);
 
   lastMovementRippleAt = time;
   lastMovementRipplePosition.copy(player.position);
 }
 
-function addMovementWakeSource(position: THREE.Vector3, time: number, strength: number): void {
+function addMovementWakeSource(
+  position: THREE.Vector3,
+  time: number,
+  strength: number,
+  direction: THREE.Vector3
+): void {
   position.y = sampleFieldHeight(position.x, position.z) + 0.4;
 
   // Movement wakes feed the terrain shader only. No burst particles, no point
   // lights: just lingering displacement, like water remembering the body that
-  // passed through it. These sources intentionally do not carry direction now:
-  // once a wake is stamped into the field, it should stay put instead of aiming
-  // around like a flashlight beam as the player changes direction.
+  // passed through it. Direction is captured at stamp time, so the packet keeps
+  // its original heading and does not swivel if the avatar turns afterward.
   rippleSources.add(position, time, strength, {
     kind: "wake",
     speedMultiplier: settings.waveMedium.wakeSpeedMultiplier,
     widthMultiplier: 1.45,
     dampingMultiplier: 0.72,
-    lifetimeSeconds: MOVEMENT_RIPPLE_LIFETIME_SECONDS
+    lifetimeSeconds: MOVEMENT_RIPPLE_LIFETIME_SECONDS,
+    direction
   });
 }
 
@@ -1499,6 +1493,8 @@ function updateStats(delta: number, time: number): void {
 
   const basePropagationSpeed = getBasePropagationSpeedMetersPerSecond(settings.waveMedium);
   const activeSources = rippleSources.getActiveSources(time);
+  const activePulseCount = activeSources.filter((source) => source.kind === "pulse").length;
+  const activeWakeCount = activeSources.length - activePulseCount;
   const newestSource = activeSources[0];
   const rawNewestStartTime = newestSource?.startTime;
   const rawNewestSpeedMultiplier = newestSource?.speedMultiplier;
@@ -1517,11 +1513,11 @@ function updateStats(delta: number, time: number): void {
   frameCount = 0;
   fpsAccumulatorSeconds = 0;
   statsLine.textContent = `${Math.round(measuredFps)} fps | ${rippleField.getInstanceCount().toLocaleString()} hexes | ${preset.particleBudget.toLocaleString()} particles`;
-  mediumLine.textContent = `${basePropagationSpeed.toFixed(1)} m/s | ${settings.waveMedium.effectiveDepth.toFixed(1)}m depth | ${formatVoxelSize(settings.voxelSizeMeters)} hex dia | ${settings.arenaRadiusMeters.toFixed(0)}m arena | ${echoZones.getActiveCount()} echoes | ${activeSources.length} waves | newest ${newestRingRadius.toFixed(1)}m`;
-  updatePerfOverlay(activeSources.length);
+  mediumLine.textContent = `${basePropagationSpeed.toFixed(1)} m/s | ${settings.waveMedium.effectiveDepth.toFixed(1)}m depth | ${formatVoxelSize(settings.voxelSizeMeters)} hex dia | ${settings.arenaRadiusMeters.toFixed(0)}m arena | ${echoZones.getActiveCount()} echoes | ${activePulseCount} pulses | ${activeWakeCount} wake | newest ${newestRingRadius.toFixed(1)}m`;
+  updatePerfOverlay(activePulseCount, activeWakeCount);
 }
 
-function updatePerfOverlay(activeSourceCount: number): void {
+function updatePerfOverlay(activePulseCount: number, activeWakeCount: number): void {
   const renderedSourceCount = rippleField.getRenderedRippleSourceCount();
   const renderedSourceLimit = rippleField.getRenderedRippleSourceLimit();
   const activeParticleCount = particles.getActiveCount();
@@ -1537,7 +1533,7 @@ function updatePerfOverlay(activeSourceCount: number): void {
   perfFps.textContent = `${Math.round(measuredFps)} | raw ${lastRawDeltaMs.toFixed(1)} ms`;
   perfHexes.textContent = formatCompactCount(rippleField.getInstanceCount());
   perfParticles.textContent = `${formatCompactCount(activeParticleCount)}/${formatCompactCount(preset.particleBudget)}`;
-  perfWaves.textContent = `${activeSourceCount} | GPU ${renderedSourceCount}/${renderedSourceLimit}`;
+  perfWaves.textContent = `${activePulseCount}p/${activeWakeCount}w | GPU ${renderedSourceCount}/${renderedSourceLimit}`;
   perfRenderer.textContent = `${drawCalls}c | ${formatCompactCount(triangles)} tri | ${getPixelRatio().toFixed(2)}x`;
 }
 

@@ -47,6 +47,9 @@
   active versus resident particle counts, rendered wave-source pressure,
   renderer draw stats, pixel ratio, quality state, an `F2` shortcut, and a
   pause-menu toggle.
+- Changed movement wake sources from paired circular ripple stamps into sparse
+  directional wake-front packets, and split HUD/overlay counts into pulse and
+  wake sources so normal movement no longer reads like spawning little rings.
 
 ## 0.2.0-ALPHA - 2026-06-18
 
