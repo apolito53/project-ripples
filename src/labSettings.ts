@@ -18,9 +18,11 @@ import {
   cloneDefaultWaveMedium,
   type WaveMediumSettings
 } from "./waveMedium";
+import { DEFAULT_SKYBOX_ID, type SkyboxId } from "./skybox";
 
 export type LabSettings = {
   qualityId: QualityId;
+  skyboxId: SkyboxId;
   playerSpeed: PlayerSpeedSettings;
   rippleHeight: number;
   rippleRadius: number;
@@ -35,6 +37,7 @@ export type LabSettings = {
 
 export const DEFAULT_SETTINGS: LabSettings = {
   qualityId: "pretty",
+  skyboxId: DEFAULT_SKYBOX_ID,
   playerSpeed: DEFAULT_PLAYER_SPEED_SETTINGS,
   rippleHeight: 1.25,
   rippleRadius: 9,

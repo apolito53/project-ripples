@@ -4,6 +4,9 @@
 
 ### Added
 
+- Added selectable panoramic skyboxes for Cyberpunk Skyline, Aurora
+  Observatory, and Orbital Megastructure themes, replacing the pure void with
+  distant city/space horizons while keeping each texture cheap to render.
 - Added a shared JSONL diagnostics analyzer with `npm.cmd run diagnostics`,
   `npm.cmd run logs:summary`, and a broad `npm.cmd run verify:perf` perf gate
   for obvious frame/rebuild runaway costs.

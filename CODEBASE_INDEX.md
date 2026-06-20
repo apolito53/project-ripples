@@ -1,6 +1,6 @@
 # Codebase Index
 
-Last reviewed: 2026-06-19
+Last reviewed: 2026-06-20
 
 Purpose: compact map for the standalone ripple-field visual lab.
 
@@ -33,6 +33,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Visual styling and overlay layout: `src/styles.css`
 - App bootstrap, Three.js scene, render loop, quality wiring, and postprocessing:
   `src/main.ts`
+- Selectable panoramic skybox texture loading, generated horizon asset choices,
+  and per-theme fog tuning: `src/skybox.ts` plus `public/skyboxes/`
 - HUD formatting and cause-specific frame-hitch payload assembly:
   `src/frameTelemetry.ts`
 - Field scale instance-budget clamp decisions:
@@ -80,13 +82,16 @@ Purpose: compact map for the standalone ripple-field visual lab.
 1. `index.html` loads `src/main.ts`.
 2. `main.ts` creates the renderer, scene, camera, bloom composer, field, particles,
    pulse lights, and glow avatar.
-3. `PlayerRig` updates momentum-based planar movement and camera follow every
+3. `SkyboxManager` applies the selected panoramic background texture and its
+   matching fog/clear color so the arena sits inside a distant sci-fi horizon
+   instead of a pure void.
+4. `PlayerRig` updates momentum-based planar movement and camera follow every
    frame.
-4. Cooldown-gated clicks and `Space` add analytic pulse sources; avatar movement
+5. Cooldown-gated clicks and `Space` add analytic pulse sources; avatar movement
    writes a continuous wake influence into a GPU height/velocity texture instead
    of adding little circular source stamps. Echo-zone timers add persistent
    collectible markers instead of immediate ambient waves.
-5. `RippleField` builds hex instances inside the circular arena using the
+6. `RippleField` builds hex instances inside the circular arena using the
    active quality, hex-size, and arena-radius settings. Hex geometry is rotated
    to match the staggered lattice, and Meltdown's visible footprint is calibrated
    to read as an interlocked honeycomb while preserving its previous density.
@@ -95,24 +100,24 @@ Purpose: compact map for the standalone ripple-field visual lab.
    stay static while the GPU animates lit cap height, lift/stretch/glow, crest
    bloom, movement wake memory, and height-based tinting. The old per-cell shaft
    mesh has been removed to keep the geometry path simpler before the sphere work.
-6. `ArenaBarrier` draws a visual-only smooth glowing gradient curtain at the
+7. `ArenaBarrier` draws a visual-only smooth glowing gradient curtain at the
    arena radius so the map edge is visible without changing collision logic.
-7. `EchoZoneField` animates live Echo markers and reports run-through triggers.
-8. `ParticleVeil` animates the player sparkle aura, burst clouds, flat Echo
+8. `EchoZoneField` animates live Echo markers and reports run-through triggers.
+9. `ParticleVeil` animates the player sparkle aura, burst clouds, flat Echo
    disc bursts, and wake motes.
-9. `PulseLightRig` assigns recent pulses and collected Echo detonations to
+10. `PulseLightRig` assigns recent pulses and collected Echo detonations to
    point lights.
-10. The HUD reports FPS, instance counts, base propagation speed, voxel size,
+11. The HUD reports FPS, instance counts, base propagation speed, voxel size,
     arena radius, live Echo count, active pulse count, and newest pulse radius.
     A denser `F2`/pause-menu performance overlay reports frame/update/render
     timing, active particles versus resident budget, rendered pulse-source
     pressure, wake texture mode/pass cost, renderer draw stats, pixel ratio,
     bloom state, and quality.
-11. Esc or the hamburger button opens the centered pause menu, which owns
+12. Esc or the hamburger button opens the centered pause menu, which owns
     tuning controls, a Resume action, and a version changelog button.
     Hidden walk/sprint speed rows remain wired for future tuning, but are not
     currently exposed in the visible menu.
-12. The scene renders through bloom when bloom strength is above zero.
+13. The scene renders through bloom when bloom strength is above zero.
 
 ## Common Change Targets
 
@@ -122,6 +127,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
   and `src/main.ts`
 - Change the visible map-edge barrier color, height, or shimmer:
   `src/arenaBarrier.ts`
+- Change generated skybox choices, labels, texture paths, or matching fog color:
+  `src/skybox.ts` and `public/skyboxes/`
 - Change ripple math, hex shape, directional water-like movement response,
   animated-height tint, crest glow, or generic proximity glow:
   `src/rippleField.ts`

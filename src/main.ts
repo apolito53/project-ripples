@@ -31,6 +31,7 @@ import {
 } from "./qualityPresets";
 import { RippleField } from "./rippleField";
 import { RippleSourceStore, type RippleSourceOptions } from "./rippleSources";
+import { SKYBOX_OPTIONS, SkyboxManager, isSkyboxId } from "./skybox";
 import "./styles.css";
 import { sampleFieldHeight } from "./terrain";
 import { WakeField } from "./wakeField";
@@ -43,6 +44,7 @@ const statsLine = requireElement<HTMLElement>("#stats-line");
 const mediumLine = requireElement<HTMLElement>("#medium-line");
 const qualityBadge = requireElement<HTMLElement>("#quality-badge");
 const qualitySelect = requireElement<HTMLSelectElement>("#quality-select");
+const skyboxSelect = requireElement<HTMLSelectElement>("#skybox-select");
 const voxelSizeSlider = requireElement<HTMLInputElement>("#voxel-size-slider");
 const voxelSizeValue = requireElement<HTMLOutputElement>("#voxel-size-value");
 const arenaRadiusSlider = requireElement<HTMLInputElement>("#arena-radius-slider");
@@ -171,6 +173,7 @@ app.append(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x020409);
+const skybox = new SkyboxManager(scene, renderer);
 const camera = new THREE.PerspectiveCamera(54, 1, 0.1, 450);
 const clock = new THREE.Clock();
 const settings = cloneDefaultSettings();
@@ -240,6 +243,7 @@ previousWakePlayerPosition.copy(player.position);
 createLighting();
 const stageFloor = createStageFloor();
 const arenaBarrier = new ArenaBarrier(scene);
+skybox.setSkybox(settings.skyboxId);
 syncControlValues();
 wireControls();
 updateTuningReadouts();
@@ -575,6 +579,12 @@ function wireControls(): void {
     updateEffectToggle(bloomToggle, settings.bloomEnabled, bloomSlider);
     applyQualityPreset(preset, false);
   });
+  skyboxSelect.addEventListener("change", () => {
+    if (!isSkyboxId(skyboxSelect.value)) return;
+    settings.skyboxId = skyboxSelect.value;
+    skybox.setSkybox(settings.skyboxId);
+    updateSceneFog(preset);
+  });
 
   voxelSizeSlider.addEventListener("input", () => {
     settings.voxelSizeMeters = Number(voxelSizeSlider.value);
@@ -627,7 +637,9 @@ function wireControls(): void {
 }
 
 function syncControlValues(): void {
+  syncSkyboxOptions();
   qualitySelect.value = settings.qualityId;
+  skyboxSelect.value = settings.skyboxId;
   voxelSizeSlider.min = String(VOXEL_SIZE_MIN_METERS);
   voxelSizeSlider.max = String(VOXEL_SIZE_MAX_METERS);
   voxelSizeSlider.step = "0.05";
@@ -652,6 +664,17 @@ function syncControlValues(): void {
   bloomSlider.value = String(settings.bloomStrength);
   updateEffectToggle(bloomToggle, settings.bloomEnabled, bloomSlider);
   setPerfOverlayVisible(perfOverlayVisible);
+}
+
+function syncSkyboxOptions(): void {
+  if (skyboxSelect.options.length > 0) return;
+
+  for (const option of SKYBOX_OPTIONS) {
+    const optionElement = document.createElement("option");
+    optionElement.value = option.id;
+    optionElement.textContent = option.label;
+    skyboxSelect.append(optionElement);
+  }
 }
 
 function enforceFieldInstanceBudget(changedControl: FieldScaleChangedControl): void {
@@ -974,7 +997,7 @@ function applyQualityPreset(nextPreset: QualityPreset, initial: boolean): void {
   qualityBadge.textContent = nextPreset.label;
   renderer.shadowMap.enabled = nextPreset.shadowMapSize > 0;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  scene.fog = new THREE.FogExp2(0x020815, nextPreset.fogDensity);
+  updateSceneFog(nextPreset);
   bloomPass.strength = getEffectiveBloomStrength();
 
   if (!initial) {
@@ -988,6 +1011,14 @@ function applyQualityPreset(nextPreset: QualityPreset, initial: boolean): void {
   updateStageFloor(nextPreset);
   updateShadowResolution(nextPreset.shadowMapSize, nextPreset.fieldRadius);
   resize();
+}
+
+function updateSceneFog(nextPreset: QualityPreset): void {
+  const activeSkybox = skybox.getActiveOption();
+  scene.fog = new THREE.FogExp2(
+    activeSkybox.fogColor,
+    nextPreset.fogDensity * activeSkybox.fogDensityMultiplier
+  );
 }
 
 function prewarmRenderPipelines(): void {

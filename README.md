@@ -67,10 +67,10 @@ height/velocity field left behind by movement. Manual click/Space pulses and
 collected Echoes still use analytic ring sources, but ordinary movement no
 longer adds little circular wave sources while the avatar runs.
 
-The Esc/hamburger pause menu changes quality, hex size, arena radius, ripple
-height/radius, Depth / Speed, particle density, bloom strength, and the live
-performance overlay while the scene is running. Hex size treats the current
-cell scale as `1m`, ranges from `25cm` to `2m`, and measures the regular
+The Esc/hamburger pause menu changes quality, skybox theme, hex size, arena
+radius, ripple height/radius, Depth / Speed, particle density, bloom strength,
+and the live performance overlay while the scene is running. Hex size treats
+the current cell scale as `1m`, ranges from `25cm` to `2m`, and measures the regular
 hexagon's widest point-to-point diameter. Changing it rebuilds the instanced
 field after a short debounce so slider drags do not spam geometry work. Arena
 radius is expressed in lab meters: `200m` preserves the original scene radius,
@@ -160,6 +160,8 @@ Versioning:
   player-proximity glow.
 - `src/arenaBarrier.ts` owns the visual-only glowing arena-edge gradient that
   follows the live arena radius without changing collision behavior.
+- `src/skybox.ts` owns the selectable panoramic background loader and per-theme
+  fog tuning. The current generated skybox assets live in `public/skyboxes/`.
 - `src/wakeField.ts` owns the ping-pong GPU wake heightfield for movement,
   including capability fallback, quality-sized render targets, and sampled
   `wake.*` diagnostics.
