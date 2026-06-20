@@ -12,6 +12,12 @@ import {
 } from "./controls";
 import { debugEvent, debugMeasure, roundMetric, vectorPayload, type RippleDebugPayload } from "./debugLog";
 import { EchoZoneField, type TriggeredEchoZone } from "./echoZones";
+import { applyFieldInstanceBudget, type FieldScaleChangedControl } from "./fieldScaleGuardrails";
+import {
+  createGlobalFrameHitchEvent,
+  formatCompactCount,
+  formatVoxelSize
+} from "./frameTelemetry";
 import { cloneDefaultSettings, getQualityPreset } from "./labSettings";
 import { ParticleVeil } from "./particleVeil";
 import { PulseLightRig } from "./pulseLights";
@@ -20,9 +26,6 @@ import {
   ARENA_RADIUS_MIN_METERS,
   VOXEL_SIZE_MAX_METERS,
   VOXEL_SIZE_MIN_METERS,
-  estimateFieldInstancesForPreset,
-  getMaxArenaRadiusMetersForFieldBudget,
-  getMinVoxelSizeMetersForFieldBudget,
   isQualityId,
   type QualityPreset
 } from "./qualityPresets";
@@ -99,8 +102,6 @@ const ECHO_DEBUG_SLOW_FRAME_MS = 24;
 const GLOBAL_FRAME_HITCH_MS = 45;
 const GLOBAL_FRAME_HITCH_LOG_INTERVAL_SECONDS = 0.75;
 const GLOBAL_FRAME_HITCH_WARMUP_SECONDS = 1;
-const GLOBAL_FRAME_HITCH_COMPONENT_MS = 24;
-const GLOBAL_FRAME_HITCH_DOMINANCE_RATIO = 1.2;
 const FIELD_REBUILD_DEBOUNCE_MS = 180;
 const MANUAL_PULSE_OPTIONS: RippleSourceOptions = {
   kind: "pulse",
@@ -154,9 +155,6 @@ type SceneLightSource = {
   readonly distanceScale: number;
   readonly phaseOffset: number;
 };
-
-type GlobalFrameHitchKind = "render" | "update" | "mixed" | "clock-gap";
-type FieldScaleChangedControl = "quality" | "voxel-size" | "arena-radius";
 
 const renderer = new THREE.WebGLRenderer({
   antialias: true,
@@ -657,55 +655,20 @@ function syncControlValues(): void {
 }
 
 function enforceFieldInstanceBudget(changedControl: FieldScaleChangedControl): void {
-  if (fieldStressModeEnabled) return;
-
-  const beforePreset = getQualityPreset(settings);
-  const beforeEstimate = estimateFieldInstancesForPreset(beforePreset);
-  if (!beforeEstimate.exceedsBudget) return;
-
-  const beforeVoxelSizeMeters = settings.voxelSizeMeters;
-  const beforeArenaRadiusMeters = settings.arenaRadiusMeters;
-  const clampedField = changedControl === "voxel-size" ? "arenaRadiusMeters" : "voxelSizeMeters";
-
-  // Preserve the last thing the user touched. Shrinking hexes clamps radius,
-  // while expanding the arena or changing quality grows the hex diameter just
-  // enough to avoid a surprise multi-million-instance rebuild.
-  if (clampedField === "arenaRadiusMeters") {
-    settings.arenaRadiusMeters = getMaxArenaRadiusMetersForFieldBudget(
-      settings.qualityId,
-      settings.voxelSizeMeters
-    );
-  } else {
-    settings.voxelSizeMeters = getMinVoxelSizeMetersForFieldBudget(
-      settings.qualityId,
-      settings.arenaRadiusMeters
-    );
-  }
-
-  // The first clamp is rounded to the UI step, so re-check and fall back to the
-  // other dimension if the rounded value is still a little too ambitious.
-  let afterPreset = getQualityPreset(settings);
-  let afterEstimate = estimateFieldInstancesForPreset(afterPreset);
-  if (afterEstimate.exceedsBudget) {
-    settings.arenaRadiusMeters = getMaxArenaRadiusMetersForFieldBudget(
-      settings.qualityId,
-      settings.voxelSizeMeters
-    );
-    afterPreset = getQualityPreset(settings);
-    afterEstimate = estimateFieldInstancesForPreset(afterPreset);
-  }
+  const result = applyFieldInstanceBudget(settings, changedControl, fieldStressModeEnabled);
+  if (!result.applied) return;
 
   debugEvent("field.guardrail", "Clamped field scale to instance budget", {
-    changedControl,
-    clampedField,
-    quality: settings.qualityId,
-    maxInstances: afterEstimate.maxInstances,
-    estimatedInstancesBefore: beforeEstimate.estimatedInstances,
-    estimatedInstancesAfter: afterEstimate.estimatedInstances,
-    voxelSizeMetersBefore: roundMetric(beforeVoxelSizeMeters),
-    voxelSizeMetersAfter: roundMetric(settings.voxelSizeMeters),
-    arenaRadiusMetersBefore: roundMetric(beforeArenaRadiusMeters),
-    arenaRadiusMetersAfter: roundMetric(settings.arenaRadiusMeters)
+    changedControl: result.changedControl,
+    clampedField: result.clampedField,
+    quality: result.quality,
+    maxInstances: result.maxInstances,
+    estimatedInstancesBefore: result.estimatedInstancesBefore,
+    estimatedInstancesAfter: result.estimatedInstancesAfter,
+    voxelSizeMetersBefore: roundMetric(result.voxelSizeMetersBefore),
+    voxelSizeMetersAfter: roundMetric(result.voxelSizeMetersAfter),
+    arenaRadiusMetersBefore: roundMetric(result.arenaRadiusMetersBefore),
+    arenaRadiusMetersAfter: roundMetric(result.arenaRadiusMetersAfter)
   }, "warn");
 }
 
@@ -1719,17 +1682,14 @@ function logGlobalFrameHitch(time: number, delta: number, rawDelta: number, fram
   lastGlobalFrameHitchLogAt = time;
   const activeSources = rippleSources.getActiveSources(time);
   const wakeMetrics = wakeField.getMetrics();
-  const hitchKind = classifyGlobalFrameHitch(frameMs, updateMs, renderMs, rawClockDeltaMs);
-  const hitchChannel = getGlobalFrameHitchChannel(hitchKind);
-
-  debugEvent(hitchChannel, getGlobalFrameHitchMessage(hitchKind), {
-    hitchKind,
-    time: roundMetric(time),
-    frameMs: roundMetric(frameMs),
-    updateMs: roundMetric(updateMs),
-    renderMs: roundMetric(renderMs),
-    rawClockDeltaMs: roundMetric(rawClockDeltaMs),
-    cappedClockDeltaMs: roundMetric(delta * 1000),
+  const hitchEvent = createGlobalFrameHitchEvent({
+    time,
+    frameMs,
+    updateMs,
+    renderMs,
+    rawClockDeltaMs,
+    cappedClockDeltaMs: delta * 1000,
+    thresholdMs: GLOBAL_FRAME_HITCH_MS,
     echoWatchActive: time <= echoDebugFrameWatchUntil,
     activeEchoes: echoZones.getActiveCount(),
     activeVisualBursts: echoZones.getCollectBurstCount(),
@@ -1738,73 +1698,18 @@ function logGlobalFrameHitch(time: number, delta: number, rawDelta: number, fram
     activeRippleSources: activeSources.length,
     renderedRippleSources: rippleField.getRenderedRippleSourceCount(),
     renderedRippleSourceLimit: rippleField.getRenderedRippleSourceLimit(),
-    wakeMode: wakeMetrics.mode,
-    wakePassMs: roundMetric(wakeMetrics.passMs),
-    wakeTextureSize: wakeMetrics.textureSize,
-    wakeFallbackReason: wakeMetrics.fallbackReason,
-    movementWakeSourceAddsSinceLastHitch: wakeMetrics.movementSourceAddsSinceLastFrame,
+    wakeMetrics,
     quality: preset.id,
-    hexDiameterMeters: roundMetric(settings.voxelSizeMeters),
-    arenaRadiusMeters: roundMetric(settings.arenaRadiusMeters),
-    bloomStrength: roundMetric(getEffectiveBloomStrength()),
-    particleDensity: roundMetric(settings.particleDensity),
+    hexDiameterMeters: settings.voxelSizeMeters,
+    arenaRadiusMeters: settings.arenaRadiusMeters,
+    bloomStrength: getEffectiveBloomStrength(),
+    particleDensity: settings.particleDensity,
     particlesEnabled: settings.particlesEnabled,
     bloomEnabled: settings.bloomEnabled,
-    rendererPixelRatio: roundMetric(getPixelRatio()),
+    rendererPixelRatio: getPixelRatio(),
     visibilityState: document.visibilityState
-  }, "warn");
-}
-
-function classifyGlobalFrameHitch(
-  frameMs: number,
-  updateMs: number,
-  renderMs: number,
-  rawClockDeltaMs: number
-): GlobalFrameHitchKind {
-  // A visible browser tab can report a huge raw clock gap after sleep, reload,
-  // DevTools pauses, or a scheduling stall even when this frame's actual work is
-  // tiny. Keep that separate so logs do not blame the renderer for wall-clock
-  // weirdness it did not cause.
-  if (frameMs < GLOBAL_FRAME_HITCH_MS && rawClockDeltaMs >= GLOBAL_FRAME_HITCH_MS) {
-    return "clock-gap";
-  }
-
-  if (renderMs >= GLOBAL_FRAME_HITCH_COMPONENT_MS && renderMs >= updateMs * GLOBAL_FRAME_HITCH_DOMINANCE_RATIO) {
-    return "render";
-  }
-
-  if (updateMs >= GLOBAL_FRAME_HITCH_COMPONENT_MS && updateMs >= renderMs * GLOBAL_FRAME_HITCH_DOMINANCE_RATIO) {
-    return "update";
-  }
-
-  return "mixed";
-}
-
-function getGlobalFrameHitchChannel(kind: GlobalFrameHitchKind): string {
-  if (kind === "render") return "frame.renderHitch";
-  if (kind === "update") return "frame.updateHitch";
-  if (kind === "clock-gap") return "frame.clockGap";
-  return "frame.mixedHitch";
-}
-
-function getGlobalFrameHitchMessage(kind: GlobalFrameHitchKind): string {
-  if (kind === "render") return "Render-dominated frame hitch";
-  if (kind === "update") return "Update-dominated frame hitch";
-  if (kind === "clock-gap") return "Raw browser clock gap";
-  return "Mixed frame hitch";
-}
-
-function formatVoxelSize(sizeMeters: number): string {
-  return sizeMeters < 1
-    ? `${Math.round(sizeMeters * 100)}cm`
-    : `${sizeMeters.toFixed(2)}m`;
-}
-
-function formatCompactCount(value: number): string {
-  const absolute = Math.abs(value);
-  if (absolute >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}m`;
-  if (absolute >= 10_000) return `${(value / 1_000).toFixed(1)}k`;
-  return Math.round(value).toLocaleString();
+  });
+  debugEvent(hitchEvent.channel, hitchEvent.message, hitchEvent.payload, "warn");
 }
 
 function resize(): void {

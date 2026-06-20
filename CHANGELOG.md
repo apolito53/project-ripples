@@ -26,6 +26,9 @@
 - Reduced continuous player aura/wake particle pressure by scaling emission as
   the resident particle buffer fills, and narrowed static particle attribute
   uploads to dirty slot ranges instead of the full active buffer.
+- Split HUD formatting, frame-hitch payload assembly, and field-scale guardrail
+  decisions out of `src/main.ts` into focused modules so the render bootstrap is
+  less crowded.
 
 ## 0.3.0-ALPHA - 2026-06-19
 

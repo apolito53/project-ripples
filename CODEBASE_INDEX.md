@@ -33,6 +33,10 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Visual styling and overlay layout: `src/styles.css`
 - App bootstrap, Three.js scene, render loop, quality wiring, and postprocessing:
   `src/main.ts`
+- HUD formatting and cause-specific frame-hitch payload assembly:
+  `src/frameTelemetry.ts`
+- Field scale instance-budget clamp decisions:
+  `src/fieldScaleGuardrails.ts`
 - Momentum-based avatar movement, hidden speed-tuning defaults, circular arena
   clamp, scene-input gating, pointer lock, and camera follow behavior:
   `src/controls.ts`
@@ -113,7 +117,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 
 - Tune visual density, hex-size ranges, arena-radius ranges, per-quality field
   instance budgets, or GPU pressure:
-  `src/qualityPresets.ts`, `src/labSettings.ts`, and `src/main.ts`
+  `src/qualityPresets.ts`, `src/labSettings.ts`, `src/fieldScaleGuardrails.ts`,
+  and `src/main.ts`
 - Change the visible map-edge barrier color, height, or shimmer:
   `src/arenaBarrier.ts`
 - Change ripple math, hex shape, directional water-like movement response,
@@ -135,8 +140,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `src/main.ts`
 - Change pause-menu layout, changelog behavior, or tuning labels:
   `index.html`, `src/styles.css`, and `src/main.ts`
-- Change the live performance overlay or its `F2` toggle:
-  `index.html`, `src/styles.css`, and `src/main.ts`
+- Change the live performance overlay, HUD formatting, frame-hitch payloads, or
+  the `F2` toggle:
+  `index.html`, `src/styles.css`, `src/frameTelemetry.ts`, and `src/main.ts`
 
 ## Sharp Edges
 
