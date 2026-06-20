@@ -32,6 +32,10 @@
 - Pooled Echo collection burst meshes, materials, and shard buffers so Echo
   pickups reset resident resources instead of allocating and disposing burst
   geometry during gameplay.
+- Stabilized the continuous GPU wake field for long movement sessions by adding
+  a broad absorbing edge band plus tiny residual-wave damping, preventing
+  old wake energy from reflecting around the circular arena as whole-field
+  shimmer.
 
 ## 0.3.0-ALPHA - 2026-06-19
 

@@ -11,6 +11,17 @@ const WAKE_BRUSH_RADIUS_METERS = 1.4;
 const WAKE_SHOULDER_OFFSET_METERS = 0.9;
 const WAKE_HEIGHT_STRENGTH = 0.08;
 const WAKE_MAX_SIM_DELTA_SECONDS = 1 / 30;
+// A finite heightfield behaves like a bowl unless the outer band absorbs old
+// waves. These ratios are intentionally wide: they bleed long-running energy
+// before it can reflect back through the whole arena as low-amplitude chatter.
+const WAKE_EDGE_ABSORB_START_RATIO = 0.72;
+const WAKE_EDGE_ABSORB_END_RATIO = 0.98;
+const WAKE_EDGE_FADE_START_RATIO = 0.965;
+// Tiny residual waves are the ones that build into visible "vibrating water"
+// noise over long play sessions. Fresh wake fronts sit above this range and
+// keep their shape.
+const WAKE_MICRO_DAMPING_START = 0.012;
+const WAKE_MICRO_DAMPING_END = 0.08;
 
 type WakeFieldUniforms = {
   readonly uPreviousWake: THREE.IUniform<THREE.Texture>;
@@ -396,6 +407,21 @@ function createWakeMaterial(uniforms: WakeFieldUniforms): THREE.ShaderMaterial {
         height += velocity * cfl * 1.45;
         height *= max(0.0, 1.0 - uDamping * safeDelta * 0.42);
 
+        // Long sessions can leave tiny standing-wave residue in the ping-pong
+        // texture. A very small neighbor blend acts like numerical viscosity:
+        // it trims high-frequency chatter without flattening the visible wake.
+        float neighborAverage = (left + right + down + up) * 0.25;
+        float viscosity = min(0.045, safeDelta * (0.18 + uDamping * 0.75));
+        height = mix(height, neighborAverage, viscosity);
+        velocity = mix(velocity, 0.0, viscosity * 0.42);
+
+        // Once a ripple has decayed below the readable wave-front range, fade
+        // it more aggressively so the field cannot accumulate bowl resonance.
+        float residualEnergy = abs(height) + abs(velocity);
+        float microDamping = 1.0 - smoothstep(${WAKE_MICRO_DAMPING_START.toFixed(3)}, ${WAKE_MICRO_DAMPING_END.toFixed(3)}, residualEnergy);
+        height *= max(0.0, 1.0 - microDamping * safeDelta * 1.35);
+        velocity *= max(0.0, 1.0 - microDamping * safeDelta * 1.7);
+
         vec2 movement = uPlayerCurrent - uPlayerPrevious;
         vec2 direction = normalize(uPlayerVelocity + vec2(0.0001, 0.0));
         float motionDistance = length(movement);
@@ -427,7 +453,21 @@ function createWakeMaterial(uniforms: WakeFieldUniforms): THREE.ShaderMaterial {
         // calmer water behind the player settles instead of glowing as a slab.
         crest = max(crest * max(0.0, 1.0 - safeDelta * 2.05), moving * (crestBrush * 1.4 + centerBrush * 0.04));
 
-        float arenaMask = 1.0 - smoothstep(uFieldRadius * 0.96, uFieldRadius, length(worldPosition));
+        // Absorb waves before the hard edge. Without this sponge band, wake
+        // energy reflects around the circular texture and eventually shows up
+        // as arena-wide shimmering instead of a local trail.
+        float radialDistance = length(worldPosition);
+        float edgeSponge = smoothstep(
+          uFieldRadius * ${WAKE_EDGE_ABSORB_START_RATIO.toFixed(3)},
+          uFieldRadius * ${WAKE_EDGE_ABSORB_END_RATIO.toFixed(3)},
+          radialDistance
+        );
+        float spongeDamping = max(0.0, 1.0 - edgeSponge * safeDelta * (2.8 + uPropagationSpeed * 0.04));
+        height *= spongeDamping;
+        velocity *= spongeDamping * spongeDamping;
+        crest *= max(0.0, 1.0 - edgeSponge * safeDelta * 3.2);
+
+        float arenaMask = 1.0 - smoothstep(uFieldRadius * ${WAKE_EDGE_FADE_START_RATIO.toFixed(3)}, uFieldRadius, radialDistance);
         height *= arenaMask;
         velocity *= arenaMask;
         crest *= arenaMask;

@@ -44,8 +44,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
   wake displacement, Meltdown-calibrated honeycomb orientation, lit hex caps,
   animated-height cell tinting, and bounded crest-specific glow:
   `src/rippleField.ts`
-- Ping-pong GPU movement wake heightfield, fallback texture, quality-sized
-  render targets, and `wake.*` diagnostics: `src/wakeField.ts`
+- Ping-pong GPU movement wake heightfield, absorbing edge band, residual-wave
+  damping, fallback texture, quality-sized render targets, and `wake.*`
+  diagnostics: `src/wakeField.ts`
 - Visual-only smooth glowing arena-edge gradient barrier: `src/arenaBarrier.ts`
 - Visible cyan/magenta spotlight fixtures, stage floor, core scene lighting,
   and player avatar visuals: `src/main.ts`
@@ -183,7 +184,10 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `/tail?minFrameMs=45` for quick local triage.
 - `WakeField` allocates render targets only at startup and quality changes, not
   during normal movement. If movement increases `activeRippleSources`, the new
-  wake path has regressed back into source stamping.
+  wake path has regressed back into source stamping. The wake texture also has a
+  broad absorbing edge band and low-energy damping; preserve those when tuning,
+  or old movement energy can reflect around the circular texture and turn into
+  whole-arena shimmer after a few minutes.
 - `ParticleVeil` keeps active motes packed into the leading buffer range and
   sets Three.js draw/update ranges from `activeCount`; preserve that shape when
   changing particle lifetimes or replacement behavior, or dead budget slots will
