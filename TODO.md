@@ -56,3 +56,6 @@ concrete follow-ups that we actually intend to revisit.
 - Added a small `F2`/pause-menu performance overlay with frame timing, render
   pressure, active particles, resident budgets, wave-source pressure, pixel
   ratio, bloom state, and quality preset.
+- Pooled Echo collection burst meshes/materials/shard buffers so pickup effects
+  reset resident resources instead of allocating and disposing burst geometry
+  during gameplay.

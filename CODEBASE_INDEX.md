@@ -53,7 +53,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `src/rippleSources.ts`
 - Persistent collectible Echo-column lights, bright orb lights, vertical
   diamond-style orb mist, avatar-style segmented crystal orbit trails, and
-  run-through collection bursts:
+  pooled run-through collection bursts:
   `src/echoZones.ts`
 - Player sparkle aura, adaptive continuous emission, additive particle bursts,
   wake trails, and narrowed static attribute uploads:
@@ -157,7 +157,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Echo zones are CPU-side gameplay markers with stacked point lights, bright
   orb lights, vertical diamond-style orb mist, segmented crystal-local orbiting
   sparkle trails, and
-  short collection bursts. They should not become shader sources until
+  pooled short collection bursts. They should not become shader sources until
   collected, otherwise they turn back into ambient pulses with extra jewelry.
   Collected Echo payloads carry both a surface wave position and an elevated
   core-height effect position; keep that split so gameplay waves stay grounded
@@ -165,6 +165,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
   Their point lights are pooled and parked at zero intensity; do not add/remove
   point lights during Echo spawn or collection, because changing Three.js light
   counts can recompile the lit field shader during gameplay.
+  Echo collection bursts also use a resident mesh/material/buffer pool; returning
+  a burst should hide and reset it, not dispose geometry or allocate replacement
+  shard buffers on the next pickup.
 - Echo detonation and global frame-hitch logging defaults on for local hosts
   and writes a retained ring buffer to `window.__rippleDebugLog`; use
   `window.__rippleDebugDump()` in DevTools after a freeze to inspect the last

@@ -29,6 +29,9 @@
 - Split HUD formatting, frame-hitch payload assembly, and field-scale guardrail
   decisions out of `src/main.ts` into focused modules so the render bootstrap is
   less crowded.
+- Pooled Echo collection burst meshes, materials, and shard buffers so Echo
+  pickups reset resident resources instead of allocating and disposing burst
+  geometry during gameplay.
 
 ## 0.3.0-ALPHA - 2026-06-19
 
