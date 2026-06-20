@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.7-ALPHA - 2026-06-20
+
 ### Added
 
 - Added selectable panoramic skyboxes for Cyberpunk Skyline, Aurora
@@ -39,6 +41,8 @@
   a broad absorbing edge band plus tiny residual-wave damping, preventing
   old wake energy from reflecting around the circular arena as whole-field
   shimmer.
+- Corrected package metadata, README, codebase index, and visible version text
+  to `v0.3.7-ALPHA` after seven post-`v0.3.0-ALPHA` commits.
 
 ## 0.3.0-ALPHA - 2026-06-19
 
