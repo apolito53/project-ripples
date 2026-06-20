@@ -51,7 +51,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
   diamond-style orb mist, avatar-style segmented crystal orbit trails, and
   run-through collection bursts:
   `src/echoZones.ts`
-- Player sparkle aura, additive particle bursts, and wake trails:
+- Player sparkle aura, adaptive continuous emission, additive particle bursts,
+  wake trails, and narrowed static attribute uploads:
   `src/particleVeil.ts`
 - Recent-pulse point light pool: `src/pulseLights.ts`
 - Quality preset budgets and labels: `src/qualityPresets.ts`
@@ -177,9 +178,12 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - `ParticleVeil` keeps active motes packed into the leading buffer range and
   sets Three.js draw/update ranges from `activeCount`; preserve that shape when
   changing particle lifetimes or replacement behavior, or dead budget slots will
-  quietly become render cost again. Echo disc detonations intentionally spend a
-  capped intensity budget on broad soft poof motes plus a smaller large-glitter
-  layer instead of one enormous glitter-only burst.
+  quietly become render cost again. Continuous avatar aura/wake emission scales
+  down as the resident buffer fills, and static attributes only upload dirty
+  slot ranges. Dynamic position/alpha/size still update broadly because live
+  particles move every frame. Echo disc detonations intentionally spend a capped
+  intensity budget on broad soft poof motes plus a smaller large-glitter layer
+  instead of one enormous glitter-only burst.
 - `RippleField` can upload fewer rendered ripple sources than the gameplay
   source list contains when the hex instance count is extreme. This is a
   GPU-side density throttle for shader loop cost, not a gameplay source cap.

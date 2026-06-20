@@ -20,6 +20,9 @@ const WAKE_PARTICLE_COUNT_MOVEMENT_BONUS = 180;
 const WAKE_VERTICAL_LIFT = 0.14;
 const WAKE_VERTICAL_JITTER_BASE = 0.44;
 const WAKE_VERTICAL_JITTER_MOVEMENT_BONUS = 0.34;
+const CONTINUOUS_EMISSION_THROTTLE_START = 0.58;
+const CONTINUOUS_EMISSION_THROTTLE_END = 0.94;
+const CONTINUOUS_EMISSION_MIN_SCALE = 0.2;
 
 export class ParticleVeil {
   readonly points: THREE.Points;
@@ -49,6 +52,8 @@ export class ParticleVeil {
   private cursor = 0;
   private elapsedSeconds = 0;
   private auraAccumulator = 0;
+  private staticDirtyMinIndex = Number.POSITIVE_INFINITY;
+  private staticDirtyMaxIndex = -1;
 
   constructor(scene: THREE.Scene, budget: number, pixelRatio: number) {
     this.capacity = budget;
@@ -220,9 +225,11 @@ export class ParticleVeil {
     // The avatar should feel wrapped in particulate light even while idle. The
     // accumulator makes the emission rate frame-rate independent, so a slow
     // machine does not get a thinner cloud just because fewer frames ran.
-    const particlesPerSecond = 2250 + movementStrength * 1750;
+    const emissionScale = this.getContinuousEmissionScale();
+    const particlesPerSecond = (2250 + movementStrength * 1750) * emissionScale;
     this.auraAccumulator += delta * particlesPerSecond;
-    const count = Math.min(340, Math.floor(this.auraAccumulator));
+    const frameCap = Math.max(42, Math.floor(340 * emissionScale));
+    const count = Math.min(frameCap, Math.floor(this.auraAccumulator));
     if (count <= 0) return;
 
     this.auraAccumulator -= count;
@@ -234,13 +241,15 @@ export class ParticleVeil {
   }
 
   spawnWake(center: THREE.Vector3, movementStrength: number): void {
-    if (movementStrength <= 0.08 || Math.random() > movementStrength * 0.55) return;
+    const emissionScale = this.getContinuousEmissionScale();
+    if (movementStrength <= 0.08 || Math.random() > movementStrength * 0.55 * emissionScale) return;
 
     // Movement wakes are emitted constantly while the player runs, so they get
     // a dedicated cheaper shape instead of borrowing the taller burst cloud.
     // The count is roughly half of the previous generic burst path, and the
     // Y scatter stays centered on the avatar core instead of hovering above it.
-    const count = WAKE_PARTICLE_COUNT_BASE + Math.floor(movementStrength * WAKE_PARTICLE_COUNT_MOVEMENT_BONUS);
+    const rawCount = WAKE_PARTICLE_COUNT_BASE + Math.floor(movementStrength * WAKE_PARTICLE_COUNT_MOVEMENT_BONUS);
+    const count = Math.max(6, Math.floor(rawCount * emissionScale));
     const strength = 0.12 + movementStrength * 0.16;
     for (let wakeIndex = 0; wakeIndex < count; wakeIndex += 1) {
       this.emitWakeParticle(center, strength, movementStrength);
@@ -482,25 +491,35 @@ export class ParticleVeil {
 
   private markDirty(includeStaticParticleData: boolean): void {
     this.geometry.setDrawRange(0, this.activeCount);
-    markAttributeRange(this.positionAttribute, this.activeCount * 3);
-    markAttributeRange(this.alphaAttribute, this.activeCount);
-    markAttributeRange(this.sizeAttribute, this.activeCount);
+    markAttributeRange(this.positionAttribute, 0, this.activeCount * 3);
+    markAttributeRange(this.alphaAttribute, 0, this.activeCount);
+    markAttributeRange(this.sizeAttribute, 0, this.activeCount);
 
     if (!includeStaticParticleData) return;
-    markAttributeRange(this.colorAttribute, this.activeCount * 3);
-    markAttributeRange(this.twinkleAttribute, this.activeCount);
-    markAttributeRange(this.cloudinessAttribute, this.activeCount);
+    if (this.staticDirtyMaxIndex < this.staticDirtyMinIndex) return;
+
+    const dirtyStart = Math.max(0, this.staticDirtyMinIndex);
+    const dirtyEnd = Math.min(this.activeCount - 1, this.staticDirtyMaxIndex);
+    const dirtyCount = dirtyEnd - dirtyStart + 1;
+    if (dirtyCount > 0) {
+      markAttributeRange(this.colorAttribute, dirtyStart * 3, dirtyCount * 3);
+      markAttributeRange(this.twinkleAttribute, dirtyStart, dirtyCount);
+      markAttributeRange(this.cloudinessAttribute, dirtyStart, dirtyCount);
+    }
+    this.clearStaticDirtyRange();
   }
 
   private allocateParticleSlot(): number {
     if (this.activeCount < this.capacity) {
       const index = this.activeCount;
       this.activeCount += 1;
+      this.markParticleStaticDataDirty(index);
       return index;
     }
 
     const index = this.cursor;
     this.cursor = (this.cursor + 1) % Math.max(1, this.activeCount);
+    this.markParticleStaticDataDirty(index);
     return index;
   }
 
@@ -528,6 +547,29 @@ export class ParticleVeil {
     this.lifetimes[toIndex] = this.lifetimes[fromIndex];
     this.baseSizes[toIndex] = this.baseSizes[fromIndex];
     this.baseAlphas[toIndex] = this.baseAlphas[fromIndex];
+    this.markParticleStaticDataDirty(toIndex);
+  }
+
+  private getContinuousEmissionScale(): number {
+    if (this.capacity <= 0) return 0;
+
+    const pressure = this.activeCount / this.capacity;
+    const throttle = smoothstep(
+      CONTINUOUS_EMISSION_THROTTLE_START,
+      CONTINUOUS_EMISSION_THROTTLE_END,
+      pressure
+    );
+    return THREE.MathUtils.lerp(1, CONTINUOUS_EMISSION_MIN_SCALE, throttle);
+  }
+
+  private markParticleStaticDataDirty(index: number): void {
+    this.staticDirtyMinIndex = Math.min(this.staticDirtyMinIndex, index);
+    this.staticDirtyMaxIndex = Math.max(this.staticDirtyMaxIndex, index);
+  }
+
+  private clearStaticDirtyRange(): void {
+    this.staticDirtyMinIndex = Number.POSITIVE_INFINITY;
+    this.staticDirtyMaxIndex = -1;
   }
 }
 
@@ -547,11 +589,16 @@ function createDynamicAttribute(array: Float32Array, itemSize: number): THREE.Bu
   return new THREE.BufferAttribute(array, itemSize).setUsage(THREE.DynamicDrawUsage);
 }
 
-function markAttributeRange(attribute: THREE.BufferAttribute, componentCount: number): void {
+function markAttributeRange(attribute: THREE.BufferAttribute, componentOffset: number, componentCount: number): void {
   attribute.clearUpdateRanges();
   if (componentCount <= 0) return;
-  attribute.addUpdateRange(0, componentCount);
+  attribute.addUpdateRange(componentOffset, componentCount);
   attribute.needsUpdate = true;
+}
+
+function smoothstep(edge0: number, edge1: number, value: number): number {
+  const x = Math.min(1, Math.max(0, (value - edge0) / (edge1 - edge0)));
+  return x * x * (3 - 2 * x);
 }
 
 function copyVec3(array: Float32Array, fromIndex: number, toIndex: number): void {

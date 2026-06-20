@@ -10,8 +10,10 @@ concrete follow-ups that we actually intend to revisit.
   broader particle system still needs a real split between sparkle mass, haze,
   and shader/procedural density.
 - Make particle buffer uploads less blunt.
-  `ParticleVeil.markDirty()` currently marks large dynamic attributes every
-  frame. Investigate update ranges, packed/interleaved buffers, or a more
+  First pass: continuous aura/wake emission now throttles as the resident buffer
+  fills, and static color/twinkle/cloudiness attributes upload only dirty slot
+  ranges. Remaining work: dynamic position/alpha/size attributes still update
+  broadly every frame, so investigate packed/interleaved buffers or a more
   GPU-driven particle state path before raising budgets again.
 - Add a proper arena edge treatment.
   The cube field now fills the circular arena and the player is clamped inside

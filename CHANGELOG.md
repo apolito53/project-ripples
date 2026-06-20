@@ -23,6 +23,9 @@
   `frame.hitch` JSONL entries.
 - Changed debug receiver stdout from a narrow slow-frame count to a richer
   warning/hitch summary so raw clock gaps and rebuild warnings are visible.
+- Reduced continuous player aura/wake particle pressure by scaling emission as
+  the resident particle buffer fills, and narrowed static particle attribute
+  uploads to dirty slot ranges instead of the full active buffer.
 
 ## 0.3.0-ALPHA - 2026-06-19
 
