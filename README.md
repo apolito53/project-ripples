@@ -7,7 +7,7 @@ This is intentionally separate from `voxel-sandbox-engine`. The goal is to make
 a polished visual lab first, then borrow patterns or ideas later if they deserve
 to graduate into the main voxel engine.
 
-Current version: `v0.3.7-ALPHA`.
+Current version: `v0.3.8-ALPHA`.
 
 ## Quick Start
 
@@ -88,6 +88,11 @@ The performance overlay adds a denser tuning cockpit with frame/update/render
 timing, active particles versus resident budget, rendered pulse-source pressure,
 GPU wake texture mode/pass cost, draw calls, triangles, pixel ratio, bloom state,
 and quality mode.
+Skybox themes use the generated Cyberpunk Skyline, Aurora Observatory, Orbital
+Megastructure, and Neon Arena Skyline panoramas on a camera-following dome.
+Modern GPUs get 8K sky textures; lower texture-cap hardware falls back to 4K,
+and the aurora/orbital themes have custom vertical framing so their horizons sit
+closer to the arena instead of sinking below the play surface.
 
 ## Quality Modes
 
@@ -145,7 +150,7 @@ Project planning:
 Versioning:
 
 - While the project is still experimental, release tags use alpha prerelease
-  labels. The current baseline is `v0.3.7-ALPHA`.
+  labels. The current baseline is `v0.3.8-ALPHA`.
 
 ## Design Notes
 
@@ -160,8 +165,9 @@ Versioning:
   player-proximity glow.
 - `src/arenaBarrier.ts` owns the visual-only glowing arena-edge gradient that
   follows the live arena radius without changing collision behavior.
-- `src/skybox.ts` owns the selectable panoramic background loader and per-theme
-  fog tuning. The current generated skybox assets live in `public/skyboxes/`.
+- `src/skybox.ts` owns the selectable camera-following sky dome, high-res versus
+  fallback texture selection, per-theme vertical framing, and fog tuning. The
+  current generated skybox assets live in `public/skyboxes/`.
 - `src/wakeField.ts` owns the ping-pong GPU wake heightfield for movement,
   including capability fallback, quality-sized render targets, and sampled
   `wake.*` diagnostics.

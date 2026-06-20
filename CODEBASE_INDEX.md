@@ -9,7 +9,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Vite + strict TypeScript browser app.
 - Three.js renderer, postprocessing composer, Unreal bloom pass, shader-customized
   `InstancedMesh`, additive `Points`, and dynamic lights.
-- Current alpha baseline: `v0.3.7-ALPHA`; keep release tags in alpha prerelease
+- Current alpha baseline: `v0.3.8-ALPHA`; keep release tags in alpha prerelease
   territory until the lab graduates from prototype status.
 - Dedicated dev port `5183`; preview port `4183`.
 
@@ -33,8 +33,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Visual styling and overlay layout: `src/styles.css`
 - App bootstrap, Three.js scene, render loop, quality wiring, and postprocessing:
   `src/main.ts`
-- Selectable panoramic skybox texture loading, generated horizon asset choices,
-  and per-theme fog tuning: `src/skybox.ts` plus `public/skyboxes/`
+- Selectable camera-following sky dome, 8K/4K generated skybox texture loading,
+  horizon framing, and per-theme fog tuning: `src/skybox.ts` plus
+  `public/skyboxes/`
 - HUD formatting and cause-specific frame-hitch payload assembly:
   `src/frameTelemetry.ts`
 - Field scale instance-budget clamp decisions:
@@ -82,9 +83,10 @@ Purpose: compact map for the standalone ripple-field visual lab.
 1. `index.html` loads `src/main.ts`.
 2. `main.ts` creates the renderer, scene, camera, bloom composer, field, particles,
    pulse lights, and glow avatar.
-3. `SkyboxManager` applies the selected panoramic background texture and its
-   matching fog/clear color so the arena sits inside a distant sci-fi horizon
-   instead of a pure void.
+3. `SkyboxManager` applies the selected generated panorama to a camera-following
+   UV sky dome, chooses 8K textures or 4K fallbacks from GPU texture caps, and
+   applies matching fog/clear color so the arena sits inside a distant sci-fi
+   horizon instead of a pure void.
 4. `PlayerRig` updates momentum-based planar movement and camera follow every
    frame.
 5. Cooldown-gated clicks and `Space` add analytic pulse sources; avatar movement
@@ -127,8 +129,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
   and `src/main.ts`
 - Change the visible map-edge barrier color, height, or shimmer:
   `src/arenaBarrier.ts`
-- Change generated skybox choices, labels, texture paths, or matching fog color:
-  `src/skybox.ts` and `public/skyboxes/`
+- Change generated skybox choices, labels, texture paths, horizon framing, or
+  matching fog color: `src/skybox.ts` and `public/skyboxes/`
 - Change ripple math, hex shape, directional water-like movement response,
   animated-height tint, crest glow, or generic proximity glow:
   `src/rippleField.ts`

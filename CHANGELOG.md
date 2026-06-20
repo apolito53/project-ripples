@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## 0.3.8-ALPHA - 2026-06-20
+
+### Added
+
+- Added Neon Arena Skyline as a fourth selectable skybox theme using the
+  generated panoramic image from the skybox pass.
+- Added 8K generated skybox texture exports with 4K fallback assets selected
+  automatically when the GPU reports a smaller maximum texture size.
+
+### Changed
+
+- Replaced the temporary procedural skybox stand-ins with the actual generated
+  panorama assets supplied from the imagegen pass.
+- Moved skybox rendering onto a camera-following UV dome with mipmapped,
+  anisotropic texture filtering and per-theme vertical framing, so the aurora
+  and orbital horizons sit higher against the arena.
+- Bumped package metadata, README, codebase index, and visible version text to
+  `v0.3.8-ALPHA`.
+
 ## 0.3.7-ALPHA - 2026-06-20
 
 ### Added
