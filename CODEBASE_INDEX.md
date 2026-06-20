@@ -110,7 +110,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 
 ## Common Change Targets
 
-- Tune visual density, hex-size ranges, arena-radius ranges, or GPU pressure:
+- Tune visual density, hex-size ranges, arena-radius ranges, per-quality field
+  instance budgets, or GPU pressure:
   `src/qualityPresets.ts`, `src/labSettings.ts`, and `src/main.ts`
 - Change the visible map-edge barrier color, height, or shimmer:
   `src/arenaBarrier.ts`
@@ -184,8 +185,11 @@ Purpose: compact map for the standalone ripple-field visual lab.
   GPU-side density throttle for shader loop cost, not a gameplay source cap.
 - The hex-size and arena-radius sliders rebuild the InstancedMesh after a
   short debounce. Meltdown's honeycomb look preserves its prior density, but
-  extreme combinations such as tiny hexes plus a 400m arena can still create
-  very large instance counts; check the HUD hex count and `field.rebuild` debug
+  extreme combinations such as tiny hexes plus a 400m arena are clamped by
+  per-quality `maxFieldInstances` budgets before rebuilding. `field.guardrail`
+  warns when the lab adjusts hex size or arena radius, and `?stress=1` or
+  `localStorage.rippleStressMode = "1"` deliberately disables the guardrail for
+  intentional stress testing. Check the HUD hex count and `field.rebuild` debug
   events before assuming a visual hitch comes from waves.
 - `Meltdown` is intentionally rude to weak GPUs. Keep it available, but do not
   tune the normal experience around it.

@@ -12,6 +12,13 @@ export type QualityPreset = {
   readonly pulseLightCount: number;
   readonly fogDensity: number;
   readonly wakeTextureSize: number;
+  readonly maxFieldInstances: number;
+};
+
+export type FieldInstanceEstimate = {
+  readonly estimatedInstances: number;
+  readonly maxInstances: number;
+  readonly exceedsBudget: boolean;
 };
 
 // Internal scene units are kept on the original art scale, while the UI now
@@ -24,6 +31,8 @@ export const ARENA_RADIUS_MAX_METERS = DEFAULT_ARENA_RADIUS_METERS * 2;
 export const DEFAULT_VOXEL_SIZE_METERS = 1;
 export const VOXEL_SIZE_MIN_METERS = 0.25;
 export const VOXEL_SIZE_MAX_METERS = 2;
+const HEX_PLACEMENT_AREA_RATIO = 0.75 * (Math.sqrt(3) * 0.5);
+const HEX_HORIZONTAL_SPACING_RATIO = 0.75;
 
 // Meltdown carries the intentionally rude particle ceiling. Lower presets stay
 // under that cap so the normal lab experience does not inherit stress-test
@@ -40,7 +49,8 @@ export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
     shadowMapSize: 0,
     pulseLightCount: 0,
     fogDensity: 0.018,
-    wakeTextureSize: 256
+    wakeTextureSize: 256,
+    maxFieldInstances: 350000
   },
   pretty: {
     id: "pretty",
@@ -53,7 +63,8 @@ export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
     shadowMapSize: 1024,
     pulseLightCount: 3,
     fogDensity: 0.016,
-    wakeTextureSize: 384
+    wakeTextureSize: 384,
+    maxFieldInstances: 500000
   },
   showoff: {
     id: "showoff",
@@ -66,7 +77,8 @@ export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
     shadowMapSize: 2048,
     pulseLightCount: 5,
     fogDensity: 0.013,
-    wakeTextureSize: 512
+    wakeTextureSize: 512,
+    maxFieldInstances: 700000
   },
   meltdown: {
     id: "meltdown",
@@ -79,10 +91,72 @@ export const QUALITY_PRESETS: Record<QualityId, QualityPreset> = {
     shadowMapSize: 4096,
     pulseLightCount: 8,
     fogDensity: 0.01,
-    wakeTextureSize: 768
+    wakeTextureSize: 768,
+    maxFieldInstances: 950000
   }
 };
 
 export function isQualityId(value: string): value is QualityId {
   return value === "clean" || value === "pretty" || value === "showoff" || value === "meltdown";
+}
+
+export function estimateFieldInstancesForPreset(preset: QualityPreset): FieldInstanceEstimate {
+  const estimatedInstances = estimateHexInstanceCount(preset.fieldRadius, preset.tileSpacing);
+  return {
+    estimatedInstances,
+    maxInstances: preset.maxFieldInstances,
+    exceedsBudget: estimatedInstances > preset.maxFieldInstances
+  };
+}
+
+export function getMaxArenaRadiusMetersForFieldBudget(qualityId: QualityId, voxelSizeMeters: number): number {
+  const basePreset = QUALITY_PRESETS[qualityId];
+  const safeVoxelSize = clamp(voxelSizeMeters, VOXEL_SIZE_MIN_METERS, VOXEL_SIZE_MAX_METERS);
+  const tileSpacing = basePreset.tileSpacing * safeVoxelSize;
+  const maxSceneRadius = getMaxSceneRadiusForInstanceBudget(tileSpacing, basePreset.maxFieldInstances);
+  const maxArenaMeters = DEFAULT_ARENA_RADIUS_METERS * (maxSceneRadius / ARENA_RADIUS);
+  return clamp(roundDownToStep(maxArenaMeters, 5), ARENA_RADIUS_MIN_METERS, ARENA_RADIUS_MAX_METERS);
+}
+
+export function getMinVoxelSizeMetersForFieldBudget(qualityId: QualityId, arenaRadiusMeters: number): number {
+  const basePreset = QUALITY_PRESETS[qualityId];
+  const safeArenaMeters = clamp(arenaRadiusMeters, ARENA_RADIUS_MIN_METERS, ARENA_RADIUS_MAX_METERS);
+  const sceneRadius = ARENA_RADIUS * (safeArenaMeters / DEFAULT_ARENA_RADIUS_METERS);
+
+  // The exact loop includes a tiny placement margin derived from tile spacing.
+  // Ignoring that margin here makes the first-pass size slightly optimistic, so
+  // the caller re-checks after applying this value before trusting the clamp.
+  const requiredTileSpacing = Math.sqrt(Math.PI * sceneRadius * sceneRadius / basePreset.maxFieldInstances);
+  const requiredVoxelSize = requiredTileSpacing / basePreset.tileSpacing;
+  return clamp(roundUpToStep(requiredVoxelSize, 0.05), VOXEL_SIZE_MIN_METERS, VOXEL_SIZE_MAX_METERS);
+}
+
+function estimateHexInstanceCount(fieldRadius: number, tileSpacing: number): number {
+  const placementDiameter = tileSpacing / Math.sqrt(HEX_PLACEMENT_AREA_RATIO);
+  const horizontalSpacing = placementDiameter * HEX_HORIZONTAL_SPACING_RATIO;
+  const placementRadius = fieldRadius + horizontalSpacing * 0.5;
+
+  // The staggered placement loop effectively tests one candidate per
+  // tileSpacing^2 of area. This estimate tracks the real loop closely enough to
+  // guard rebuilds without running the expensive placement walk twice.
+  return Math.ceil(Math.PI * placementRadius * placementRadius / Math.max(0.0001, tileSpacing * tileSpacing));
+}
+
+function getMaxSceneRadiusForInstanceBudget(tileSpacing: number, maxInstances: number): number {
+  const placementDiameter = tileSpacing / Math.sqrt(HEX_PLACEMENT_AREA_RATIO);
+  const horizontalSpacing = placementDiameter * HEX_HORIZONTAL_SPACING_RATIO;
+  const placementRadius = Math.sqrt(maxInstances * tileSpacing * tileSpacing / Math.PI);
+  return Math.max(0, placementRadius - horizontalSpacing * 0.5);
+}
+
+function roundUpToStep(value: number, step: number): number {
+  return Math.ceil(value / step) * step;
+}
+
+function roundDownToStep(value: number, step: number): number {
+  return Math.floor(value / step) * step;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }

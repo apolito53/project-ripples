@@ -10,6 +10,10 @@
 - Added debug receiver summaries and filtered tails through
   `/summary?format=text`, `/tail?source=latest&channel=...`, and timing filters
   such as `minFrameMs`, `minRawClockDeltaMs`, and `minDurationMs`.
+- Added per-quality field instance budgets that clamp extreme hex-size and
+  arena-radius combinations before rebuilding, plus an explicit `?stress=1` /
+  `localStorage.rippleStressMode = "1"` escape hatch for intentional GPU stress
+  tests.
 
 ### Changed
 

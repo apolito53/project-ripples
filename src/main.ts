@@ -20,6 +20,9 @@ import {
   ARENA_RADIUS_MIN_METERS,
   VOXEL_SIZE_MAX_METERS,
   VOXEL_SIZE_MIN_METERS,
+  estimateFieldInstancesForPreset,
+  getMaxArenaRadiusMetersForFieldBudget,
+  getMinVoxelSizeMetersForFieldBudget,
   isQualityId,
   type QualityPreset
 } from "./qualityPresets";
@@ -153,6 +156,7 @@ type SceneLightSource = {
 };
 
 type GlobalFrameHitchKind = "render" | "update" | "mixed" | "clock-gap";
+type FieldScaleChangedControl = "quality" | "voxel-size" | "arena-radius";
 
 const renderer = new THREE.WebGLRenderer({
   antialias: true,
@@ -172,6 +176,7 @@ scene.background = new THREE.Color(0x020409);
 const camera = new THREE.PerspectiveCamera(54, 1, 0.1, 450);
 const clock = new THREE.Clock();
 const settings = cloneDefaultSettings();
+const fieldStressModeEnabled = isFieldStressModeEnabled();
 let preset = getQualityPreset(settings);
 let frameCount = 0;
 let fpsAccumulatorSeconds = 0;
@@ -563,6 +568,8 @@ function wireControls(): void {
     if (!isQualityId(qualitySelect.value)) return;
     cancelScheduledFieldRebuild();
     settings.qualityId = qualitySelect.value;
+    enforceFieldInstanceBudget("quality");
+    syncFieldScaleControls();
     preset = getQualityPreset(settings);
     settings.bloomStrength = preset.bloomStrength;
     settings.bloomEnabled = settings.bloomStrength > 0;
@@ -573,14 +580,16 @@ function wireControls(): void {
 
   voxelSizeSlider.addEventListener("input", () => {
     settings.voxelSizeMeters = Number(voxelSizeSlider.value);
+    enforceFieldInstanceBudget("voxel-size");
     preset = getQualityPreset(settings);
-    updateVoxelSizeValue();
+    syncFieldScaleControls();
     scheduleFieldRebuild();
   });
   arenaRadiusSlider.addEventListener("input", () => {
     settings.arenaRadiusMeters = Number(arenaRadiusSlider.value);
+    enforceFieldInstanceBudget("arena-radius");
     preset = getQualityPreset(settings);
-    updateArenaRadiusValue();
+    syncFieldScaleControls();
     scheduleFieldRebuild();
   });
   walkSpeedSlider.addEventListener("input", () => {
@@ -629,6 +638,7 @@ function syncControlValues(): void {
   arenaRadiusSlider.max = String(ARENA_RADIUS_MAX_METERS);
   arenaRadiusSlider.step = "5";
   arenaRadiusSlider.value = String(settings.arenaRadiusMeters);
+  syncFieldScaleControls();
   walkSpeedSlider.min = String(PLAYER_SPEED_LIMITS.walk.min);
   walkSpeedSlider.max = String(PLAYER_SPEED_LIMITS.walk.max);
   walkSpeedSlider.step = String(PLAYER_SPEED_LIMITS.walk.step);
@@ -644,6 +654,80 @@ function syncControlValues(): void {
   bloomSlider.value = String(settings.bloomStrength);
   updateEffectToggle(bloomToggle, settings.bloomEnabled, bloomSlider);
   setPerfOverlayVisible(perfOverlayVisible);
+}
+
+function enforceFieldInstanceBudget(changedControl: FieldScaleChangedControl): void {
+  if (fieldStressModeEnabled) return;
+
+  const beforePreset = getQualityPreset(settings);
+  const beforeEstimate = estimateFieldInstancesForPreset(beforePreset);
+  if (!beforeEstimate.exceedsBudget) return;
+
+  const beforeVoxelSizeMeters = settings.voxelSizeMeters;
+  const beforeArenaRadiusMeters = settings.arenaRadiusMeters;
+  const clampedField = changedControl === "voxel-size" ? "arenaRadiusMeters" : "voxelSizeMeters";
+
+  // Preserve the last thing the user touched. Shrinking hexes clamps radius,
+  // while expanding the arena or changing quality grows the hex diameter just
+  // enough to avoid a surprise multi-million-instance rebuild.
+  if (clampedField === "arenaRadiusMeters") {
+    settings.arenaRadiusMeters = getMaxArenaRadiusMetersForFieldBudget(
+      settings.qualityId,
+      settings.voxelSizeMeters
+    );
+  } else {
+    settings.voxelSizeMeters = getMinVoxelSizeMetersForFieldBudget(
+      settings.qualityId,
+      settings.arenaRadiusMeters
+    );
+  }
+
+  // The first clamp is rounded to the UI step, so re-check and fall back to the
+  // other dimension if the rounded value is still a little too ambitious.
+  let afterPreset = getQualityPreset(settings);
+  let afterEstimate = estimateFieldInstancesForPreset(afterPreset);
+  if (afterEstimate.exceedsBudget) {
+    settings.arenaRadiusMeters = getMaxArenaRadiusMetersForFieldBudget(
+      settings.qualityId,
+      settings.voxelSizeMeters
+    );
+    afterPreset = getQualityPreset(settings);
+    afterEstimate = estimateFieldInstancesForPreset(afterPreset);
+  }
+
+  debugEvent("field.guardrail", "Clamped field scale to instance budget", {
+    changedControl,
+    clampedField,
+    quality: settings.qualityId,
+    maxInstances: afterEstimate.maxInstances,
+    estimatedInstancesBefore: beforeEstimate.estimatedInstances,
+    estimatedInstancesAfter: afterEstimate.estimatedInstances,
+    voxelSizeMetersBefore: roundMetric(beforeVoxelSizeMeters),
+    voxelSizeMetersAfter: roundMetric(settings.voxelSizeMeters),
+    arenaRadiusMetersBefore: roundMetric(beforeArenaRadiusMeters),
+    arenaRadiusMetersAfter: roundMetric(settings.arenaRadiusMeters)
+  }, "warn");
+}
+
+function syncFieldScaleControls(): void {
+  voxelSizeSlider.value = String(settings.voxelSizeMeters);
+  arenaRadiusSlider.value = String(settings.arenaRadiusMeters);
+  updateVoxelSizeValue();
+  updateArenaRadiusValue();
+}
+
+function isFieldStressModeEnabled(): boolean {
+  const queryValue = new URLSearchParams(window.location.search).get("stress");
+  const storedValue = readLocalStorageValue("rippleStressMode");
+  return queryValue === "1" || storedValue === "1";
+}
+
+function readLocalStorageValue(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
 }
 
 function areSceneInputsEnabled(): boolean {

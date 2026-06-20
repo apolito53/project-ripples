@@ -77,6 +77,10 @@ radius is expressed in lab meters: `200m` preserves the original scene radius,
 while `400m` doubles it. Depth / Speed changes the medium's effective depth,
 then shows the derived propagation speed from the shallow-water-inspired
 `sqrt(g * depth)` model.
+The lab now clamps extreme hex-size/arena-radius combinations before rebuilding
+the field, using per-quality instance budgets so a casual slider drag cannot
+spawn millions of hexes. If you intentionally want stress-test behavior, open
+the app with `?stress=1` or set `localStorage.rippleStressMode = "1"`.
 The HUD shows that derived speed, hex diameter, arena radius, active pulse count,
 and the newest pulse's approximate radius, plus the number of live Echo zones, so
 propagation and scale tuning have a quick visual sanity check.
