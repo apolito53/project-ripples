@@ -2,6 +2,15 @@ import { createServer } from "node:http";
 import { appendFile, mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  buildRecordFilters,
+  filterDebugRecords,
+  findDebugLogPath,
+  formatSummaryText,
+  readDebugLogFile,
+  readFiniteNumber,
+  summarizeDebugRecords
+} from "./debug-log-analysis.mjs";
 
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.RIPPLE_LOG_PORT ?? 5184);
@@ -43,7 +52,45 @@ const server = createServer(async (request, response) => {
   }
 
   if (request.method === "GET" && url.pathname === "/tail") {
-    writeText(response, 200, formatTail(Number(url.searchParams.get("limit") ?? 80)));
+    try {
+      const { records } = await getRecordsForQuery(url, "recent");
+      const filteredRecords = filterDebugRecords(records, buildRecordFilters(url.searchParams));
+      writeText(response, 200, formatTail(filteredRecords, Number(url.searchParams.get("limit") ?? 80)));
+    } catch (error) {
+      writeJson(response, 400, {
+        ok: false,
+        error: error instanceof Error ? error.message : "Unable to read Ripple debug tail."
+      });
+    }
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/summary") {
+    try {
+      const format = url.searchParams.get("format") ?? "json";
+      const { records, source, logPath } = await getRecordsForQuery(url, "latest");
+      const filteredRecords = filterDebugRecords(records, buildRecordFilters(url.searchParams));
+      const summary = summarizeDebugRecords(filteredRecords, {
+        topLimit: Number(url.searchParams.get("limit") ?? 8)
+      });
+
+      if (format === "text") {
+        writeText(response, 200, formatSummaryText(summary, logPath ?? source));
+      } else {
+        writeJson(response, 200, {
+          ok: true,
+          source,
+          logPath,
+          filteredCount: filteredRecords.length,
+          summary
+        });
+      }
+    } catch (error) {
+      writeJson(response, 400, {
+        ok: false,
+        error: error instanceof Error ? error.message : "Unable to summarize Ripple debug logs."
+      });
+    }
     return;
   }
 
@@ -69,7 +116,7 @@ const server = createServer(async (request, response) => {
 
   writeJson(response, 404, {
     ok: false,
-    error: `Use POST ${DEBUG_ENDPOINT}, GET /tail, GET /events, or GET /health.`
+    error: `Use POST ${DEBUG_ENDPOINT}, GET /summary, GET /tail, GET /events, or GET /health.`
   });
 });
 
@@ -77,6 +124,7 @@ server.listen(PORT, HOST, () => {
   console.log(`Ripple debug log server listening on http://${HOST}:${PORT}`);
   console.log(`POST ${DEBUG_ENDPOINT} -> ${LOGS_DIRECTORY}`);
   console.log(`GET /tail?limit=80 for a quick recent-log view`);
+  console.log(`GET /summary?format=text for a quick diagnostics summary`);
 });
 
 server.on("error", (error) => {
@@ -142,26 +190,63 @@ async function appendDebugEntries(payload) {
     recentEntries.splice(0, recentEntries.length - RECENT_ENTRY_LIMIT);
   }
 
-  const slowFrames = records.filter((record) => {
-    const payload = record.entry && typeof record.entry === "object" ? record.entry.payload : null;
-    return payload && typeof payload === "object" && Number(payload.frameMs) >= 24;
-  }).length;
-  console.log(`[ripple-log] +${records.length} entries (${slowFrames} slow frames) -> ${logPath}`);
+  const summary = summarizeDebugRecords(records, { topLimit: 3 });
+  console.log(`[ripple-log] +${records.length} entries (${formatReceiverStats(summary)}) -> ${logPath}`);
 
   return {
     ok: true,
     count: records.length,
-    slowFrames,
+    warningCount: summary.warningCount,
+    hitchesByKind: summary.hitchesByKind,
     logPath
   };
 }
 
-function formatTail(limit) {
+async function getRecordsForQuery(url, defaultSource) {
+  const source = url.searchParams.get("source") ?? defaultSource;
+  if (source === "recent") {
+    return {
+      source: "recent",
+      records: recentEntries
+    };
+  }
+
+  if (source !== "latest" && source !== "file") {
+    throw new Error(`Unknown log source "${source}". Use recent, latest, or file.`);
+  }
+
+  const dateStamp = url.searchParams.get("date") || undefined;
+  const logPath = await findDebugLogPath(LOGS_DIRECTORY, dateStamp);
+  return {
+    source: dateStamp ? `file:${dateStamp}` : "latest",
+    logPath,
+    records: await readDebugLogFile(logPath)
+  };
+}
+
+function formatTail(records, limit) {
   const safeLimit = Math.max(1, Math.min(RECENT_ENTRY_LIMIT, Math.floor(limit || 80)));
-  return recentEntries
+  return records
     .slice(-safeLimit)
     .map((record) => JSON.stringify(record))
     .join("\n");
+}
+
+function formatReceiverStats(summary) {
+  const hitches = summary.hitchesByKind;
+  const pieces = [
+    `${summary.warningCount} warnings`,
+    `${hitches.render ?? 0} render hitches`,
+    `${hitches.update ?? 0} update hitches`,
+    `${hitches["clock-gap"] ?? 0} clock gaps`
+  ];
+
+  const topFrameMs = readFiniteNumber(summary.tops.frameMs[0]?.value);
+  const topRebuildMs = readFiniteNumber(summary.tops.fieldRebuildMs[0]?.value);
+  if (topFrameMs !== undefined) pieces.push(`max frame ${topFrameMs}ms`);
+  if (topRebuildMs !== undefined) pieces.push(`max rebuild ${topRebuildMs}ms`);
+
+  return pieces.join("; ");
 }
 
 function setCorsHeaders(response) {

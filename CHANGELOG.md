@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Added
+
+- Added a shared JSONL diagnostics analyzer with `npm.cmd run diagnostics`,
+  `npm.cmd run logs:summary`, and a broad `npm.cmd run verify:perf` perf gate
+  for obvious frame/rebuild runaway costs.
+- Added debug receiver summaries and filtered tails through
+  `/summary?format=text`, `/tail?source=latest&channel=...`, and timing filters
+  such as `minFrameMs`, `minRawClockDeltaMs`, and `minDurationMs`.
+
+### Changed
+
+- Split broad browser frame warnings into cause-specific channels:
+  `frame.renderHitch`, `frame.updateHitch`, `frame.mixedHitch`, and
+  `frame.clockGap`, while the diagnostics analyzer still classifies legacy
+  `frame.hitch` JSONL entries.
+- Changed debug receiver stdout from a narrow slow-frame count to a richer
+  warning/hitch summary so raw clock gaps and rebuild warnings are visible.
+
 ## 0.3.0-ALPHA - 2026-06-19
 
 ### Changed

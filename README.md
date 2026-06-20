@@ -98,16 +98,18 @@ and quality mode.
 ```powershell
 npm.cmd install
 npm.cmd run debug:logs
+npm.cmd run diagnostics
 npm.cmd run typecheck
 npm.cmd run build
 npm.cmd run validate
 ```
 
 Local runs emit debug logs for Echo detonations, including particle burst counts
-and frame timings around collection. They also report broader `frame.hitch`
-warnings when a frame stalls outside the Echo watch window, with both raw clock
-delta and capped simulation delta so render pauses do not hide behind physics
-smoothing. Console lines include inline JSON so Chrome automation can read the
+and frame timings around collection. They also report broader frame warnings
+when a frame stalls outside the Echo watch window. New logs split those warnings
+into `frame.renderHitch`, `frame.updateHitch`, `frame.mixedHitch`, and
+`frame.clockGap` so true render pressure is not blended with sleep/reload/browser
+clock gaps. Console lines include inline JSON so Chrome automation can read the
 numbers instead of collapsed `Object` payloads. In DevTools, call
 `window.__rippleDebugDump()` to inspect the retained in-page log.
 
@@ -115,6 +117,11 @@ For file-backed local logging, run `npm.cmd run debug:logs` in a second terminal
 The browser batches debug events to
 `http://127.0.0.1:5184/__ripple_debug_log`; the receiver appends JSONL under
 `logs/` and exposes `http://127.0.0.1:5184/tail?limit=80` for quick inspection.
+Use `http://127.0.0.1:5184/summary?format=text` for an immediate diagnostics
+summary, or add filters such as `?source=latest&channel=frame.renderHitch`.
+`npm.cmd run diagnostics` prints the same kind of summary for the newest JSONL
+file, while `npm.cmd run verify:perf` applies broad alpha-era thresholds for
+obvious runaway frame/rebuild costs.
 Set `localStorage.rippleDebug = "0"` or open `?debug=0` to silence browser
 debug logging. Set `localStorage.rippleLogServer = "0"` or open `?logServer=0`
 to keep console logging on while disabling the local receiver writes.

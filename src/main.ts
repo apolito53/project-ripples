@@ -96,6 +96,8 @@ const ECHO_DEBUG_SLOW_FRAME_MS = 24;
 const GLOBAL_FRAME_HITCH_MS = 45;
 const GLOBAL_FRAME_HITCH_LOG_INTERVAL_SECONDS = 0.75;
 const GLOBAL_FRAME_HITCH_WARMUP_SECONDS = 1;
+const GLOBAL_FRAME_HITCH_COMPONENT_MS = 24;
+const GLOBAL_FRAME_HITCH_DOMINANCE_RATIO = 1.2;
 const FIELD_REBUILD_DEBOUNCE_MS = 180;
 const MANUAL_PULSE_OPTIONS: RippleSourceOptions = {
   kind: "pulse",
@@ -149,6 +151,8 @@ type SceneLightSource = {
   readonly distanceScale: number;
   readonly phaseOffset: number;
 };
+
+type GlobalFrameHitchKind = "render" | "update" | "mixed" | "clock-gap";
 
 const renderer = new THREE.WebGLRenderer({
   antialias: true,
@@ -1617,6 +1621,8 @@ function logGlobalFrameHitch(time: number, delta: number, rawDelta: number, fram
   if (document.visibilityState !== "visible") return;
 
   const frameMs = performance.now() - frameStartedAt;
+  const updateMs = lastFrameUpdateMs;
+  const renderMs = lastFrameRenderMs;
   const rawClockDeltaMs = rawDelta * 1000;
   const isSlowFrame = frameMs >= GLOBAL_FRAME_HITCH_MS || rawClockDeltaMs >= GLOBAL_FRAME_HITCH_MS;
   if (!isSlowFrame) return;
@@ -1629,11 +1635,15 @@ function logGlobalFrameHitch(time: number, delta: number, rawDelta: number, fram
   lastGlobalFrameHitchLogAt = time;
   const activeSources = rippleSources.getActiveSources(time);
   const wakeMetrics = wakeField.getMetrics();
-  debugEvent("frame.hitch", "Global frame hitch", {
+  const hitchKind = classifyGlobalFrameHitch(frameMs, updateMs, renderMs, rawClockDeltaMs);
+  const hitchChannel = getGlobalFrameHitchChannel(hitchKind);
+
+  debugEvent(hitchChannel, getGlobalFrameHitchMessage(hitchKind), {
+    hitchKind,
     time: roundMetric(time),
     frameMs: roundMetric(frameMs),
-    updateMs: roundMetric(lastFrameUpdateMs),
-    renderMs: roundMetric(lastFrameRenderMs),
+    updateMs: roundMetric(updateMs),
+    renderMs: roundMetric(renderMs),
     rawClockDeltaMs: roundMetric(rawClockDeltaMs),
     cappedClockDeltaMs: roundMetric(delta * 1000),
     echoWatchActive: time <= echoDebugFrameWatchUntil,
@@ -1659,6 +1669,45 @@ function logGlobalFrameHitch(time: number, delta: number, rawDelta: number, fram
     rendererPixelRatio: roundMetric(getPixelRatio()),
     visibilityState: document.visibilityState
   }, "warn");
+}
+
+function classifyGlobalFrameHitch(
+  frameMs: number,
+  updateMs: number,
+  renderMs: number,
+  rawClockDeltaMs: number
+): GlobalFrameHitchKind {
+  // A visible browser tab can report a huge raw clock gap after sleep, reload,
+  // DevTools pauses, or a scheduling stall even when this frame's actual work is
+  // tiny. Keep that separate so logs do not blame the renderer for wall-clock
+  // weirdness it did not cause.
+  if (frameMs < GLOBAL_FRAME_HITCH_MS && rawClockDeltaMs >= GLOBAL_FRAME_HITCH_MS) {
+    return "clock-gap";
+  }
+
+  if (renderMs >= GLOBAL_FRAME_HITCH_COMPONENT_MS && renderMs >= updateMs * GLOBAL_FRAME_HITCH_DOMINANCE_RATIO) {
+    return "render";
+  }
+
+  if (updateMs >= GLOBAL_FRAME_HITCH_COMPONENT_MS && updateMs >= renderMs * GLOBAL_FRAME_HITCH_DOMINANCE_RATIO) {
+    return "update";
+  }
+
+  return "mixed";
+}
+
+function getGlobalFrameHitchChannel(kind: GlobalFrameHitchKind): string {
+  if (kind === "render") return "frame.renderHitch";
+  if (kind === "update") return "frame.updateHitch";
+  if (kind === "clock-gap") return "frame.clockGap";
+  return "frame.mixedHitch";
+}
+
+function getGlobalFrameHitchMessage(kind: GlobalFrameHitchKind): string {
+  if (kind === "render") return "Render-dominated frame hitch";
+  if (kind === "update") return "Update-dominated frame hitch";
+  if (kind === "clock-gap") return "Raw browser clock gap";
+  return "Mixed frame hitch";
 }
 
 function formatVoxelSize(sizeMeters: number): string {
