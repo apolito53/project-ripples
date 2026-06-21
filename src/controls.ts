@@ -6,6 +6,8 @@ export type PlayerRigOptions = {
   readonly sampleHeight: (x: number, z: number) => number;
   readonly getBoundaryRadius: () => number;
   readonly onPulse: (position: THREE.Vector3) => void;
+  readonly onJump?: (event: PlayerJumpEvent) => void;
+  readonly onLand?: (event: PlayerJumpEvent) => void;
   readonly speedSettings?: PlayerSpeedSettings;
   readonly isInputEnabled?: () => boolean;
 };
@@ -13,6 +15,13 @@ export type PlayerRigOptions = {
 export type PlayerSpeedSettings = {
   readonly walkSpeedMetersPerSecond: number;
   readonly sprintSpeedMetersPerSecond: number;
+};
+
+export type PlayerJumpEvent = {
+  readonly position: THREE.Vector3;
+  readonly strength: number;
+  readonly airtimeSeconds: number;
+  readonly impactSpeed: number;
 };
 
 export const PLAYER_SPEED_LIMITS = {
@@ -44,6 +53,13 @@ const CAMERA_WHEEL_ZOOM_SPEED = 0.018;
 const PLAYER_HEIGHT = 1.75;
 const PULSE_DISTANCE = 4.2;
 const PULSE_COOLDOWN_SECONDS = 0.42;
+const JUMP_INITIAL_SPEED = 7.6;
+const JUMP_GRAVITY = 21.5;
+const JUMP_SURFACE_CONTACT_FADE_HEIGHT = 1.25;
+const JUMP_TAKEOFF_STRENGTH = 0.26;
+const JUMP_LANDING_MIN_STRENGTH = 0.42;
+const JUMP_LANDING_MAX_STRENGTH = 0.74;
+const JUMP_LANDING_MIN_IMPACT_SPEED = 2.2;
 const LOOK_SENSITIVITY_X = 0.002;
 const LOOK_SENSITIVITY_Y = 0.00155;
 const TOUCH_LOOK_RATE_X = 2.65;
@@ -85,6 +101,8 @@ export class PlayerRig {
   private readonly sampleHeight: (x: number, z: number) => number;
   private readonly getBoundaryRadius: () => number;
   private readonly onPulse: (position: THREE.Vector3) => void;
+  private readonly onJump: (event: PlayerJumpEvent) => void;
+  private readonly onLand: (event: PlayerJumpEvent) => void;
   private readonly isInputEnabled: () => boolean;
   private readonly desiredCameraPosition = new THREE.Vector3();
   private readonly movementIntent = new THREE.Vector3();
@@ -95,6 +113,10 @@ export class PlayerRig {
   private targetCameraDistance = CAMERA_DEFAULT_DISTANCE;
   private lastPulseSecond = -Infinity;
   private speedSettings = DEFAULT_PLAYER_SPEED_SETTINGS;
+  private jumpOffset = 0;
+  private verticalVelocity = 0;
+  private grounded = true;
+  private jumpStartedAt = -Infinity;
   private yaw = Math.PI * 0.23;
   private pitch = 0.45;
 
@@ -104,6 +126,8 @@ export class PlayerRig {
     this.sampleHeight = options.sampleHeight;
     this.getBoundaryRadius = options.getBoundaryRadius;
     this.onPulse = options.onPulse;
+    this.onJump = options.onJump ?? (() => undefined);
+    this.onLand = options.onLand ?? (() => undefined);
     this.isInputEnabled = options.isInputEnabled ?? (() => true);
     this.setSpeedSettings(options.speedSettings ?? DEFAULT_PLAYER_SPEED_SETTINGS);
 
@@ -169,9 +193,12 @@ export class PlayerRig {
     }
     this.position.addScaledVector(this.velocity, delta);
     this.clampToArenaBoundary();
+    this.updateJump(delta);
 
     const groundY = this.sampleHeight(this.position.x, this.position.z) + PLAYER_HEIGHT;
-    this.position.y = THREE.MathUtils.lerp(this.position.y, groundY, 1 - Math.exp(-delta * 14));
+    const targetY = groundY + this.jumpOffset;
+    const verticalResponse = this.grounded ? 14 : 24;
+    this.position.y = THREE.MathUtils.lerp(this.position.y, targetY, 1 - Math.exp(-delta * verticalResponse));
     this.updateCamera(delta);
   }
 
@@ -184,6 +211,17 @@ export class PlayerRig {
 
   getSpeed(): number {
     return this.velocity.length();
+  }
+
+  getGroundContactStrength(): number {
+    // A small fade band keeps takeoff and touchdown from hard-switching the
+    // surface response, while still fully lifting pressure once the avatar is
+    // visibly airborne.
+    return THREE.MathUtils.clamp(1 - this.jumpOffset / JUMP_SURFACE_CONTACT_FADE_HEIGHT, 0, 1);
+  }
+
+  isGrounded(): boolean {
+    return this.grounded;
   }
 
   setSpeedSettings(settings: PlayerSpeedSettings): void {
@@ -310,9 +348,7 @@ export class PlayerRig {
     this.keys.add(event.code);
     if (event.code === "Space") {
       event.preventDefault();
-      // Holding Space fires repeated keydown events in most browsers. The shared
-      // cooldown turns that into a deliberate pulse cadence instead of a flood.
-      this.tryCreatePulse();
+      if (!event.repeat) this.tryJump();
     }
   };
 
@@ -351,5 +387,58 @@ export class PlayerRig {
     if (now - this.lastPulseSecond < PULSE_COOLDOWN_SECONDS) return;
     this.lastPulseSecond = now;
     this.onPulse(this.createPulsePosition());
+  }
+
+  private tryJump(): void {
+    if (!this.grounded) return;
+
+    this.grounded = false;
+    this.verticalVelocity = JUMP_INITIAL_SPEED;
+    this.jumpOffset = Math.max(this.jumpOffset, 0.02);
+    this.jumpStartedAt = performance.now() / 1000;
+    this.onJump({
+      position: this.createSurfaceEventPosition(),
+      strength: JUMP_TAKEOFF_STRENGTH,
+      airtimeSeconds: 0,
+      impactSpeed: 0
+    });
+  }
+
+  private updateJump(delta: number): void {
+    if (this.grounded) {
+      this.jumpOffset = 0;
+      this.verticalVelocity = 0;
+      return;
+    }
+
+    this.verticalVelocity -= JUMP_GRAVITY * delta;
+    this.jumpOffset += this.verticalVelocity * delta;
+    if (this.jumpOffset > 0) return;
+
+    const impactSpeed = Math.max(0, -this.verticalVelocity);
+    const airtimeSeconds = Number.isFinite(this.jumpStartedAt)
+      ? Math.max(0, performance.now() / 1000 - this.jumpStartedAt)
+      : 0;
+    this.jumpOffset = 0;
+    this.verticalVelocity = 0;
+    this.grounded = true;
+    this.jumpStartedAt = -Infinity;
+    if (impactSpeed < JUMP_LANDING_MIN_IMPACT_SPEED) return;
+
+    const impact01 = THREE.MathUtils.clamp((impactSpeed - JUMP_LANDING_MIN_IMPACT_SPEED) / 6.8, 0, 1);
+    this.onLand({
+      position: this.createSurfaceEventPosition(),
+      strength: THREE.MathUtils.lerp(JUMP_LANDING_MIN_STRENGTH, JUMP_LANDING_MAX_STRENGTH, impact01),
+      airtimeSeconds,
+      impactSpeed
+    });
+  }
+
+  private createSurfaceEventPosition(): THREE.Vector3 {
+    return new THREE.Vector3(
+      this.position.x,
+      this.sampleHeight(this.position.x, this.position.z) + 0.45,
+      this.position.z
+    );
   }
 }

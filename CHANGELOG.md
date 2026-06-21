@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 0.3.9-ALPHA - 2026-06-21
+
+### Added
+
+- Added a `Space` jump mechanic with airborne height, surface-contact fadeout,
+  small takeoff ripples, stronger landing ripples, and `player.jump` debug
+  events for takeoff/touchdown.
+
+### Changed
+
+- Changed `Space` from manual pulse input to jump input; mouse click and the
+  touch pulse button remain the manual pulse controls.
+- Faded GPU movement wake injection, player pressure, local rim lift, and
+  player-driven field glow while the avatar is airborne so the field responds
+  to contact instead of treating jumps like grounded movement.
+- Bumped package metadata, README, codebase index, and visible version text to
+  `v0.3.9-ALPHA`.
+
 ## 0.3.8-ALPHA - 2026-06-20
 
 ### Added

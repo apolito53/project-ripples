@@ -1,6 +1,6 @@
 # Codebase Index
 
-Last reviewed: 2026-06-20
+Last reviewed: 2026-06-21
 
 Purpose: compact map for the standalone ripple-field visual lab.
 
@@ -9,7 +9,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Vite + strict TypeScript browser app.
 - Three.js renderer, postprocessing composer, Unreal bloom pass, shader-customized
   `InstancedMesh`, additive `Points`, and dynamic lights.
-- Current alpha baseline: `v0.3.8-ALPHA`; keep release tags in alpha prerelease
+- Current alpha baseline: `v0.3.9-ALPHA`; keep release tags in alpha prerelease
   territory until the lab graduates from prototype status.
 - Dedicated dev port `5183`; preview port `4183`.
 
@@ -40,8 +40,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `src/frameTelemetry.ts`
 - Field scale instance-budget clamp decisions:
   `src/fieldScaleGuardrails.ts`
-- Momentum-based avatar movement, hidden speed-tuning defaults, circular arena
-  clamp, scene-input gating, pointer lock, and camera follow behavior:
+- Momentum-based avatar movement, jump/landing state, hidden speed-tuning
+  defaults, circular arena clamp, scene-input gating, pointer lock, and camera
+  follow behavior:
   `src/controls.ts`
 - Circular shader-displaced instanced hex field, including sampled GPU movement
   wake displacement, Meltdown-calibrated honeycomb orientation, lit hex caps,
@@ -87,21 +88,24 @@ Purpose: compact map for the standalone ripple-field visual lab.
    UV sky dome, chooses 8K textures or 4K fallbacks from GPU texture caps, and
    applies matching fog/clear color so the arena sits inside a distant sci-fi
    horizon instead of a pure void.
-4. `PlayerRig` updates momentum-based planar movement and camera follow every
-   frame.
-5. Cooldown-gated clicks and `Space` add analytic pulse sources; avatar movement
-   writes a continuous wake influence into a GPU height/velocity texture instead
-   of adding little circular source stamps. Echo-zone timers add persistent
+4. `PlayerRig` updates momentum-based planar movement, jump height, surface
+   ground-contact strength, and camera follow every frame.
+5. Cooldown-gated clicks/touch pulses add analytic pulse sources, while `Space`
+   jumps and emits smaller takeoff plus stronger landing ripples. Avatar
+   movement writes a continuous wake influence into a GPU height/velocity
+   texture instead of adding little circular source stamps, and airborne jumps
+   fade that contact before touchdown. Echo-zone timers add persistent
    collectible markers instead of immediate ambient waves.
 6. `RippleField` builds hex instances inside the circular arena using the
    active quality, hex-size, and arena-radius settings. Hex geometry is rotated
    to match the staggered lattice, and Meltdown's visible footprint is calibrated
    to read as an interlocked honeycomb while preserving its previous density.
    The field then sends active pulse source/metadata/lifetime uniforms plus the
-   wake texture, wave-medium, and cell-scale values to the shaders; cell matrices
-   stay static while the GPU animates lit cap height, lift/stretch/glow, crest
-   bloom, movement wake memory, and height-based tinting. The old per-cell shaft
-   mesh has been removed to keep the geometry path simpler before the sphere work.
+   wake texture, player ground-contact strength, wave-medium, and cell-scale
+   values to the shaders; cell matrices stay static while the GPU animates lit
+   cap height, lift/stretch/glow, crest bloom, movement wake memory, and
+   height-based tinting. The old per-cell shaft mesh has been removed to keep
+   the geometry path simpler before the sphere work.
 7. `ArenaBarrier` draws a visual-only smooth glowing gradient curtain at the
    arena radius so the map edge is visible without changing collision logic.
 8. `EchoZoneField` animates live Echo markers and reports run-through triggers.
@@ -145,9 +149,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Change pulse source strength or cooldown: `src/main.ts`
 - Change propagation-speed semantics or medium parameters: `src/waveMedium.ts`,
   `src/labSettings.ts`, and `PROPAGATION_NOTES.md`
-- Change momentum, hidden speed defaults/limits, movement/camera feel, or the
-  circular player boundary: `src/controls.ts`, `src/labSettings.ts`, and
-  `src/main.ts`
+- Change momentum, jump feel, hidden speed defaults/limits,
+  movement/camera feel, or the circular player boundary: `src/controls.ts`,
+  `src/labSettings.ts`, and `src/main.ts`
 - Change pause-menu layout, changelog behavior, or tuning labels:
   `index.html`, `src/styles.css`, and `src/main.ts`
 - Change the live performance overlay, HUD formatting, frame-hitch payloads, or
@@ -158,9 +162,10 @@ Purpose: compact map for the standalone ripple-field visual lab.
 
 - The field is a visual lab, not voxel terrain. Do not add save data or chunk
   loading here unless the project deliberately changes shape.
-- Keep the CPU/GPU contract small: pulse uniforms, player position, wake texture,
-  and settings go in; shader animation comes out. Movement wake must not add
-  entries to `RippleSourceStore`; that store is for manual and Echo pulses only.
+- Keep the CPU/GPU contract small: pulse uniforms, player position, player
+  ground-contact strength, wake texture, and settings go in; shader animation
+  comes out. Movement wake must not add entries to `RippleSourceStore`; that
+  store is for manual, jump/landing, and Echo pulses only.
   The shader still has a fixed pulse upload budget, but pulse retention should
   be governed by per-source lifetime and input cooldown rather than a tiny
   gameplay cap.
@@ -196,7 +201,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
   wake path has regressed back into source stamping. The wake texture also has a
   broad absorbing edge band and low-energy damping; preserve those when tuning,
   or old movement energy can reflect around the circular texture and turn into
-  whole-arena shimmer after a few minutes.
+  whole-arena shimmer after a few minutes. Player jump contact intentionally
+  suppresses fresh wake injection while airborne, but the texture still
+  propagates and fades whatever was already there.
 - `ParticleVeil` keeps active motes packed into the leading buffer range and
   sets Three.js draw/update ranges from `activeCount`; preserve that shape when
   changing particle lifetimes or replacement behavior, or dead budget slots will

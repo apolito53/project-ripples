@@ -7,7 +7,7 @@ This is intentionally separate from `voxel-sandbox-engine`. The goal is to make
 a polished visual lab first, then borrow patterns or ideas later if they deserve
 to graduate into the main voxel engine.
 
-Current version: `v0.3.8-ALPHA`.
+Current version: `v0.3.9-ALPHA`.
 
 ## Quick Start
 
@@ -33,11 +33,12 @@ Open `http://127.0.0.1:5183`.
 - `Mouse movement` orbits the follow camera while captured.
 - `Mouse wheel` zooms the follow camera in and out.
 - `+` / `-` zoom in and out; `0` resets the camera distance.
-- `Space` drops a pulse in front of the avatar.
+- `Space` jumps, with small takeoff and stronger landing ripples.
 - `Shift` sprints with momentum.
 - `F2` shows or hides the live performance overlay.
 - `Esc` releases pointer lock and opens/closes the pause menu.
 - The pause menu's version pill opens the in-app changelog.
+- The on-screen pulse button still drops pulses on touch layouts.
 
 The avatar is clamped inside the circular arena edge.
 The arena edge is rendered as a smooth glowing gradient barrier so the playable
@@ -49,8 +50,8 @@ visually interlock without raising the old stress-test instance count, while
 lighter quality modes keep more breathing room.
 Raised wave crests carry an extra bounded glow signal, so ripple fronts bloom
 brighter without washing out the whole field.
-Manual pulses have a short shared cooldown so held keys or rapid clicks do not
-flood the field.
+Manual pulses have a short shared cooldown so rapid clicks or touch pulses do
+not flood the field.
 The avatar itself uses fast orbiting energy motes with long additive trails
 instead of flat rings, so it reads as a moving glow cloud rather than a UI target.
 Sparkling Echo columns spawn around the arena as real local light sources with
@@ -63,9 +64,11 @@ snapping instantly to full speed. Walk defaults to `10 m/s` and sprint defaults
 to `37 m/s`. It behaves like a small body pushing through water: the shader
 forms a pressed fabric depression, local bow/wake displacement, and small raised
 rim around the avatar, while a dedicated GPU wake texture stores the lingering
-height/velocity field left behind by movement. Manual click/Space pulses and
-collected Echoes still use analytic ring sources, but ordinary movement no
-longer adds little circular wave sources while the avatar runs.
+height/velocity field left behind by movement. Jumping fades that surface
+contact while the avatar is airborne, then landing stamps a brighter impact
+ripple back into the field. Manual click/touch pulses and collected Echoes still
+use analytic ring sources, but ordinary movement no longer adds little circular
+wave sources while the avatar runs.
 
 The Esc/hamburger pause menu changes quality, skybox theme, hex size, arena
 radius, ripple height/radius, Depth / Speed, particle density, bloom strength,
@@ -150,7 +153,7 @@ Project planning:
 Versioning:
 
 - While the project is still experimental, release tags use alpha prerelease
-  labels. The current baseline is `v0.3.8-ALPHA`.
+  labels. The current baseline is `v0.3.9-ALPHA`.
 
 ## Design Notes
 

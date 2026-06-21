@@ -31,6 +31,7 @@ type WakeFieldUniforms = {
   readonly uPlayerCurrent: THREE.IUniform<THREE.Vector2>;
   readonly uPlayerVelocity: THREE.IUniform<THREE.Vector2>;
   readonly uPlayerSpeed: THREE.IUniform<number>;
+  readonly uPlayerContact: THREE.IUniform<number>;
   readonly uTexelSize: THREE.IUniform<THREE.Vector2>;
   readonly uPropagationSpeed: THREE.IUniform<number>;
   readonly uDamping: THREE.IUniform<number>;
@@ -49,6 +50,7 @@ export type WakeFieldMetrics = {
   readonly fallbackReason: string;
   readonly supportsVertexTextures: boolean;
   readonly movementSourceAddsSinceLastFrame: number;
+  readonly playerGroundContact: number;
 };
 
 export type WakeFieldRenderInput = {
@@ -59,6 +61,7 @@ export type WakeFieldRenderInput = {
   readonly previousPlayerPosition: THREE.Vector3;
   readonly playerVelocity: THREE.Vector3;
   readonly playerSpeed: number;
+  readonly playerGroundContact: number;
   readonly waveMedium: WaveMediumSettings;
   readonly activeRippleSourceCount: number;
   readonly renderedRippleSourceCount: number;
@@ -85,6 +88,7 @@ export class WakeField {
   private writeTarget: THREE.WebGLRenderTarget | null = null;
   private textureSize = 1;
   private passMs = 0;
+  private lastPlayerGroundContact = 1;
   private lastFrameLogAt = -Infinity;
 
   constructor(private readonly renderer: THREE.WebGLRenderer, preset: QualityPreset) {
@@ -110,6 +114,7 @@ export class WakeField {
       uPlayerCurrent: { value: new THREE.Vector2() },
       uPlayerVelocity: { value: new THREE.Vector2() },
       uPlayerSpeed: { value: 0 },
+      uPlayerContact: { value: 1 },
       uTexelSize: { value: new THREE.Vector2(1, 1) },
       uPropagationSpeed: { value: 9 },
       uDamping: { value: 0.16 },
@@ -147,6 +152,7 @@ export class WakeField {
   }
 
   render(input: WakeFieldRenderInput): void {
+    this.lastPlayerGroundContact = THREE.MathUtils.clamp(input.playerGroundContact, 0, 1);
     if (this.mode === "noop" || !this.readTarget || !this.writeTarget) {
       this.passMs = 0;
       return;
@@ -166,6 +172,7 @@ export class WakeField {
     this.uniforms.uPlayerCurrent.value.set(input.playerPosition.x, input.playerPosition.z);
     this.uniforms.uPlayerVelocity.value.set(velocityX, velocityZ);
     this.uniforms.uPlayerSpeed.value = input.playerSpeed;
+    this.uniforms.uPlayerContact.value = this.lastPlayerGroundContact;
     this.uniforms.uPropagationSpeed.value =
       getBasePropagationSpeedMetersPerSecond(input.waveMedium) * input.waveMedium.wakeSpeedMultiplier;
     this.uniforms.uDamping.value = input.waveMedium.damping;
@@ -239,7 +246,8 @@ export class WakeField {
       passMs: this.passMs,
       fallbackReason: this.fallbackReason,
       supportsVertexTextures: this.supportsVertexTextures,
-      movementSourceAddsSinceLastFrame: 0
+      movementSourceAddsSinceLastFrame: 0,
+      playerGroundContact: this.lastPlayerGroundContact
     };
   }
 
@@ -253,6 +261,7 @@ export class WakeField {
   private maybeLogFrame(input: WakeFieldRenderInput): void {
     if (input.time - this.lastFrameLogAt < WAKE_FRAME_LOG_INTERVAL_SECONDS) return;
     if (input.playerSpeed < WAKE_MIN_INJECTION_SPEED) return;
+    if (this.lastPlayerGroundContact <= 0.05) return;
 
     this.lastFrameLogAt = input.time;
     debugEvent("wake.frame", "Wake field frame sample", {
@@ -261,6 +270,7 @@ export class WakeField {
       passMs: roundMetric(this.passMs),
       textureSize: this.textureSize,
       playerSpeed: roundMetric(input.playerSpeed),
+      playerGroundContact: roundMetric(this.lastPlayerGroundContact),
       activeRippleSources: input.activeRippleSourceCount,
       renderedRippleSources: input.renderedRippleSourceCount,
       movementSourceAddsSinceLastFrame: 0,
@@ -357,6 +367,7 @@ function createWakeMaterial(uniforms: WakeFieldUniforms): THREE.ShaderMaterial {
       uniform vec2 uPlayerCurrent;
       uniform vec2 uPlayerVelocity;
       uniform float uPlayerSpeed;
+      uniform float uPlayerContact;
       uniform vec2 uTexelSize;
       uniform float uPropagationSpeed;
       uniform float uDamping;
@@ -425,8 +436,9 @@ function createWakeMaterial(uniforms: WakeFieldUniforms): THREE.ShaderMaterial {
         vec2 movement = uPlayerCurrent - uPlayerPrevious;
         vec2 direction = normalize(uPlayerVelocity + vec2(0.0001, 0.0));
         float motionDistance = length(movement);
+        float playerContact = clamp(uPlayerContact, 0.0, 1.0);
         float moving = smoothstep(${WAKE_MIN_INJECTION_SPEED.toFixed(2)}, 8.0, uPlayerSpeed) *
-          smoothstep(0.015, 0.12, motionDistance);
+          smoothstep(0.015, 0.12, motionDistance) * playerContact;
         float centerDistance = segmentDistance(worldPosition, uPlayerPrevious, uPlayerCurrent);
         float centerBrush = exp(-pow(centerDistance / max(0.2, uBrushRadius), 2.0));
         float alongMotion = dot(worldPosition - uPlayerCurrent, direction);

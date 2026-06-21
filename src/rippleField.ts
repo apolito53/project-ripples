@@ -24,6 +24,7 @@ type RippleShaderUniforms = {
   readonly uPlayerPosition: Uniform<THREE.Vector3>;
   readonly uPlayerVelocity: Uniform<THREE.Vector2>;
   readonly uPlayerSpeed: Uniform<number>;
+  readonly uPlayerContact: Uniform<number>;
   readonly uRippleHeight: Uniform<number>;
   readonly uRippleRadius: Uniform<number>;
   readonly uVoxelSize: Uniform<number>;
@@ -149,6 +150,7 @@ export class RippleField {
     playerPosition: THREE.Vector3,
     playerVelocity: THREE.Vector3,
     playerSpeed: number,
+    playerGroundContact: number,
     wakeTexture: THREE.Texture,
     wakeMetrics: WakeFieldMetrics
   ): void {
@@ -173,6 +175,7 @@ export class RippleField {
       playerPosition,
       playerVelocity,
       playerSpeed,
+      playerGroundContact,
       wakeTexture,
       wakeMetrics,
       basePropagationSpeed,
@@ -242,6 +245,7 @@ export class RippleField {
       shader.uniforms.uPlayerPosition = { value: new THREE.Vector3() };
       shader.uniforms.uPlayerVelocity = { value: new THREE.Vector2() };
       shader.uniforms.uPlayerSpeed = { value: 0 };
+      shader.uniforms.uPlayerContact = { value: 1 };
       shader.uniforms.uRippleHeight = { value: 1.25 };
       shader.uniforms.uRippleRadius = { value: 9 };
       shader.uniforms.uVoxelSize = { value: 1 };
@@ -266,6 +270,7 @@ export class RippleField {
           uniform vec3 uPlayerPosition;
           uniform vec2 uPlayerVelocity;
           uniform float uPlayerSpeed;
+          uniform float uPlayerContact;
           uniform float uRippleHeight;
           uniform float uRippleRadius;
           uniform float uVoxelSize;
@@ -312,7 +317,7 @@ export class RippleField {
 
           float movingBodyWake(vec2 fromPlayer, float distanceToPlayer, float phase) {
             float speed = length(uPlayerVelocity);
-            float moving = smoothstep(0.8, 10.5, speed);
+            float moving = smoothstep(0.8, 10.5, speed) * clamp(uPlayerContact, 0.0, 1.0);
             if (moving <= 0.001 || distanceToPlayer <= 0.001) {
               return 0.0;
             }
@@ -344,10 +349,12 @@ export class RippleField {
           vec2 cellPosition = instanceFieldPosition.xz;
           vec2 fromPlayer = cellPosition - uPlayerPosition.xz;
           float playerDistance = length(fromPlayer);
-          float proximity = 1.0 - smoothstep(0.0, uRippleRadius, playerDistance);
-          float bodyPressure = 1.0 - smoothstep(0.15, 2.55, playerDistance);
-          float pressureRim = exp(-pow((playerDistance - 2.35) / 0.9, 2.0));
-          float movementPush = clamp(uPlayerSpeed / 16.0, 0.0, 1.0);
+          float playerContact = clamp(uPlayerContact, 0.0, 1.0);
+          float proximity = (1.0 - smoothstep(0.0, uRippleRadius, playerDistance)) *
+            (0.12 + playerContact * 0.88);
+          float bodyPressure = (1.0 - smoothstep(0.15, 2.55, playerDistance)) * playerContact;
+          float pressureRim = exp(-pow((playerDistance - 2.35) / 0.9, 2.0)) * playerContact;
+          float movementPush = clamp(uPlayerSpeed / 16.0, 0.0, 1.0) * playerContact;
           float shimmer = sin(uTime * 5.8 - playerDistance * 2.15 + instancePhase) * 0.5 + 0.5;
           float flowWave = movingBodyWake(fromPlayer, playerDistance, instancePhase);
           vec3 wakeSample = sampleWakeField(cellPosition);
@@ -448,6 +455,7 @@ export class RippleField {
     playerPosition: THREE.Vector3,
     playerVelocity: THREE.Vector3,
     playerSpeed: number,
+    playerGroundContact: number,
     wakeTexture: THREE.Texture,
     wakeMetrics: WakeFieldMetrics,
     basePropagationSpeed: number,
@@ -459,6 +467,7 @@ export class RippleField {
     shader.uniforms.uPlayerPosition.value.copy(playerPosition);
     shader.uniforms.uPlayerVelocity.value.set(playerVelocity.x, playerVelocity.z);
     shader.uniforms.uPlayerSpeed.value = playerSpeed;
+    shader.uniforms.uPlayerContact.value = THREE.MathUtils.clamp(playerGroundContact, 0, 1);
     shader.uniforms.uRippleHeight.value = settings.rippleHeight;
     shader.uniforms.uRippleRadius.value = settings.rippleRadius;
     shader.uniforms.uVoxelSize.value = settings.voxelSizeMeters;

@@ -7,6 +7,7 @@ import { ArenaBarrier } from "./arenaBarrier";
 import {
   PlayerRig,
   PLAYER_SPEED_LIMITS,
+  type PlayerJumpEvent,
   getMinimumSprintSpeedMetersPerSecond,
   normalizePlayerSpeedSettings
 } from "./controls";
@@ -110,6 +111,20 @@ const MANUAL_PULSE_OPTIONS: RippleSourceOptions = {
   speedMultiplier: 1,
   widthMultiplier: 1,
   dampingMultiplier: 0.92
+};
+const JUMP_TAKEOFF_OPTIONS: RippleSourceOptions = {
+  kind: "pulse",
+  speedMultiplier: 0.92,
+  widthMultiplier: 0.72,
+  dampingMultiplier: 0.78,
+  lifetimeSeconds: 4.2
+};
+const JUMP_LANDING_OPTIONS: RippleSourceOptions = {
+  kind: "pulse",
+  speedMultiplier: 1.02,
+  widthMultiplier: 1.25,
+  dampingMultiplier: 0.68,
+  lifetimeSeconds: 6.2
 };
 const ECHO_BURST_OPTIONS: RippleSourceOptions = {
   kind: "pulse",
@@ -235,6 +250,8 @@ const player = new PlayerRig({
   sampleHeight: sampleFieldHeight,
   getBoundaryRadius: () => Math.max(0, preset.fieldRadius - PLAYER_BOUNDARY_PADDING),
   onPulse: (position) => spawnPulse(position, 0.45),
+  onJump: (event) => triggerJumpRipple(event),
+  onLand: (event) => triggerLandingRipple(event),
   speedSettings: settings.playerSpeed,
   isInputEnabled: areSceneInputsEnabled
 });
@@ -269,10 +286,11 @@ function animate(): void {
   const frameStartedAt = performance.now();
   player.update(delta);
   const playerSpeed = player.getSpeed();
+  const playerGroundContact = player.getGroundContactStrength();
   avatar.update(delta, player.position, playerSpeed);
   if (settings.particlesEnabled) {
     particles.spawnAura(player.position, delta, playerSpeed / 18);
-    particles.spawnWake(player.position, playerSpeed / 18);
+    particles.spawnWake(player.position, (playerSpeed / 18) * playerGroundContact);
   }
   arenaBarrier.update(time);
   updateSceneLightSourceVisuals(time);
@@ -301,6 +319,7 @@ function animate(): void {
     previousPlayerPosition: previousWakePlayerPosition,
     playerVelocity: player.velocity,
     playerSpeed,
+    playerGroundContact,
     waveMedium: settings.waveMedium,
     activeRippleSourceCount: rippleSources.getActiveSources(time).length,
     renderedRippleSourceCount: rippleField.getRenderedRippleSourceCount(),
@@ -316,6 +335,7 @@ function animate(): void {
     player.position,
     player.velocity,
     playerSpeed,
+    playerGroundContact,
     wakeField.getTexture(),
     wakeMetrics
   );
@@ -351,6 +371,28 @@ function spawnPulseParticles(position: THREE.Vector3, strength: number): void {
   if (settings.particlesEnabled) {
     particles.spawnPulseBurst(position, count, strength);
   }
+}
+
+function triggerJumpRipple(event: PlayerJumpEvent): void {
+  // Takeoff is a smaller pressure release: visible enough to sell the jump,
+  // but intentionally quieter than the landing impact.
+  spawnPulse(event.position, event.strength, JUMP_TAKEOFF_OPTIONS);
+  debugEvent("player.jump", "Player jumped from field surface", {
+    time: roundMetric(clock.elapsedTime),
+    strength: roundMetric(event.strength),
+    position: vectorPayload(event.position)
+  }, "info");
+}
+
+function triggerLandingRipple(event: PlayerJumpEvent): void {
+  spawnPulse(event.position, event.strength, JUMP_LANDING_OPTIONS);
+  debugEvent("player.jump", "Player landed on field surface", {
+    time: roundMetric(clock.elapsedTime),
+    strength: roundMetric(event.strength),
+    airtimeSeconds: roundMetric(event.airtimeSeconds),
+    impactSpeed: roundMetric(event.impactSpeed),
+    position: vectorPayload(event.position)
+  }, "info");
 }
 
 function seedEchoZones(time: number): void {
@@ -1035,6 +1077,7 @@ function prewarmRenderPipelines(): void {
     previousPlayerPosition: player.position,
     playerVelocity: player.velocity,
     playerSpeed: 0,
+    playerGroundContact: 1,
     waveMedium: settings.waveMedium,
     activeRippleSourceCount: rippleSources.getActiveSources(time).length,
     renderedRippleSourceCount: rippleField.getRenderedRippleSourceCount(),
