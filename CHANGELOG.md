@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.3.11-ALPHA - 2026-06-22
+
+### Changed
+
+- Brightened particle motes by raising the shared alpha range and increasing
+  shader core energy, so aura, wake-tail, pulse, and Echo glitter remain visible
+  against bright ripple crests without increasing particle size or count.
+- Added an extra alpha bump for the tightened movement wake tail so it reads as
+  an intentional luminous trail instead of disappearing into the field.
+- Bumped package metadata, README, codebase index, and visible version text to
+  `v0.3.11-ALPHA`.
+
 ## 0.3.10-ALPHA - 2026-06-22
 
 ### Changed

@@ -7,7 +7,7 @@ This is intentionally separate from `voxel-sandbox-engine`. The goal is to make
 a polished visual lab first, then borrow patterns or ideas later if they deserve
 to graduate into the main voxel engine.
 
-Current version: `v0.3.10-ALPHA`.
+Current version: `v0.3.11-ALPHA`.
 
 ## Quick Start
 
@@ -52,8 +52,9 @@ Raised wave crests carry an extra bounded glow signal, so ripple fronts bloom
 brighter without washing out the whole field.
 Manual pulses have a short shared cooldown so rapid clicks or touch pulses do
 not flood the field.
-The avatar itself uses fast orbiting energy motes with long additive trails
-instead of flat rings, so it reads as a moving glow cloud rather than a UI target.
+The avatar itself uses brighter fast orbiting energy motes with long additive
+trails instead of flat rings, so it reads as a moving glow cloud rather than a
+UI target.
 Sparkling Echo columns spawn around the arena as real local light sources with
 a bright inner orb, a vertically stretched diamond-shaped glow cloud, faster
 core-local orbiting motes, and segmented fading trails. They wait until the
@@ -154,7 +155,7 @@ Project planning:
 Versioning:
 
 - While the project is still experimental, release tags use alpha prerelease
-  labels. The current baseline is `v0.3.10-ALPHA`.
+  labels. The current baseline is `v0.3.11-ALPHA`.
 
 ## Design Notes
 
@@ -188,8 +189,8 @@ Versioning:
   including hex point-to-point diameter scaling and the 200m-to-400m arena
   radius range.
 - `src/particleVeil.ts` owns the player sparkle aura, additive glitter-cloud
-  bursts, layered Echo poof-disc bursts, and tight velocity-following wake
-  tails.
+  bursts, layered Echo poof-disc bursts, bright shader energy, and tight
+  velocity-following wake tails.
 - `src/pulseLights.ts` maps recent pulses onto a small pool of point lights.
 - `src/controls.ts` owns avatar movement, circular arena clamping, scene-input
   gating while menus are open, and camera pointer-lock behavior. The avatar

@@ -9,7 +9,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Vite + strict TypeScript browser app.
 - Three.js renderer, postprocessing composer, Unreal bloom pass, shader-customized
   `InstancedMesh`, additive `Points`, and dynamic lights.
-- Current alpha baseline: `v0.3.10-ALPHA`; keep release tags in alpha prerelease
+- Current alpha baseline: `v0.3.11-ALPHA`; keep release tags in alpha prerelease
   territory until the lab graduates from prototype status.
 - Dedicated dev port `5183`; preview port `4183`.
 
@@ -61,7 +61,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
   pooled run-through collection bursts:
   `src/echoZones.ts`
 - Player sparkle aura, adaptive continuous emission, additive particle bursts,
-  tight velocity-following wake tails, and narrowed static attribute uploads:
+  shader brightness/energy, tight velocity-following wake tails, and narrowed
+  static attribute uploads:
   `src/particleVeil.ts`
 - Recent-pulse point light pool: `src/pulseLights.ts`
 - Quality preset budgets and labels: `src/qualityPresets.ts`

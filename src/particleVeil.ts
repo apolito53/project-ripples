@@ -5,8 +5,9 @@ const TURQUOISE = new THREE.Color(0x7dffd8);
 const VIOLET = new THREE.Color(0x7f7dff);
 const GOLD = new THREE.Color(0xffd36a);
 const PALE_CYAN = new THREE.Color(0xdffcff);
-const PARTICLE_ALPHA_MIN = 0.34;
-const PARTICLE_ALPHA_VARIANCE = 0.32;
+const PARTICLE_ALPHA_MIN = 0.44;
+const PARTICLE_ALPHA_VARIANCE = 0.38;
+const PARTICLE_SHADER_ENERGY_GAIN = 1.24;
 const DISC_CLOUD_PARTICLE_RATIO = 0.012;
 const DISC_CLOUD_PARTICLE_MAX = 720;
 const DISC_GLITTER_PARTICLE_RATIO = 0.06;
@@ -138,11 +139,13 @@ export class ParticleVeil {
           float cloudShape = cloudBody * (0.44 + cloudCore * 0.56);
           float shape = mix(glitterShape, cloudShape, vCloudiness);
           float twinkle = mix(vTwinkle, 0.88 + vTwinkle * 0.12, vCloudiness);
-          float alpha = shape * vAlpha * twinkle;
+          float alpha = min(shape * vAlpha * twinkle, 1.0);
           if (alpha < 0.004) discard;
-          float glitterEnergy = 1.75 + pinCore * 3.4 + vTwinkle * 0.75;
-          float cloudEnergy = 1.05 + cloudCore * 1.65 + cloudBody * 0.55;
-          gl_FragColor = vec4(vColor * mix(glitterEnergy, cloudEnergy, vCloudiness), alpha);
+          // Keep the shape crisp and make the light hotter. Size stays CPU-side,
+          // while this energy gain lets particles compete with bright crest glow.
+          float glitterEnergy = 2.2 + pinCore * 4.6 + vTwinkle * 1.05;
+          float cloudEnergy = 1.28 + cloudCore * 2.0 + cloudBody * 0.72;
+          gl_FragColor = vec4(vColor * mix(glitterEnergy, cloudEnergy, vCloudiness) * ${PARTICLE_SHADER_ENERGY_GAIN.toFixed(2)}, alpha);
         }
       `
     });
@@ -429,7 +432,7 @@ export class ParticleVeil {
     this.colors[positionOffset + 2] = color.b;
     this.ages[index] = 0;
     this.lifetimes[index] = 0.42 + Math.random() * 0.76;
-    this.baseAlphas[index] = (PARTICLE_ALPHA_MIN + Math.random() * PARTICLE_ALPHA_VARIANCE) * 0.78;
+    this.baseAlphas[index] = (PARTICLE_ALPHA_MIN + Math.random() * PARTICLE_ALPHA_VARIANCE) * 0.98;
     this.baseSizes[index] = 0.36 + Math.random() * (0.72 + strength * 0.3);
     this.alphas[index] = this.baseAlphas[index];
     this.sizes[index] = this.baseSizes[index];
@@ -494,7 +497,7 @@ export class ParticleVeil {
     this.colors[positionOffset + 2] = color.b;
     this.ages[index] = 0;
     this.lifetimes[index] = 0.58 + Math.random() * 0.88;
-    this.baseAlphas[index] = PARTICLE_ALPHA_MIN + 0.24 + Math.random() * (PARTICLE_ALPHA_VARIANCE + 0.18);
+    this.baseAlphas[index] = PARTICLE_ALPHA_MIN + 0.3 + Math.random() * (PARTICLE_ALPHA_VARIANCE + 0.22);
     this.baseSizes[index] = 1.1 + Math.random() * (2.2 + strength * 1.15);
     this.alphas[index] = this.baseAlphas[index];
     this.sizes[index] = this.baseSizes[index];
