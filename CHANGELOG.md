@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.3.10-ALPHA - 2026-06-22
+
+### Changed
+
+- Doubled the avatar jump apex by raising the initial jump velocity without
+  reducing gravity, keeping the jump snappier than a floaty low-gravity hop.
+- Reworked continuous movement wake particles into a tighter directional tail
+  that spawns behind the avatar velocity vector with lower sideways/vertical
+  scatter, shorter lifetimes, smaller motes, and fewer particles.
+- Bumped package metadata, README, codebase index, and visible version text to
+  `v0.3.10-ALPHA`.
+
 ## 0.3.9-ALPHA - 2026-06-21
 
 ### Added

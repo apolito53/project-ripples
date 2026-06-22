@@ -15,14 +15,16 @@ const PULSE_VERTICAL_LIFT = 0.18;
 const PULSE_VERTICAL_JITTER = 0.56;
 const PULSE_LIFETIME_BASE = 0.42;
 const PULSE_LIFETIME_VARIANCE = 0.66;
-const WAKE_PARTICLE_COUNT_BASE = 70;
-const WAKE_PARTICLE_COUNT_MOVEMENT_BONUS = 180;
-const WAKE_VERTICAL_LIFT = 0.14;
-const WAKE_VERTICAL_JITTER_BASE = 0.44;
-const WAKE_VERTICAL_JITTER_MOVEMENT_BONUS = 0.34;
+const WAKE_PARTICLE_COUNT_BASE = 36;
+const WAKE_PARTICLE_COUNT_MOVEMENT_BONUS = 96;
+const WAKE_VERTICAL_LIFT = 0.08;
+const WAKE_VERTICAL_JITTER_BASE = 0.1;
+const WAKE_VERTICAL_JITTER_MOVEMENT_BONUS = 0.14;
 const CONTINUOUS_EMISSION_THROTTLE_START = 0.58;
 const CONTINUOUS_EMISSION_THROTTLE_END = 0.94;
 const CONTINUOUS_EMISSION_MIN_SCALE = 0.2;
+const TEMP_WAKE_DIRECTION = new THREE.Vector2();
+const TEMP_WAKE_RIGHT = new THREE.Vector2();
 
 export class ParticleVeil {
   readonly points: THREE.Points;
@@ -240,19 +242,23 @@ export class ParticleVeil {
     this.markDirty(true);
   }
 
-  spawnWake(center: THREE.Vector3, movementStrength: number): void {
+  spawnWake(center: THREE.Vector3, movementStrength: number, movementVelocity: THREE.Vector3): void {
     const emissionScale = this.getContinuousEmissionScale();
     if (movementStrength <= 0.08 || Math.random() > movementStrength * 0.55 * emissionScale) return;
 
-    // Movement wakes are emitted constantly while the player runs, so they get
-    // a dedicated cheaper shape instead of borrowing the taller burst cloud.
-    // The count is roughly half of the previous generic burst path, and the
-    // Y scatter stays centered on the avatar core instead of hovering above it.
+    TEMP_WAKE_DIRECTION.set(movementVelocity.x, movementVelocity.z);
+    if (TEMP_WAKE_DIRECTION.lengthSq() <= 0.0001) return;
+    TEMP_WAKE_DIRECTION.normalize();
+    TEMP_WAKE_RIGHT.set(-TEMP_WAKE_DIRECTION.y, TEMP_WAKE_DIRECTION.x);
+
+    // Movement wakes are emitted constantly while the player runs. Keep them as
+    // a directional tail instead of a loose glitter shed: fewer motes, narrower
+    // lateral scatter, and a spawn bias behind the current velocity vector.
     const rawCount = WAKE_PARTICLE_COUNT_BASE + Math.floor(movementStrength * WAKE_PARTICLE_COUNT_MOVEMENT_BONUS);
     const count = Math.max(6, Math.floor(rawCount * emissionScale));
     const strength = 0.12 + movementStrength * 0.16;
     for (let wakeIndex = 0; wakeIndex < count; wakeIndex += 1) {
-      this.emitWakeParticle(center, strength, movementStrength);
+      this.emitWakeParticle(center, strength, movementStrength, TEMP_WAKE_DIRECTION, TEMP_WAKE_RIGHT);
     }
 
     this.markDirty(true);
@@ -388,36 +394,43 @@ export class ParticleVeil {
     this.cloudinesses[index] = 0;
   }
 
-  private emitWakeParticle(center: THREE.Vector3, strength: number, movementStrength: number): void {
+  private emitWakeParticle(
+    center: THREE.Vector3,
+    strength: number,
+    movementStrength: number,
+    direction: THREE.Vector2,
+    right: THREE.Vector2
+  ): void {
     const index = this.allocateParticleSlot();
 
-    const angle = Math.random() * Math.PI * 2;
-    // Wake motes should read like light being shed from the moving avatar, not
-    // a tall fog wall. Keep the horizontal throw broad enough to trail behind
-    // the player over time, but make the vertical band much tighter.
-    const cloudRadius = 0.72 + movementStrength * 2.15;
-    const radius = Math.sqrt(Math.random()) * cloudRadius;
+    // A true tail wants anisotropy: long behind the avatar, tight sideways, and
+    // almost no vertical throw. The field wake texture handles the broad water
+    // disturbance; these motes are just the glowing core shedding light.
+    const tailT = Math.random();
+    const tailDistance = 0.22 + tailT * tailT * (1.1 + movementStrength * 3.1);
+    const lateralSpread = 0.08 + tailT * (0.18 + movementStrength * 0.28);
+    const lateral = (Math.random() - 0.5) * lateralSpread;
     const heightJitter = (Math.random() - 0.5) *
       (WAKE_VERTICAL_JITTER_BASE + movementStrength * WAKE_VERTICAL_JITTER_MOVEMENT_BONUS);
-    const outward = 0.18 + Math.random() * (0.48 + movementStrength * 0.72);
-    const tangent = (Math.random() - 0.5) * (0.34 + movementStrength * 0.62);
-    const upward = (Math.random() - 0.48) * (0.1 + movementStrength * 0.24);
+    const backwardDrift = 0.1 + Math.random() * (0.22 + movementStrength * 0.34);
+    const lateralDrift = (Math.random() - 0.5) * (0.06 + movementStrength * 0.16);
+    const upward = (Math.random() - 0.56) * (0.05 + movementStrength * 0.09);
     const positionOffset = index * 3;
     const color = pickParticleColor(Math.random());
 
-    this.positions[positionOffset] = center.x + Math.cos(angle) * radius;
+    this.positions[positionOffset] = center.x - direction.x * tailDistance + right.x * lateral;
     this.positions[positionOffset + 1] = center.y + WAKE_VERTICAL_LIFT + heightJitter;
-    this.positions[positionOffset + 2] = center.z + Math.sin(angle) * radius;
-    this.velocities[positionOffset] = Math.cos(angle) * outward - Math.sin(angle) * tangent;
+    this.positions[positionOffset + 2] = center.z - direction.y * tailDistance + right.y * lateral;
+    this.velocities[positionOffset] = -direction.x * backwardDrift + right.x * lateralDrift;
     this.velocities[positionOffset + 1] = upward;
-    this.velocities[positionOffset + 2] = Math.sin(angle) * outward + Math.cos(angle) * tangent;
+    this.velocities[positionOffset + 2] = -direction.y * backwardDrift + right.y * lateralDrift;
     this.colors[positionOffset] = color.r;
     this.colors[positionOffset + 1] = color.g;
     this.colors[positionOffset + 2] = color.b;
     this.ages[index] = 0;
-    this.lifetimes[index] = 0.68 + Math.random() * 1.12;
-    this.baseAlphas[index] = (PARTICLE_ALPHA_MIN + Math.random() * PARTICLE_ALPHA_VARIANCE) * 0.86;
-    this.baseSizes[index] = 0.42 + Math.random() * (0.92 + strength * 0.38);
+    this.lifetimes[index] = 0.42 + Math.random() * 0.76;
+    this.baseAlphas[index] = (PARTICLE_ALPHA_MIN + Math.random() * PARTICLE_ALPHA_VARIANCE) * 0.78;
+    this.baseSizes[index] = 0.36 + Math.random() * (0.72 + strength * 0.3);
     this.alphas[index] = this.baseAlphas[index];
     this.sizes[index] = this.baseSizes[index];
     this.twinkles[index] = Math.random();

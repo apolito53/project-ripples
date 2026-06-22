@@ -7,7 +7,7 @@ This is intentionally separate from `voxel-sandbox-engine`. The goal is to make
 a polished visual lab first, then borrow patterns or ideas later if they deserve
 to graduate into the main voxel engine.
 
-Current version: `v0.3.9-ALPHA`.
+Current version: `v0.3.10-ALPHA`.
 
 ## Quick Start
 
@@ -33,7 +33,7 @@ Open `http://127.0.0.1:5183`.
 - `Mouse movement` orbits the follow camera while captured.
 - `Mouse wheel` zooms the follow camera in and out.
 - `+` / `-` zoom in and out; `0` resets the camera distance.
-- `Space` jumps, with small takeoff and stronger landing ripples.
+- `Space` jumps high, with small takeoff and stronger landing ripples.
 - `Shift` sprints with momentum.
 - `F2` shows or hides the live performance overlay.
 - `Esc` releases pointer lock and opens/closes the pause menu.
@@ -64,11 +64,12 @@ snapping instantly to full speed. Walk defaults to `10 m/s` and sprint defaults
 to `37 m/s`. It behaves like a small body pushing through water: the shader
 forms a pressed fabric depression, local bow/wake displacement, and small raised
 rim around the avatar, while a dedicated GPU wake texture stores the lingering
-height/velocity field left behind by movement. Jumping fades that surface
-contact while the avatar is airborne, then landing stamps a brighter impact
-ripple back into the field. Manual click/touch pulses and collected Echoes still
-use analytic ring sources, but ordinary movement no longer adds little circular
-wave sources while the avatar runs.
+height/velocity field left behind by movement. The visible movement particle
+trail is now a tighter velocity-following tail instead of a broad glitter shed.
+Jumping fades that surface contact while the avatar is airborne, then landing
+stamps a brighter impact ripple back into the field. Manual click/touch pulses
+and collected Echoes still use analytic ring sources, but ordinary movement no
+longer adds little circular wave sources while the avatar runs.
 
 The Esc/hamburger pause menu changes quality, skybox theme, hex size, arena
 radius, ripple height/radius, Depth / Speed, particle density, bloom strength,
@@ -153,7 +154,7 @@ Project planning:
 Versioning:
 
 - While the project is still experimental, release tags use alpha prerelease
-  labels. The current baseline is `v0.3.9-ALPHA`.
+  labels. The current baseline is `v0.3.10-ALPHA`.
 
 ## Design Notes
 
@@ -187,7 +188,8 @@ Versioning:
   including hex point-to-point diameter scaling and the 200m-to-400m arena
   radius range.
 - `src/particleVeil.ts` owns the player sparkle aura, additive glitter-cloud
-  bursts, layered Echo poof-disc bursts, and wake trails.
+  bursts, layered Echo poof-disc bursts, and tight velocity-following wake
+  tails.
 - `src/pulseLights.ts` maps recent pulses onto a small pool of point lights.
 - `src/controls.ts` owns avatar movement, circular arena clamping, scene-input
   gating while menus are open, and camera pointer-lock behavior. The avatar

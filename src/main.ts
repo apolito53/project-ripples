@@ -290,7 +290,7 @@ function animate(): void {
   avatar.update(delta, player.position, playerSpeed);
   if (settings.particlesEnabled) {
     particles.spawnAura(player.position, delta, playerSpeed / 18);
-    particles.spawnWake(player.position, (playerSpeed / 18) * playerGroundContact);
+    particles.spawnWake(player.position, (playerSpeed / 18) * playerGroundContact, player.velocity);
   }
   arenaBarrier.update(time);
   updateSceneLightSourceVisuals(time);

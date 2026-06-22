@@ -53,7 +53,10 @@ const CAMERA_WHEEL_ZOOM_SPEED = 0.018;
 const PLAYER_HEIGHT = 1.75;
 const PULSE_DISTANCE = 4.2;
 const PULSE_COOLDOWN_SECONDS = 0.42;
-const JUMP_INITIAL_SPEED = 7.6;
+// Jump height scales with velocity squared. 10.75m/s is roughly sqrt(2) times
+// the first jump tune, which doubles apex height without making gravity feel
+// syrupy or turning the avatar into a slow floating balloon.
+const JUMP_INITIAL_SPEED = 10.75;
 const JUMP_GRAVITY = 21.5;
 const JUMP_SURFACE_CONTACT_FADE_HEIGHT = 1.25;
 const JUMP_TAKEOFF_STRENGTH = 0.26;

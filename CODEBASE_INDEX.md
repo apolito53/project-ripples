@@ -1,6 +1,6 @@
 # Codebase Index
 
-Last reviewed: 2026-06-21
+Last reviewed: 2026-06-22
 
 Purpose: compact map for the standalone ripple-field visual lab.
 
@@ -9,7 +9,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Vite + strict TypeScript browser app.
 - Three.js renderer, postprocessing composer, Unreal bloom pass, shader-customized
   `InstancedMesh`, additive `Points`, and dynamic lights.
-- Current alpha baseline: `v0.3.9-ALPHA`; keep release tags in alpha prerelease
+- Current alpha baseline: `v0.3.10-ALPHA`; keep release tags in alpha prerelease
   territory until the lab graduates from prototype status.
 - Dedicated dev port `5183`; preview port `4183`.
 
@@ -61,7 +61,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
   pooled run-through collection bursts:
   `src/echoZones.ts`
 - Player sparkle aura, adaptive continuous emission, additive particle bursts,
-  wake trails, and narrowed static attribute uploads:
+  tight velocity-following wake tails, and narrowed static attribute uploads:
   `src/particleVeil.ts`
 - Recent-pulse point light pool: `src/pulseLights.ts`
 - Quality preset budgets and labels: `src/qualityPresets.ts`
@@ -110,7 +110,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
    arena radius so the map edge is visible without changing collision logic.
 8. `EchoZoneField` animates live Echo markers and reports run-through triggers.
 9. `ParticleVeil` animates the player sparkle aura, burst clouds, flat Echo
-   disc bursts, and wake motes.
+   disc bursts, and velocity-shaped wake-tail motes.
 10. `PulseLightRig` assigns recent pulses and collected Echo detonations to
    point lights.
 11. The HUD reports FPS, instance counts, base propagation speed, voxel size,
@@ -144,7 +144,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
   behavior: `src/echoZones.ts` and `src/main.ts`
 - Change avatar marker motes, long orbit trails, lights, or shell visuals:
   `src/main.ts`
-- Change particles, wake behavior, or burst count: `src/particleVeil.ts` and
+- Change particles, wake-tail shape, or burst count: `src/particleVeil.ts` and
   `src/main.ts`
 - Change pulse source strength or cooldown: `src/main.ts`
 - Change propagation-speed semantics or medium parameters: `src/waveMedium.ts`,
@@ -208,11 +208,13 @@ Purpose: compact map for the standalone ripple-field visual lab.
   sets Three.js draw/update ranges from `activeCount`; preserve that shape when
   changing particle lifetimes or replacement behavior, or dead budget slots will
   quietly become render cost again. Continuous avatar aura/wake emission scales
-  down as the resident buffer fills, and static attributes only upload dirty
-  slot ranges. Dynamic position/alpha/size still update broadly because live
-  particles move every frame. Echo disc detonations intentionally spend a capped
-  intensity budget on broad soft poof motes plus a smaller large-glitter layer
-  instead of one enormous glitter-only burst.
+  down as the resident buffer fills, and the movement wake trail is intentionally
+  directional: spawn motes behind the current velocity vector rather than in a
+  circular glitter cloud. Static attributes only upload dirty slot ranges.
+  Dynamic position/alpha/size still update broadly because live particles move
+  every frame. Echo disc detonations intentionally spend a capped intensity
+  budget on broad soft poof motes plus a smaller large-glitter layer instead of
+  one enormous glitter-only burst.
 - `RippleField` can upload fewer rendered ripple sources than the gameplay
   source list contains when the hex instance count is extreme. This is a
   GPU-side density throttle for shader loop cost, not a gameplay source cap.
