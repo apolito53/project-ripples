@@ -6,6 +6,7 @@ export type PlayerRigOptions = {
   readonly sampleHeight: (x: number, z: number) => number;
   readonly getBoundaryRadius: () => number;
   readonly onPulse: (position: THREE.Vector3) => void;
+  readonly onQuietPointerUnlock?: () => void;
   readonly onJump?: (event: PlayerJumpEvent) => void;
   readonly onLand?: (event: PlayerJumpEvent) => void;
   readonly speedSettings?: PlayerSpeedSettings;
@@ -104,6 +105,7 @@ export class PlayerRig {
   private readonly sampleHeight: (x: number, z: number) => number;
   private readonly getBoundaryRadius: () => number;
   private readonly onPulse: (position: THREE.Vector3) => void;
+  private readonly onQuietPointerUnlock: () => void;
   private readonly onJump: (event: PlayerJumpEvent) => void;
   private readonly onLand: (event: PlayerJumpEvent) => void;
   private readonly isInputEnabled: () => boolean;
@@ -120,6 +122,7 @@ export class PlayerRig {
   private verticalVelocity = 0;
   private grounded = true;
   private jumpStartedAt = -Infinity;
+  private cameraDragPointerId: number | null = null;
   private yaw = Math.PI * 0.23;
   private pitch = 0.45;
 
@@ -129,6 +132,7 @@ export class PlayerRig {
     this.sampleHeight = options.sampleHeight;
     this.getBoundaryRadius = options.getBoundaryRadius;
     this.onPulse = options.onPulse;
+    this.onQuietPointerUnlock = options.onQuietPointerUnlock ?? (() => undefined);
     this.onJump = options.onJump ?? (() => undefined);
     this.onLand = options.onLand ?? (() => undefined);
     this.isInputEnabled = options.isInputEnabled ?? (() => true);
@@ -136,7 +140,11 @@ export class PlayerRig {
 
     window.addEventListener("keydown", this.handleKeyDown);
     window.addEventListener("keyup", this.handleKeyUp);
+    window.addEventListener("blur", this.handleWindowBlur);
     document.addEventListener("pointermove", this.handlePointerMove);
+    document.addEventListener("pointerup", this.handlePointerUp);
+    document.addEventListener("pointercancel", this.handlePointerCancel);
+    document.addEventListener("pointerlockchange", this.handlePointerLockChange);
     this.canvas.addEventListener("pointerdown", this.handlePointerDown);
     this.canvas.addEventListener("wheel", this.handleWheel, { passive: false });
   }
@@ -144,9 +152,14 @@ export class PlayerRig {
   dispose(): void {
     window.removeEventListener("keydown", this.handleKeyDown);
     window.removeEventListener("keyup", this.handleKeyUp);
+    window.removeEventListener("blur", this.handleWindowBlur);
     document.removeEventListener("pointermove", this.handlePointerMove);
+    document.removeEventListener("pointerup", this.handlePointerUp);
+    document.removeEventListener("pointercancel", this.handlePointerCancel);
+    document.removeEventListener("pointerlockchange", this.handlePointerLockChange);
     this.canvas.removeEventListener("pointerdown", this.handlePointerDown);
     this.canvas.removeEventListener("wheel", this.handleWheel);
+    this.releaseCameraDrag();
   }
 
   update(delta: number): void {
@@ -158,6 +171,7 @@ export class PlayerRig {
       this.keys.clear();
       this.mobileMoveIntent.set(0, 0);
       this.mobileLookIntent.set(0, 0);
+      this.releaseCameraDrag();
     }
 
     if (inputEnabled) this.applyMobileLook(delta);
@@ -364,19 +378,55 @@ export class PlayerRig {
     if (!this.isInputEnabled()) return;
     if (event.button !== 0) return;
     if (event.target !== this.canvas) return;
+    event.preventDefault();
+    this.cameraDragPointerId = event.pointerId;
+    // Desktop camera look is intentionally "hold to steer" now, matching the
+    // familiar third-person RPG pattern. Click no longer doubles as a pulse
+    // action, because that made normal camera work feel like accidental spell
+    // casting with extra steps.
     void this.canvas.requestPointerLock();
-    this.tryCreatePulse();
   };
 
   private handlePointerMove = (event: PointerEvent): void => {
     if (!this.isInputEnabled()) return;
     if (document.pointerLockElement !== this.canvas) return;
+    if (this.cameraDragPointerId === null) return;
     this.yaw -= event.movementX * LOOK_SENSITIVITY_X;
     this.pitch = THREE.MathUtils.clamp(
       this.pitch + event.movementY * LOOK_SENSITIVITY_Y,
       CAMERA_PITCH_RANGE.min,
       CAMERA_PITCH_RANGE.max
     );
+  };
+
+  private handlePointerUp = (event: PointerEvent): void => {
+    if (event.button !== 0) return;
+    if (this.cameraDragPointerId !== null && event.pointerId !== this.cameraDragPointerId) return;
+    this.releaseCameraDrag();
+  };
+
+  private handlePointerCancel = (event: PointerEvent): void => {
+    if (this.cameraDragPointerId !== null && event.pointerId !== this.cameraDragPointerId) return;
+    this.releaseCameraDrag();
+  };
+
+  private handlePointerLockChange = (): void => {
+    const lockedToCanvas = document.pointerLockElement === this.canvas;
+    if (lockedToCanvas && this.cameraDragPointerId === null) {
+      // Pointer lock can be granted after a very quick click-release. If the
+      // button is no longer held by the time the lock arrives, immediately give
+      // the cursor back and mark it as a quiet camera release.
+      this.releaseCameraDrag();
+      return;
+    }
+
+    if (!lockedToCanvas) {
+      this.cameraDragPointerId = null;
+    }
+  };
+
+  private handleWindowBlur = (): void => {
+    this.releaseCameraDrag();
   };
 
   private handleWheel = (event: WheelEvent): void => {
@@ -390,6 +440,17 @@ export class PlayerRig {
     if (now - this.lastPulseSecond < PULSE_COOLDOWN_SECONDS) return;
     this.lastPulseSecond = now;
     this.onPulse(this.createPulsePosition());
+  }
+
+  private releaseCameraDrag(): void {
+    this.cameraDragPointerId = null;
+    if (document.pointerLockElement !== this.canvas) return;
+
+    // Main still opens the pause menu for an Esc-style unlock. This callback
+    // tells it that a normal mouse-button release is expected camera behavior,
+    // so it should not treat the unlock as a pause request.
+    this.onQuietPointerUnlock();
+    document.exitPointerLock();
   }
 
   private tryJump(): void {

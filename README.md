@@ -7,7 +7,7 @@ This is intentionally separate from `voxel-sandbox-engine`. The goal is to make
 a polished visual lab first, then borrow patterns or ideas later if they deserve
 to graduate into the main voxel engine.
 
-Current version: `v0.3.11-ALPHA`.
+Current version: `v0.3.12-ALPHA`.
 
 ## Quick Start
 
@@ -29,16 +29,16 @@ Open `http://127.0.0.1:5183`.
 ## Controls
 
 - `WASD` moves the glow avatar across the field.
-- `Mouse click` captures camera look and drops a pulse.
-- `Mouse movement` orbits the follow camera while captured.
+- Hold left mouse button to capture camera look; release it to show the cursor again.
+- Mouse movement orbits the follow camera while the button is held.
 - `Mouse wheel` zooms the follow camera in and out.
 - `+` / `-` zoom in and out; `0` resets the camera distance.
 - `Space` jumps high, with small takeoff and stronger landing ripples.
 - `Shift` sprints with momentum.
 - `F2` shows or hides the live performance overlay.
-- `Esc` releases pointer lock and opens/closes the pause menu.
+- `Esc` opens/closes the pause menu.
 - The pause menu's version pill opens the in-app changelog.
-- The on-screen pulse button still drops pulses on touch layouts.
+- The on-screen pulse button drops manual pulses on touch layouts.
 
 The avatar is clamped inside the circular arena edge.
 The arena edge is rendered as a smooth glowing gradient barrier so the playable
@@ -50,8 +50,8 @@ visually interlock without raising the old stress-test instance count, while
 lighter quality modes keep more breathing room.
 Raised wave crests carry an extra bounded glow signal, so ripple fronts bloom
 brighter without washing out the whole field.
-Manual pulses have a short shared cooldown so rapid clicks or touch pulses do
-not flood the field.
+Manual touch pulses have a short shared cooldown so the on-screen pulse button
+does not flood the field.
 The avatar itself uses brighter fast orbiting energy motes with long additive
 trails instead of flat rings, so it reads as a moving glow cloud rather than a
 UI target.
@@ -68,8 +68,8 @@ rim around the avatar, while a dedicated GPU wake texture stores the lingering
 height/velocity field left behind by movement. The visible movement particle
 trail is now a tighter velocity-following tail instead of a broad glitter shed.
 Jumping fades that surface contact while the avatar is airborne, then landing
-stamps a brighter impact ripple back into the field. Manual click/touch pulses
-and collected Echoes still use analytic ring sources, but ordinary movement no
+stamps a brighter impact ripple back into the field. Touch-button pulses and
+collected Echoes still use analytic ring sources, but ordinary movement no
 longer adds little circular wave sources while the avatar runs.
 
 The Esc/hamburger pause menu changes quality, skybox theme, hex size, arena
@@ -155,7 +155,7 @@ Project planning:
 Versioning:
 
 - While the project is still experimental, release tags use alpha prerelease
-  labels. The current baseline is `v0.3.11-ALPHA`.
+  labels. The current baseline is `v0.3.12-ALPHA`.
 
 ## Design Notes
 
@@ -193,14 +193,14 @@ Versioning:
   velocity-following wake tails.
 - `src/pulseLights.ts` maps recent pulses onto a small pool of point lights.
 - `src/controls.ts` owns avatar movement, circular arena clamping, scene-input
-  gating while menus are open, and camera pointer-lock behavior. The avatar
-  visuals in `src/main.ts` use orbiting motes and segmented additive trails
-  instead of torus rings.
+  gating while menus are open, hold-to-look pointer-lock behavior, and quiet
+  mouse-release unlocks. The avatar visuals in `src/main.ts` use orbiting
+  motes and segmented additive trails instead of torus rings.
 
-The CPU decides where the player, manual pulses, and persistent Echo zones are.
-Manual pulse input is cooldown-gated, Echo zones only become pulse sources after
-collection, and pulse sources age out by per-source lifetime. Movement wake is
-fed into a small GPU height/velocity texture instead of the pulse source list.
+The CPU decides where the player, touch-button pulses, and persistent Echo zones
+are. Manual pulse input is cooldown-gated, Echo zones only become pulse sources
+after collection, and pulse sources age out by per-source lifetime. Movement wake
+is fed into a small GPU height/velocity texture instead of the pulse source list.
 The GPU handles wake propagation, hex lift, stretch, tint, emissive glow, and
 cell footprint/height from the wake texture plus the newest rendered pulse
 uniforms, with dense fields allowed to render fewer pulse sources than the full

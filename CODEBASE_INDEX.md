@@ -9,7 +9,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Vite + strict TypeScript browser app.
 - Three.js renderer, postprocessing composer, Unreal bloom pass, shader-customized
   `InstancedMesh`, additive `Points`, and dynamic lights.
-- Current alpha baseline: `v0.3.11-ALPHA`; keep release tags in alpha prerelease
+- Current alpha baseline: `v0.3.12-ALPHA`; keep release tags in alpha prerelease
   territory until the lab graduates from prototype status.
 - Dedicated dev port `5183`; preview port `4183`.
 
@@ -41,8 +41,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Field scale instance-budget clamp decisions:
   `src/fieldScaleGuardrails.ts`
 - Momentum-based avatar movement, jump/landing state, hidden speed-tuning
-  defaults, circular arena clamp, scene-input gating, pointer lock, and camera
-  follow behavior:
+  defaults, circular arena clamp, scene-input gating, hold-to-look pointer lock,
+  quiet mouse-release unlocks, and camera follow behavior:
   `src/controls.ts`
 - Circular shader-displaced instanced hex field, including sampled GPU movement
   wake displacement, Meltdown-calibrated honeycomb orientation, lit hex caps,
@@ -91,12 +91,13 @@ Purpose: compact map for the standalone ripple-field visual lab.
    horizon instead of a pure void.
 4. `PlayerRig` updates momentum-based planar movement, jump height, surface
    ground-contact strength, and camera follow every frame.
-5. Cooldown-gated clicks/touch pulses add analytic pulse sources, while `Space`
-   jumps and emits smaller takeoff plus stronger landing ripples. Avatar
-   movement writes a continuous wake influence into a GPU height/velocity
-   texture instead of adding little circular source stamps, and airborne jumps
-   fade that contact before touchdown. Echo-zone timers add persistent
-   collectible markers instead of immediate ambient waves.
+5. Touch-button pulses add cooldown-gated analytic pulse sources, while `Space`
+   jumps and emits smaller takeoff plus stronger landing ripples. Desktop mouse
+   input uses hold-to-look pointer lock and no longer emits click pulses. Avatar
+   movement writes a continuous wake influence into a GPU height/velocity texture
+   instead of adding little circular source stamps, and airborne jumps fade that
+   contact before touchdown. Echo-zone timers add persistent collectible markers
+   instead of immediate ambient waves.
 6. `RippleField` builds hex instances inside the circular arena using the
    active quality, hex-size, and arena-radius settings. Hex geometry is rotated
    to match the staggered lattice, and Meltdown's visible footprint is calibrated

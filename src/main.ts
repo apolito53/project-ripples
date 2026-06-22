@@ -213,6 +213,9 @@ let menuVisible = false;
 let changelogVisible = false;
 let perfOverlayVisible = true;
 let pointerLockWasActive = false;
+// Mouse-button release is now normal camera behavior, while Esc/unexpected
+// unlocks still mean "pause." This one-shot flag separates those two paths.
+let suppressNextPointerUnlockMenu = false;
 
 type TouchStickKind = "move" | "look";
 
@@ -250,6 +253,9 @@ const player = new PlayerRig({
   sampleHeight: sampleFieldHeight,
   getBoundaryRadius: () => Math.max(0, preset.fieldRadius - PLAYER_BOUNDARY_PADDING),
   onPulse: (position) => spawnPulse(position, 0.45),
+  onQuietPointerUnlock: () => {
+    suppressNextPointerUnlockMenu = true;
+  },
   onJump: (event) => triggerJumpRipple(event),
   onLand: (event) => triggerLandingRipple(event),
   speedSettings: settings.playerSpeed,
@@ -811,7 +817,9 @@ function handleGlobalKeyDown(event: KeyboardEvent): void {
 
 function handlePointerLockChange(): void {
   const pointerIsLockedToScene = document.pointerLockElement === renderer.domElement;
-  if (!pointerIsLockedToScene && pointerLockWasActive && areSceneInputsEnabled()) {
+  if (!pointerIsLockedToScene && pointerLockWasActive && suppressNextPointerUnlockMenu) {
+    suppressNextPointerUnlockMenu = false;
+  } else if (!pointerIsLockedToScene && pointerLockWasActive && areSceneInputsEnabled()) {
     setMenuVisible(true);
   }
   pointerLockWasActive = pointerIsLockedToScene;

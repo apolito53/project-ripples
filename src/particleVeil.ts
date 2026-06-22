@@ -188,9 +188,9 @@ export class ParticleVeil {
   }
 
   spawnPulseBurst(center: THREE.Vector3, count: number, strength: number): void {
-    // Manual click/Space pulses are gameplay punctuation, not lingering fog.
-    // Emit a flatter, faster cloud so the burst diffuses across the field and
-    // fades before it can stack into a vertical cylinder of sparkles.
+    // Manual touch pulses, jump impacts, and Echo detonations are gameplay
+    // punctuation, not lingering fog. Emit a flatter, faster cloud so the burst
+    // diffuses across the field before it can stack into a vertical cylinder.
     for (let burstIndex = 0; burstIndex < count; burstIndex += 1) {
       this.emitPulseParticle(center, strength);
     }

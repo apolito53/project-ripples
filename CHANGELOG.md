@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.3.12-ALPHA - 2026-06-22
+
+### Changed
+
+- Changed desktop camera control to hold-left-click pointer lock: pressing the
+  button captures camera look, releasing the button restores the cursor without
+  opening the pause menu, and Esc/unexpected unlocks still route through pause.
+- Disabled mouse-click pulse spawning so normal camera drags no longer create
+  accidental analytic pulse sources; touch layouts keep the explicit on-screen
+  pulse button.
+- Bumped package metadata, README, codebase index, and visible version text to
+  `v0.3.12-ALPHA`.
+
 ## 0.3.11-ALPHA - 2026-06-22
 
 ### Changed
