@@ -25,6 +25,8 @@ export type PlayerJumpEvent = {
   readonly impactSpeed: number;
 };
 
+type CameraDragMode = "camera" | "steer";
+
 export const PLAYER_SPEED_LIMITS = {
   walk: { min: 1, max: 30, step: 0.5 },
   sprint: { min: 20, max: 50, step: 0.5, minimumGapFromWalk: 5 }
@@ -68,6 +70,11 @@ const LOOK_SENSITIVITY_X = 0.002;
 const LOOK_SENSITIVITY_Y = 0.00155;
 const TOUCH_LOOK_RATE_X = 2.65;
 const TOUCH_LOOK_RATE_Y = 2.05;
+const KEYBOARD_TURN_RATE = 2.35;
+const MOUSE_BUTTON_LEFT = 0;
+const MOUSE_BUTTON_RIGHT = 2;
+const MOUSE_BUTTON_LEFT_MASK = 1;
+const MOUSE_BUTTON_RIGHT_MASK = 2;
 
 
 export function normalizePlayerSpeedSettings(settings: PlayerSpeedSettings): PlayerSpeedSettings {
@@ -123,7 +130,11 @@ export class PlayerRig {
   private grounded = true;
   private jumpStartedAt = -Infinity;
   private cameraDragPointerId: number | null = null;
-  private yaw = Math.PI * 0.23;
+  private cameraDragMode: CameraDragMode | null = null;
+  private isLeftMouseHeld = false;
+  private isRightMouseHeld = false;
+  private cameraYaw = Math.PI * 0.23;
+  private playerYaw = Math.PI * 0.23;
   private pitch = 0.45;
 
   constructor(options: PlayerRigOptions) {
@@ -146,6 +157,7 @@ export class PlayerRig {
     document.addEventListener("pointercancel", this.handlePointerCancel);
     document.addEventListener("pointerlockchange", this.handlePointerLockChange);
     this.canvas.addEventListener("pointerdown", this.handlePointerDown);
+    this.canvas.addEventListener("contextmenu", this.handleContextMenu);
     this.canvas.addEventListener("wheel", this.handleWheel, { passive: false });
   }
 
@@ -158,6 +170,7 @@ export class PlayerRig {
     document.removeEventListener("pointercancel", this.handlePointerCancel);
     document.removeEventListener("pointerlockchange", this.handlePointerLockChange);
     this.canvas.removeEventListener("pointerdown", this.handlePointerDown);
+    this.canvas.removeEventListener("contextmenu", this.handleContextMenu);
     this.canvas.removeEventListener("wheel", this.handleWheel);
     this.releaseCameraDrag();
   }
@@ -175,6 +188,7 @@ export class PlayerRig {
     }
 
     if (inputEnabled) this.applyMobileLook(delta);
+    if (inputEnabled) this.applyKeyboardTurn(delta);
 
     const forward = this.getPlanarForward();
     const right = new THREE.Vector3(forward.z, 0, -forward.x);
@@ -182,8 +196,15 @@ export class PlayerRig {
 
     if (this.keys.has("KeyW")) intent.add(forward);
     if (this.keys.has("KeyS")) intent.sub(forward);
-    if (this.keys.has("KeyA")) intent.add(right);
-    if (this.keys.has("KeyD")) intent.sub(right);
+    if (this.keys.has("KeyQ") || (this.isRightMouseHeld && this.keys.has("KeyA"))) intent.add(right);
+    if (this.keys.has("KeyE") || (this.isRightMouseHeld && this.keys.has("KeyD"))) intent.sub(right);
+    if (this.isMouseForwardMoveActive()) {
+      // Holding both mouse buttons is the familiar MMO autorun-ish gesture: move
+      // in the direction the camera is looking, and keep player facing glued to
+      // that camera heading while the gesture is active.
+      this.playerYaw = this.cameraYaw;
+      intent.add(this.getCameraPlanarForward());
+    }
     if (this.mobileMoveIntent.y !== 0) intent.addScaledVector(forward, this.mobileMoveIntent.y);
     if (this.mobileMoveIntent.x !== 0) intent.addScaledVector(right, -this.mobileMoveIntent.x);
 
@@ -269,19 +290,50 @@ export class PlayerRig {
   private applyMobileLook(delta: number): void {
     if (this.mobileLookIntent.lengthSq() <= 0) return;
 
-    this.yaw -= this.mobileLookIntent.x * TOUCH_LOOK_RATE_X * delta;
+    // Touch has one look stick rather than separate left/right mouse gestures,
+    // so it keeps the old steering behavior: the camera and player facing move
+    // together.
+    this.applyLookDelta(
+      -this.mobileLookIntent.x * TOUCH_LOOK_RATE_X * delta,
+      this.mobileLookIntent.y * TOUCH_LOOK_RATE_Y * delta,
+      true
+    );
+  }
+
+  private applyLookDelta(yawDelta: number, pitchDelta: number, steersPlayer: boolean): void {
+    this.cameraYaw += yawDelta;
+    if (steersPlayer) this.playerYaw = this.cameraYaw;
     this.pitch = THREE.MathUtils.clamp(
-      this.pitch + this.mobileLookIntent.y * TOUCH_LOOK_RATE_Y * delta,
+      this.pitch + pitchDelta,
       CAMERA_PITCH_RANGE.min,
       CAMERA_PITCH_RANGE.max
     );
+  }
+
+  private applyKeyboardTurn(delta: number): void {
+    // WoW-style keyboard movement treats A/D as turn keys until the right mouse
+    // button is steering. While right-drag is held, those same keys become
+    // strafe keys in the movement-intent block below.
+    if (this.isRightMouseHeld) return;
+
+    const turnDirection = (this.keys.has("KeyA") ? 1 : 0) - (this.keys.has("KeyD") ? 1 : 0);
+    if (turnDirection === 0) return;
+
+    // Keyboard turning rotates the avatar from its own current facing. If the
+    // player is holding left-drag free look, the camera is intentionally
+    // detached, so A/D should not pull it around. Without left-drag, rotate the
+    // camera with the avatar so ordinary keyboard turning still feels like a
+    // follow camera instead of leaving the view behind.
+    const yawDelta = turnDirection * KEYBOARD_TURN_RATE * delta;
+    this.playerYaw += yawDelta;
+    if (!this.isLeftMouseHeld) this.cameraYaw += yawDelta;
   }
 
   private updateCamera(delta: number): void {
     const smoothing = 1 - Math.pow(1 - CAMERA_SMOOTHING, Math.max(1, delta * 60));
     this.cameraDistance = THREE.MathUtils.lerp(this.cameraDistance, this.targetCameraDistance, smoothing);
 
-    const behind = this.getPlanarForward().multiplyScalar(-Math.cos(this.pitch) * this.cameraDistance);
+    const behind = this.getCameraPlanarForward().multiplyScalar(-Math.cos(this.pitch) * this.cameraDistance);
     const height = Math.sin(this.pitch) * this.cameraDistance;
     this.desiredCameraPosition.set(
       this.position.x + behind.x,
@@ -310,7 +362,11 @@ export class PlayerRig {
   }
 
   private getPlanarForward(): THREE.Vector3 {
-    return new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw)).normalize();
+    return new THREE.Vector3(Math.sin(this.playerYaw), 0, Math.cos(this.playerYaw)).normalize();
+  }
+
+  private getCameraPlanarForward(): THREE.Vector3 {
+    return new THREE.Vector3(Math.sin(this.cameraYaw), 0, Math.cos(this.cameraYaw)).normalize();
   }
 
   private clampToArenaBoundary(): void {
@@ -376,14 +432,16 @@ export class PlayerRig {
 
   private handlePointerDown = (event: PointerEvent): void => {
     if (!this.isInputEnabled()) return;
-    if (event.button !== 0) return;
+    if (event.button !== MOUSE_BUTTON_LEFT && event.button !== MOUSE_BUTTON_RIGHT) return;
     if (event.target !== this.canvas) return;
     event.preventDefault();
     this.cameraDragPointerId = event.pointerId;
-    // Desktop camera look is intentionally "hold to steer" now, matching the
-    // familiar third-person RPG pattern. Click no longer doubles as a pulse
-    // action, because that made normal camera work feel like accidental spell
-    // casting with extra steps.
+    this.syncMouseButtonsFromEvent(event, event.button);
+    // Desktop camera look follows the familiar third-person RPG split:
+    // left-drag only orbits the camera, right-drag steers both camera and player
+    // facing, and both buttons together also feed forward movement. Click still
+    // does not double as a pulse action, because that made normal camera work
+    // feel like accidental spell casting with extra steps.
     void this.canvas.requestPointerLock();
   };
 
@@ -391,17 +449,25 @@ export class PlayerRig {
     if (!this.isInputEnabled()) return;
     if (document.pointerLockElement !== this.canvas) return;
     if (this.cameraDragPointerId === null) return;
-    this.yaw -= event.movementX * LOOK_SENSITIVITY_X;
-    this.pitch = THREE.MathUtils.clamp(
-      this.pitch + event.movementY * LOOK_SENSITIVITY_Y,
-      CAMERA_PITCH_RANGE.min,
-      CAMERA_PITCH_RANGE.max
+    this.syncMouseButtonsFromEvent(event);
+    if (!this.hasMouseButtonHeld()) {
+      this.releaseCameraDrag();
+      return;
+    }
+
+    this.applyLookDelta(
+      -event.movementX * LOOK_SENSITIVITY_X,
+      event.movementY * LOOK_SENSITIVITY_Y,
+      this.cameraDragMode === "steer"
     );
   };
 
   private handlePointerUp = (event: PointerEvent): void => {
-    if (event.button !== 0) return;
+    if (event.button !== MOUSE_BUTTON_LEFT && event.button !== MOUSE_BUTTON_RIGHT) return;
     if (this.cameraDragPointerId !== null && event.pointerId !== this.cameraDragPointerId) return;
+    event.preventDefault();
+    this.syncMouseButtonsFromEvent(event);
+    if (this.hasMouseButtonHeld()) return;
     this.releaseCameraDrag();
   };
 
@@ -422,11 +488,19 @@ export class PlayerRig {
 
     if (!lockedToCanvas) {
       this.cameraDragPointerId = null;
+      this.cameraDragMode = null;
+      this.isLeftMouseHeld = false;
+      this.isRightMouseHeld = false;
     }
   };
 
   private handleWindowBlur = (): void => {
     this.releaseCameraDrag();
+  };
+
+  private handleContextMenu = (event: MouseEvent): void => {
+    // Right-drag is a steering gesture inside the scene, not a browser menu.
+    event.preventDefault();
   };
 
   private handleWheel = (event: WheelEvent): void => {
@@ -444,6 +518,9 @@ export class PlayerRig {
 
   private releaseCameraDrag(): void {
     this.cameraDragPointerId = null;
+    this.cameraDragMode = null;
+    this.isLeftMouseHeld = false;
+    this.isRightMouseHeld = false;
     if (document.pointerLockElement !== this.canvas) return;
 
     // Main still opens the pause menu for an Esc-style unlock. This callback
@@ -451,6 +528,45 @@ export class PlayerRig {
     // so it should not treat the unlock as a pause request.
     this.onQuietPointerUnlock();
     document.exitPointerLock();
+  }
+
+  private setMouseButtonHeld(button: number, held: boolean): void {
+    if (button === MOUSE_BUTTON_LEFT) this.isLeftMouseHeld = held;
+    if (button === MOUSE_BUTTON_RIGHT) this.isRightMouseHeld = held;
+    this.syncCameraDragModeFromHeldButtons();
+  }
+
+  private syncMouseButtonsFromEvent(event: PointerEvent, pressedFallbackButton?: number): void {
+    if (event.buttons === 0 && pressedFallbackButton !== undefined) {
+      // Some pointer-lock transitions can hand us a down event before the
+      // aggregate bitmask has caught up. Keep the pressed button as a fallback,
+      // but use the browser-owned bitmask everywhere else so a missed/downgraded
+      // release cannot leave the both-button forward gesture stuck on one side.
+      this.setMouseButtonHeld(pressedFallbackButton, true);
+      return;
+    }
+
+    this.isLeftMouseHeld = (event.buttons & MOUSE_BUTTON_LEFT_MASK) !== 0;
+    this.isRightMouseHeld = (event.buttons & MOUSE_BUTTON_RIGHT_MASK) !== 0;
+    this.syncCameraDragModeFromHeldButtons();
+  }
+
+  private syncCameraDragModeFromHeldButtons(): void {
+    if (this.isRightMouseHeld) {
+      this.cameraDragMode = "steer";
+      this.playerYaw = this.cameraYaw;
+      return;
+    }
+
+    this.cameraDragMode = this.isLeftMouseHeld ? "camera" : null;
+  }
+
+  private hasMouseButtonHeld(): boolean {
+    return this.isLeftMouseHeld || this.isRightMouseHeld;
+  }
+
+  private isMouseForwardMoveActive(): boolean {
+    return this.isLeftMouseHeld && this.isRightMouseHeld && this.cameraDragMode === "steer";
   }
 
   private tryJump(): void {

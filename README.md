@@ -7,7 +7,7 @@ This is intentionally separate from `voxel-sandbox-engine`. The goal is to make
 a polished visual lab first, then borrow patterns or ideas later if they deserve
 to graduate into the main voxel engine.
 
-Current version: `v0.3.12-ALPHA`.
+Current version: `v0.3.13-ALPHA`.
 
 ## Quick Start
 
@@ -28,9 +28,15 @@ Open `http://127.0.0.1:5183`.
 
 ## Controls
 
-- `WASD` moves the glow avatar across the field.
-- Hold left mouse button to capture camera look; release it to show the cursor again.
-- Mouse movement orbits the follow camera while the button is held.
+- `W` / `S` move forward and backward.
+- `A` / `D` turn left and right by default.
+- `Q` / `E` strafe left and right.
+- Hold left mouse button to orbit the camera without changing avatar facing.
+- Hold right mouse button to orbit the camera and steer avatar facing together;
+  while held, `A` / `D` strafe instead of turning.
+- Hold both mouse buttons to move forward in the camera-facing direction.
+- Releasing one mouse button downgrades to the remaining drag mode; releasing
+  the last held scene mouse button restores the cursor.
 - `Mouse wheel` zooms the follow camera in and out.
 - `+` / `-` zoom in and out; `0` resets the camera distance.
 - `Space` jumps high, with small takeoff and stronger landing ripples.
@@ -155,7 +161,7 @@ Project planning:
 Versioning:
 
 - While the project is still experimental, release tags use alpha prerelease
-  labels. The current baseline is `v0.3.12-ALPHA`.
+  labels. The current baseline is `v0.3.13-ALPHA`.
 
 ## Design Notes
 
@@ -193,9 +199,11 @@ Versioning:
   velocity-following wake tails.
 - `src/pulseLights.ts` maps recent pulses onto a small pool of point lights.
 - `src/controls.ts` owns avatar movement, circular arena clamping, scene-input
-  gating while menus are open, hold-to-look pointer-lock behavior, and quiet
-  mouse-release unlocks. The avatar visuals in `src/main.ts` use orbiting
-  motes and segmented additive trails instead of torus rings.
+  gating while menus are open, split left/right hold-to-look pointer-lock
+  behavior, camera-only orbit yaw, right-drag steering yaw, WoW-style keyboard
+  turning/strafe semantics, both-button camera-forward movement, and quiet
+  mouse-release unlocks. The avatar visuals in `src/main.ts` use orbiting motes
+  and segmented additive trails instead of torus rings.
 
 The CPU decides where the player, touch-button pulses, and persistent Echo zones
 are. Manual pulse input is cooldown-gated, Echo zones only become pulse sources

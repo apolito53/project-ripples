@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+## 0.3.13-ALPHA - 2026-06-22
+
+### Changed
+
+- Split desktop hold-to-look controls into camera-only left-drag,
+  camera-plus-avatar right-drag, and both-button camera-forward movement, with
+  separate camera yaw and player-facing yaw inside `PlayerRig`.
+- Swapped keyboard movement to a WoW-style scheme: `A/D` turn by default, `Q/E`
+  strafe, and holding right mouse changes `A/D` into strafe keys.
+- Keyboard turning now preserves left-drag free look: `A/D` rotate avatar facing
+  without forcing the held free camera to turn or snapping avatar facing to the
+  camera yaw first.
+- Mouse-button state now syncs from the browser `buttons` bitmask so the
+  both-button forward gesture cannot stick on only left-click or only
+  right-click after a release/downgrade.
+- Right-drag now syncs player facing to the camera angle immediately, suppresses
+  the browser context menu on the canvas, and exits pointer lock quietly once no
+  scene mouse buttons remain held.
+- Bumped package metadata, README, codebase index, and visible version text to
+  `v0.3.13-ALPHA`.
+
 ## 0.3.12-ALPHA - 2026-06-22
 
 ### Changed
