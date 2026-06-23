@@ -193,20 +193,33 @@ export class PlayerRig {
     const forward = this.getPlanarForward();
     const right = new THREE.Vector3(forward.z, 0, -forward.x);
     const intent = this.movementIntent.set(0, 0, 0);
+    const hasMovementAuthority = this.grounded;
 
-    if (this.keys.has("KeyW")) intent.add(forward);
-    if (this.keys.has("KeyS")) intent.sub(forward);
-    if (this.keys.has("KeyQ") || (this.isRightMouseHeld && this.keys.has("KeyA"))) intent.add(right);
-    if (this.keys.has("KeyE") || (this.isRightMouseHeld && this.keys.has("KeyD"))) intent.sub(right);
     if (this.isMouseForwardMoveActive()) {
       // Holding both mouse buttons is the familiar MMO autorun-ish gesture: move
       // in the direction the camera is looking, and keep player facing glued to
-      // that camera heading while the gesture is active.
+      // that camera heading while the gesture is active. The facing snap stays
+      // available in the air, but the actual velocity change below is grounded
+      // only so jumps keep their takeoff trajectory instead of gaining midair
+      // side-thrust.
       this.playerYaw = this.cameraYaw;
+    }
+
+    if (hasMovementAuthority && this.keys.has("KeyW")) intent.add(forward);
+    if (hasMovementAuthority && this.keys.has("KeyS")) intent.sub(forward);
+    if (hasMovementAuthority && (this.keys.has("KeyQ") || (this.isRightMouseHeld && this.keys.has("KeyA")))) {
+      intent.add(right);
+    }
+    if (hasMovementAuthority && (this.keys.has("KeyE") || (this.isRightMouseHeld && this.keys.has("KeyD")))) {
+      intent.sub(right);
+    }
+    if (hasMovementAuthority && this.isMouseForwardMoveActive()) {
       intent.add(this.getCameraPlanarForward());
     }
-    if (this.mobileMoveIntent.y !== 0) intent.addScaledVector(forward, this.mobileMoveIntent.y);
-    if (this.mobileMoveIntent.x !== 0) intent.addScaledVector(right, -this.mobileMoveIntent.x);
+    if (hasMovementAuthority) {
+      if (this.mobileMoveIntent.y !== 0) intent.addScaledVector(forward, this.mobileMoveIntent.y);
+      if (this.mobileMoveIntent.x !== 0) intent.addScaledVector(right, -this.mobileMoveIntent.x);
+    }
 
     const hasIntent = intent.lengthSq() > 0;
     if (hasIntent) intent.normalize();
@@ -221,13 +234,15 @@ export class PlayerRig {
       ? (isCounterSteering ? MOVE_COUNTER_STEER_ACCELERATION : MOVE_ACCELERATION)
       : (inputEnabled ? MOVE_BRAKE : MENU_BRAKE);
 
-    // Movement is intentionally inertial now: input defines the velocity we are
-    // trying to reach, while acceleration/brake response decides how much of
-    // that change happens this frame. Counter-steering stays a little snappier
-    // so the avatar feels weighty without becoming a runaway sled.
-    this.velocity.lerp(targetVelocity, 1 - Math.exp(-delta * response));
-    if (!hasIntent && this.velocity.lengthSq() < STOP_EPSILON * STOP_EPSILON) {
-      this.velocity.set(0, 0, 0);
+    if (hasMovementAuthority) {
+      // Movement is intentionally inertial now: input defines the velocity we are
+      // trying to reach, while acceleration/brake response decides how much of
+      // that change happens this frame. Counter-steering stays a little snappier
+      // so the avatar feels weighty without becoming a runaway sled.
+      this.velocity.lerp(targetVelocity, 1 - Math.exp(-delta * response));
+      if (!hasIntent && this.velocity.lengthSq() < STOP_EPSILON * STOP_EPSILON) {
+        this.velocity.set(0, 0, 0);
+      }
     }
     this.position.addScaledVector(this.velocity, delta);
     this.clampToArenaBoundary();
@@ -315,11 +330,6 @@ export class PlayerRig {
     // button is steering. While right-drag is held, those same keys become
     // strafe keys in the movement-intent block below.
     if (this.isRightMouseHeld) return;
-    // Bare A/D turning is grounded body authority. While airborne, keep the
-    // avatar's facing stable unless the player is actively steering with the
-    // mouse, which preserves the MMO control feel without granting free midair
-    // keyboard yaw.
-    if (!this.grounded) return;
 
     const turnDirection = (this.keys.has("KeyA") ? 1 : 0) - (this.keys.has("KeyD") ? 1 : 0);
     if (turnDirection === 0) return;

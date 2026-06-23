@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.3.15-ALPHA - 2026-06-22
+
+### Changed
+
+- Changed airborne movement from input-steered acceleration to ballistic planar
+  momentum: jumps now preserve the horizontal trajectory the avatar had at
+  takeoff until landing or arena-boundary correction.
+- Restored airborne `A/D` facing control; camera and facing can still rotate in
+  the air, but W/A/S/D, strafe, touch-move, and both-button forward input no
+  longer redirect horizontal velocity mid-jump.
+- Bumped package metadata, README, codebase index, and visible menu version text
+  to `v0.3.15-ALPHA`.
+
 ## 0.3.14-ALPHA - 2026-06-22
 
 ### Changed
