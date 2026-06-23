@@ -315,6 +315,11 @@ export class PlayerRig {
     // button is steering. While right-drag is held, those same keys become
     // strafe keys in the movement-intent block below.
     if (this.isRightMouseHeld) return;
+    // Bare A/D turning is grounded body authority. While airborne, keep the
+    // avatar's facing stable unless the player is actively steering with the
+    // mouse, which preserves the MMO control feel without granting free midair
+    // keyboard yaw.
+    if (!this.grounded) return;
 
     const turnDirection = (this.keys.has("KeyA") ? 1 : 0) - (this.keys.has("KeyD") ? 1 : 0);
     if (turnDirection === 0) return;

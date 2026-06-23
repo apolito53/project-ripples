@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.3.14-ALPHA - 2026-06-22
+
+### Changed
+
+- Restricted bare keyboard `A/D` turning to grounded movement so jumps preserve
+  the avatar's takeoff-facing direction unless the player is actively steering
+  with mouse controls.
+- Kept right-drag steering, right-drag `A/D` strafing, and both-button
+  camera-forward alignment active in the air so the desktop control scheme
+  remains close to MMO-style movement.
+- Bumped package metadata, README, codebase index, and visible menu version text
+  to `v0.3.14-ALPHA`.
+
 ## 0.3.13-ALPHA - 2026-06-22
 
 ### Changed
