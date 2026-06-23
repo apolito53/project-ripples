@@ -24,6 +24,7 @@ export type LabSettings = {
   qualityId: QualityId;
   skyboxId: SkyboxId;
   playerSpeed: PlayerSpeedSettings;
+  surfaceGrip: number;
   rippleHeight: number;
   rippleRadius: number;
   voxelSizeMeters: number;
@@ -39,6 +40,7 @@ export const DEFAULT_SETTINGS: LabSettings = {
   qualityId: "pretty",
   skyboxId: DEFAULT_SKYBOX_ID,
   playerSpeed: DEFAULT_PLAYER_SPEED_SETTINGS,
+  surfaceGrip: 1,
   rippleHeight: 1.25,
   rippleRadius: 9,
   voxelSizeMeters: DEFAULT_VOXEL_SIZE_METERS,

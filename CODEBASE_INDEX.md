@@ -9,7 +9,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Vite + strict TypeScript browser app.
 - Three.js renderer, postprocessing composer, Unreal bloom pass, shader-customized
   `InstancedMesh`, additive `Points`, and dynamic lights.
-- Current alpha baseline: `v0.3.18-ALPHA`; keep release tags in alpha prerelease
+- Current alpha baseline: `v0.3.19-ALPHA`; keep release tags in alpha prerelease
   territory until the lab graduates from prototype status.
 - Dedicated dev port `5183`; preview port `4183`.
 
@@ -40,9 +40,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `src/frameTelemetry.ts`
 - Field scale instance-budget clamp decisions:
   `src/fieldScaleGuardrails.ts`
-- Momentum-based avatar movement with higher carried ground momentum,
-  jump/landing state, hidden speed-tuning defaults, circular arena clamp,
-  scene-input gating, split left/right
+- Momentum-based avatar movement with visible surface-grip tuning, higher
+  carried ground momentum, jump/landing state, hidden speed-tuning defaults,
+  circular arena clamp, scene-input gating, split left/right
   hold-to-look pointer lock, camera/player yaw separation, both-button
   camera-forward movement, WoW-style turn/strafe key semantics, ballistic
   airborne horizontal momentum, full 180-degree vertical camera orbit, quiet
@@ -70,7 +70,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `src/particleVeil.ts`
 - Recent-pulse point light pool: `src/pulseLights.ts`
 - Quality preset budgets and labels: `src/qualityPresets.ts`
-- Runtime settings shape/defaults and lab-meter-to-scene-unit scale mapping:
+- Runtime settings shape/defaults, surface-grip defaults, and
+  lab-meter-to-scene-unit scale mapping:
   `src/labSettings.ts`
 - Wave-medium settings and derived propagation speed: `src/waveMedium.ts`
 - Local diagnostic log buffer and console profiler hooks: `src/debugLog.ts`
@@ -104,8 +105,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
    overhead.
    `A/D` turn by default, `Q/E` strafe, and right mouse changes `A/D` into strafe
    keys. Grounded input can accelerate, brake, and redirect planar velocity with
-   deliberately slide-y response rates; airborne movement preserves the
-   horizontal takeoff trajectory until landing.
+   deliberately slide-y response rates scaled by the pause-menu `Surface Grip`
+   slider; airborne movement preserves the horizontal takeoff trajectory until
+   landing.
    Mouse clicks no longer emit pulse sources. Avatar movement writes a
    continuous wake influence into a GPU height/velocity texture instead of
    adding little circular source stamps, and airborne jumps fade that contact
@@ -164,7 +166,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Change pulse source strength or cooldown: `src/main.ts`
 - Change propagation-speed semantics or medium parameters: `src/waveMedium.ts`,
   `src/labSettings.ts`, and `PROPAGATION_NOTES.md`
-- Change momentum, jump feel, hidden speed defaults/limits,
+- Change momentum, surface grip, jump feel, hidden speed defaults/limits,
   movement/camera feel, or the circular player boundary: `src/controls.ts`,
   `src/labSettings.ts`, and `src/main.ts`
 - Change pause-menu layout, changelog behavior, or tuning labels:

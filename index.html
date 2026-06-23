@@ -30,7 +30,7 @@
         <section id="scene-menu" class="scene-menu" aria-label="Pause menu" role="dialog" aria-modal="true" tabindex="-1">
           <header class="scene-menu__header">
             <h2>Paused</h2>
-            <button id="version-link" class="version-link" type="button" aria-haspopup="dialog">v0.3.18-ALPHA</button>
+            <button id="version-link" class="version-link" type="button" aria-haspopup="dialog">v0.3.19-ALPHA</button>
           </header>
 
           <div class="pause-actions" aria-label="Pause actions">
@@ -81,6 +81,13 @@
               <div class="range-with-value">
                 <input id="sprint-speed-slider" type="range" min="20" max="50" step="0.5" value="37" />
                 <output id="sprint-speed-value" class="control-value" for="sprint-speed-slider">37.0 m/s</output>
+              </div>
+            </label>
+            <label class="control-row">
+              <span>Surface Grip</span>
+              <div class="range-with-value">
+                <input id="surface-grip-slider" type="range" min="0.25" max="2" step="0.05" value="1" />
+                <output id="surface-grip-value" class="control-value" for="surface-grip-slider">100%</output>
               </div>
             </label>
             <label class="control-row">

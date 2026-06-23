@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 0.3.19-ALPHA - 2026-06-23
+
+### Added
+
+- Added a visible `Surface Grip` slider to the pause menu. `100%` preserves the
+  current committed handling, lower values make the avatar slide longer, and
+  higher values make grounded acceleration/braking bite harder without changing
+  walk or sprint top speeds.
+
+### Changed
+
+- Routed surface grip through `PlayerRig` as a multiplier on grounded
+  acceleration, counter-steering, and normal release braking while keeping
+  menu-open braking unchanged.
+- Bumped package metadata, README, codebase index, and visible menu version text
+  to `v0.3.19-ALPHA`.
+
 ## 0.3.18-ALPHA - 2026-06-23
 
 ### Changed

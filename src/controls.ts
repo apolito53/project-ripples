@@ -10,6 +10,7 @@ export type PlayerRigOptions = {
   readonly onJump?: (event: PlayerJumpEvent) => void;
   readonly onLand?: (event: PlayerJumpEvent) => void;
   readonly speedSettings?: PlayerSpeedSettings;
+  readonly surfaceGrip?: number;
   readonly isInputEnabled?: () => boolean;
 };
 
@@ -36,6 +37,13 @@ export const DEFAULT_PLAYER_SPEED_SETTINGS: PlayerSpeedSettings = {
   walkSpeedMetersPerSecond: 10,
   sprintSpeedMetersPerSecond: 37
 };
+
+export const SURFACE_GRIP_LIMITS = {
+  min: 0.25,
+  max: 2,
+  step: 0.05,
+  default: 1
+} as const;
 
 // These are exponential velocity response rates, not raw meters/second forces.
 // Halving them roughly doubles how long the avatar carries momentum during
@@ -130,6 +138,7 @@ export class PlayerRig {
   private targetCameraDistance = CAMERA_DEFAULT_DISTANCE;
   private lastPulseSecond = -Infinity;
   private speedSettings = DEFAULT_PLAYER_SPEED_SETTINGS;
+  private surfaceGrip: number = SURFACE_GRIP_LIMITS.default;
   private jumpOffset = 0;
   private verticalVelocity = 0;
   private grounded = true;
@@ -153,6 +162,7 @@ export class PlayerRig {
     this.onLand = options.onLand ?? (() => undefined);
     this.isInputEnabled = options.isInputEnabled ?? (() => true);
     this.setSpeedSettings(options.speedSettings ?? DEFAULT_PLAYER_SPEED_SETTINGS);
+    this.setSurfaceGrip(options.surfaceGrip ?? SURFACE_GRIP_LIMITS.default);
 
     window.addEventListener("keydown", this.handleKeyDown);
     window.addEventListener("keyup", this.handleKeyUp);
@@ -235,16 +245,16 @@ export class PlayerRig {
     const targetVelocity = intent.multiplyScalar(targetSpeed);
     const hasPlanarVelocity = this.velocity.lengthSq() > STOP_EPSILON * STOP_EPSILON;
     const isCounterSteering = hasIntent && hasPlanarVelocity && targetVelocity.dot(this.velocity) < 0;
-    const response = hasIntent
+    const baseResponse = hasIntent
       ? (isCounterSteering ? MOVE_COUNTER_STEER_ACCELERATION : MOVE_ACCELERATION)
       : (inputEnabled ? MOVE_BRAKE : MENU_BRAKE);
+    const response = inputEnabled ? baseResponse * this.surfaceGrip : baseResponse;
 
     if (hasMovementAuthority) {
       // Movement is intentionally inertial now: input defines the velocity we are
       // trying to reach, while acceleration/brake response decides how much of
-      // that change happens this frame. Counter-steering stays a little snappier
-      // than normal acceleration, but still preserves a deliberate amount of
-      // slide so fast direction changes feel physical instead of digital.
+      // that change happens this frame. Surface grip scales only the active
+      // ground response rates, leaving top speeds and menu-open braking alone.
       this.velocity.lerp(targetVelocity, 1 - Math.exp(-delta * response));
       if (!hasIntent && this.velocity.lengthSq() < STOP_EPSILON * STOP_EPSILON) {
         this.velocity.set(0, 0, 0);
@@ -287,6 +297,17 @@ export class PlayerRig {
     // Keep the hidden speed controls and any future callers honest: sprint
     // should remain meaningfully faster even while the visible UI is simplified.
     this.speedSettings = normalizePlayerSpeedSettings(settings);
+  }
+
+  setSurfaceGrip(surfaceGrip: number): void {
+    // Think of this as traction, not speed. Lower values make the avatar keep
+    // sliding after input changes; higher values make the same top speeds bite
+    // into the surface faster.
+    this.surfaceGrip = THREE.MathUtils.clamp(
+      surfaceGrip,
+      SURFACE_GRIP_LIMITS.min,
+      SURFACE_GRIP_LIMITS.max
+    );
   }
 
   setMobileMoveIntent(x: number, y: number): void {

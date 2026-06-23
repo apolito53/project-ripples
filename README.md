@@ -7,7 +7,7 @@ This is intentionally separate from `voxel-sandbox-engine`. The goal is to make
 a polished visual lab first, then borrow patterns or ideas later if they deserve
 to graduate into the main voxel engine.
 
-Current version: `v0.3.18-ALPHA`.
+Current version: `v0.3.19-ALPHA`.
 
 ## Quick Start
 
@@ -73,20 +73,23 @@ sparks, and a short local orb-shatter effect without geometric ring markers.
 Movement has acceleration, braking, and stronger carried momentum instead of
 snapping instantly to full speed. Walk defaults to `10 m/s` and sprint defaults
 to `37 m/s`, with grounded acceleration, counter-steering, and release braking
-tuned for a more slide-y feel. It behaves like a small body pushing through
-water: the shader forms a pressed fabric depression, local bow/wake
-displacement, and small raised rim around the avatar, while a dedicated GPU wake
-texture stores the lingering height/velocity field left behind by movement. The
-visible movement particle trail is now a tighter velocity-following tail instead
-of a broad glitter shed.
+tuned for a more slide-y feel. The pause menu's `Surface Grip` slider scales
+that grounded response from slicker low-grip handling to tighter high-grip
+handling without changing walk or sprint top speed. It behaves like a small body
+pushing through water: the shader forms a pressed fabric depression, local
+bow/wake displacement, and small raised rim around the avatar, while a dedicated
+GPU wake texture stores the lingering height/velocity field left behind by
+movement. The visible movement particle trail is now a tighter
+velocity-following tail instead of a broad glitter shed.
 Jumping fades that surface contact while the avatar is airborne, then landing
 stamps a brighter impact ripple back into the field. Touch-button pulses and
 collected Echoes still use analytic ring sources, but ordinary movement no
 longer adds little circular wave sources while the avatar runs.
 
 The Esc/hamburger pause menu changes quality, skybox theme, hex size, arena
-radius, ripple height/radius, Depth / Speed, particle density, bloom strength,
-and the live performance overlay while the scene is running. Hex size treats
+radius, surface grip, ripple height/radius, Depth / Speed, particle density,
+bloom strength, and the live performance overlay while the scene is running.
+Hex size treats
 the current cell scale as `1m`, ranges from `25cm` to `2m`, and measures the regular
 hexagon's widest point-to-point diameter. Changing it rebuilds the instanced
 field after a short debounce so slider drags do not spam geometry work. Arena
@@ -167,7 +170,7 @@ Project planning:
 Versioning:
 
 - While the project is still experimental, release tags use alpha prerelease
-  labels. The current baseline is `v0.3.18-ALPHA`.
+  labels. The current baseline is `v0.3.19-ALPHA`.
 
 ## Design Notes
 
@@ -198,8 +201,8 @@ Versioning:
   trails, and their run-through trigger/despawn burst detection.
 - `src/waveMedium.ts` defines the medium settings and derived propagation speed.
 - `src/labSettings.ts` maps UI meters onto the original scene-unit art scale,
-  including hex point-to-point diameter scaling and the 200m-to-400m arena
-  radius range.
+  including surface grip defaults, hex point-to-point diameter scaling, and the
+  200m-to-400m arena radius range.
 - `src/particleVeil.ts` owns the player sparkle aura, additive glitter-cloud
   bursts, layered Echo poof-disc bursts, bright shader energy, and tight
   velocity-following wake tails.
@@ -207,10 +210,11 @@ Versioning:
 - `src/controls.ts` owns avatar movement, circular arena clamping, scene-input
   gating while menus are open, split left/right hold-to-look pointer-lock
   behavior, camera-only orbit yaw, right-drag steering yaw, WoW-style keyboard
-  turning/strafe semantics, ballistic airborne horizontal momentum,
-  both-button camera-forward movement, full 180-degree vertical camera orbit,
-  and quiet mouse-release unlocks. The avatar visuals in `src/main.ts` use
-  orbiting motes and segmented additive trails instead of torus rings.
+  turning/strafe semantics, surface-grip handling response, ballistic airborne
+  horizontal momentum, both-button camera-forward movement, full 180-degree
+  vertical camera orbit, and quiet mouse-release unlocks. The avatar visuals in
+  `src/main.ts` use orbiting motes and segmented additive trails instead of
+  torus rings.
 
 The CPU decides where the player, touch-button pulses, and persistent Echo zones
 are. Manual pulse input is cooldown-gated, Echo zones only become pulse sources

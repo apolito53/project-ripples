@@ -7,6 +7,7 @@ import { ArenaBarrier } from "./arenaBarrier";
 import {
   PlayerRig,
   PLAYER_SPEED_LIMITS,
+  SURFACE_GRIP_LIMITS,
   type PlayerJumpEvent,
   getMinimumSprintSpeedMetersPerSecond,
   normalizePlayerSpeedSettings
@@ -54,6 +55,8 @@ const walkSpeedSlider = requireElement<HTMLInputElement>("#walk-speed-slider");
 const walkSpeedValue = requireElement<HTMLOutputElement>("#walk-speed-value");
 const sprintSpeedSlider = requireElement<HTMLInputElement>("#sprint-speed-slider");
 const sprintSpeedValue = requireElement<HTMLOutputElement>("#sprint-speed-value");
+const surfaceGripSlider = requireElement<HTMLInputElement>("#surface-grip-slider");
+const surfaceGripValue = requireElement<HTMLOutputElement>("#surface-grip-value");
 const heightSlider = requireElement<HTMLInputElement>("#height-slider");
 const radiusSlider = requireElement<HTMLInputElement>("#radius-slider");
 const depthSlider = requireElement<HTMLInputElement>("#depth-slider");
@@ -259,6 +262,7 @@ const player = new PlayerRig({
   onJump: (event) => triggerJumpRipple(event),
   onLand: (event) => triggerLandingRipple(event),
   speedSettings: settings.playerSpeed,
+  surfaceGrip: settings.surfaceGrip,
   isInputEnabled: areSceneInputsEnabled
 });
 previousWakePlayerPosition.copy(player.position);
@@ -654,6 +658,15 @@ function wireControls(): void {
   sprintSpeedSlider.addEventListener("input", () => {
     updatePlayerSpeedSettingsFromControls("sprint");
   });
+  surfaceGripSlider.addEventListener("input", () => {
+    settings.surfaceGrip = THREE.MathUtils.clamp(
+      Number(surfaceGripSlider.value),
+      SURFACE_GRIP_LIMITS.min,
+      SURFACE_GRIP_LIMITS.max
+    );
+    player.setSurfaceGrip(settings.surfaceGrip);
+    updateSurfaceGripValue();
+  });
   heightSlider.addEventListener("input", () => {
     settings.rippleHeight = Number(heightSlider.value);
   });
@@ -703,6 +716,10 @@ function syncControlValues(): void {
   sprintSpeedSlider.max = String(PLAYER_SPEED_LIMITS.sprint.max);
   sprintSpeedSlider.step = String(PLAYER_SPEED_LIMITS.sprint.step);
   syncPlayerSpeedControls();
+  surfaceGripSlider.min = String(SURFACE_GRIP_LIMITS.min);
+  surfaceGripSlider.max = String(SURFACE_GRIP_LIMITS.max);
+  surfaceGripSlider.step = String(SURFACE_GRIP_LIMITS.step);
+  surfaceGripSlider.value = String(settings.surfaceGrip);
   heightSlider.value = String(settings.rippleHeight);
   radiusSlider.value = String(settings.rippleRadius);
   depthSlider.value = String(settings.waveMedium.effectiveDepth);
@@ -956,6 +973,7 @@ function updateTuningReadouts(): void {
   updateVoxelSizeValue();
   updateArenaRadiusValue();
   updatePlayerSpeedValues();
+  updateSurfaceGripValue();
 }
 
 function updateVoxelSizeValue(): void {
@@ -999,6 +1017,12 @@ function syncPlayerSpeedControls(): void {
 function updatePlayerSpeedValues(): void {
   walkSpeedValue.textContent = `${settings.playerSpeed.walkSpeedMetersPerSecond.toFixed(1)} m/s`;
   sprintSpeedValue.textContent = `${settings.playerSpeed.sprintSpeedMetersPerSecond.toFixed(1)} m/s`;
+}
+
+function updateSurfaceGripValue(): void {
+  // Grip is shown as a simple baseline multiplier: 100% is the committed
+  // default handling, lower is slicker, higher is tighter.
+  surfaceGripValue.textContent = `${Math.round(settings.surfaceGrip * 100)}%`;
 }
 
 function scheduleFieldRebuild(): void {
