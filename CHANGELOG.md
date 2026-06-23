@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.3.17-ALPHA - 2026-06-23
+
+### Changed
+
+- Expanded the third-person camera pitch clamp to the full vertical half-orbit
+  from `-90` to `+90` degrees, allowing straight-below through straight-overhead
+  camera angles.
+- Bumped package metadata, README, codebase index, and visible menu version text
+  to `v0.3.17-ALPHA`.
+
 ## 0.3.16-ALPHA - 2026-06-23
 
 ### Changed

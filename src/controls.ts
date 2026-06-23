@@ -47,9 +47,10 @@ const STOP_EPSILON = 0.05;
 const CAMERA_DEFAULT_DISTANCE = 15;
 const CAMERA_DISTANCE_RANGE = { min: 7.5, max: 34 };
 const CAMERA_TARGET_HEIGHT = 0.58;
-// Keep the orbit comfortably short of a pole flip, but allow a lower field-level
-// angle and a much taller overhead view than the original conservative clamp.
-const CAMERA_PITCH_RANGE = { min: -0.1, max: 1.2 };
+// Full vertical half-orbit: straight below the avatar through straight overhead.
+// Yaw naturally becomes visually ambiguous at the poles, but returns as soon as
+// the camera moves off that exact vertical line.
+const CAMERA_PITCH_RANGE = { min: -Math.PI / 2, max: Math.PI / 2 };
 const CAMERA_SMOOTHING = 1 - Math.exp(-14 / 60);
 const CAMERA_ZOOM_STEP = 1.4;
 const CAMERA_WHEEL_ZOOM_SPEED = 0.018;
