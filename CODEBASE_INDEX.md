@@ -9,7 +9,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Vite + strict TypeScript browser app.
 - Three.js renderer, postprocessing composer, Unreal bloom pass, shader-customized
   `InstancedMesh`, additive `Points`, and dynamic lights.
-- Current alpha baseline: `v0.3.17-ALPHA`; keep release tags in alpha prerelease
+- Current alpha baseline: `v0.3.18-ALPHA`; keep release tags in alpha prerelease
   territory until the lab graduates from prototype status.
 - Dedicated dev port `5183`; preview port `4183`.
 
@@ -40,8 +40,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `src/frameTelemetry.ts`
 - Field scale instance-budget clamp decisions:
   `src/fieldScaleGuardrails.ts`
-- Momentum-based avatar movement, jump/landing state, hidden speed-tuning
-  defaults, circular arena clamp, scene-input gating, split left/right
+- Momentum-based avatar movement with higher carried ground momentum,
+  jump/landing state, hidden speed-tuning defaults, circular arena clamp,
+  scene-input gating, split left/right
   hold-to-look pointer lock, camera/player yaw separation, both-button
   camera-forward movement, WoW-style turn/strafe key semantics, ballistic
   airborne horizontal momentum, full 180-degree vertical camera orbit, quiet
@@ -102,8 +103,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
    full 180-degree vertical orbit from straight below the avatar to straight
    overhead.
    `A/D` turn by default, `Q/E` strafe, and right mouse changes `A/D` into strafe
-   keys. Grounded input can accelerate, brake, and redirect planar velocity;
-   airborne movement preserves the horizontal takeoff trajectory until landing.
+   keys. Grounded input can accelerate, brake, and redirect planar velocity with
+   deliberately slide-y response rates; airborne movement preserves the
+   horizontal takeoff trajectory until landing.
    Mouse clicks no longer emit pulse sources. Avatar movement writes a
    continuous wake influence into a GPU height/velocity texture instead of
    adding little circular source stamps, and airborne jumps fade that contact

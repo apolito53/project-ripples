@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.3.18-ALPHA - 2026-06-23
+
+### Changed
+
+- Halved grounded acceleration, counter-steering, and normal release-brake
+  response rates so the avatar carries roughly twice as much momentum and feels
+  more slide-y on the arena surface.
+- Kept the menu-open brake response unchanged so pausing still clears movement
+  quickly instead of letting the avatar coast under a modal UI.
+- Bumped package metadata, README, codebase index, and visible menu version text
+  to `v0.3.18-ALPHA`.
+
 ## 0.3.17-ALPHA - 2026-06-23
 
 ### Changed

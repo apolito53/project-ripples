@@ -37,11 +37,13 @@ export const DEFAULT_PLAYER_SPEED_SETTINGS: PlayerSpeedSettings = {
   sprintSpeedMetersPerSecond: 37
 };
 
-const MOVE_ACCELERATION = 7.5;
-const MOVE_COUNTER_STEER_ACCELERATION = 10.5;
-// This is an exponential response rate, so smaller values make released
-// movement coast longer before settling to a stop.
-const MOVE_BRAKE = 3.36;
+// These are exponential velocity response rates, not raw meters/second forces.
+// Halving them roughly doubles how long the avatar carries momentum during
+// grounded movement, which gives the lab the slide-y feel without changing the
+// visible walk/sprint top speeds.
+const MOVE_ACCELERATION = 3.75;
+const MOVE_COUNTER_STEER_ACCELERATION = 5.25;
+const MOVE_BRAKE = 1.68;
 const MENU_BRAKE = 18;
 const STOP_EPSILON = 0.05;
 const CAMERA_DEFAULT_DISTANCE = 15;
@@ -241,7 +243,8 @@ export class PlayerRig {
       // Movement is intentionally inertial now: input defines the velocity we are
       // trying to reach, while acceleration/brake response decides how much of
       // that change happens this frame. Counter-steering stays a little snappier
-      // so the avatar feels weighty without becoming a runaway sled.
+      // than normal acceleration, but still preserves a deliberate amount of
+      // slide so fast direction changes feel physical instead of digital.
       this.velocity.lerp(targetVelocity, 1 - Math.exp(-delta * response));
       if (!hasIntent && this.velocity.lengthSq() < STOP_EPSILON * STOP_EPSILON) {
         this.velocity.set(0, 0, 0);

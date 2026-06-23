@@ -7,7 +7,7 @@ This is intentionally separate from `voxel-sandbox-engine`. The goal is to make
 a polished visual lab first, then borrow patterns or ideas later if they deserve
 to graduate into the main voxel engine.
 
-Current version: `v0.3.17-ALPHA`.
+Current version: `v0.3.18-ALPHA`.
 
 ## Quick Start
 
@@ -70,13 +70,15 @@ a bright inner orb, a vertically stretched diamond-shaped glow cloud, faster
 core-local orbiting motes, and segmented fading trails. They wait until the
 avatar runs through them, then detonate into a wider pulse, a flat disc burst of
 sparks, and a short local orb-shatter effect without geometric ring markers.
-Movement has acceleration, braking, and a little carried momentum instead of
+Movement has acceleration, braking, and stronger carried momentum instead of
 snapping instantly to full speed. Walk defaults to `10 m/s` and sprint defaults
-to `37 m/s`. It behaves like a small body pushing through water: the shader
-forms a pressed fabric depression, local bow/wake displacement, and small raised
-rim around the avatar, while a dedicated GPU wake texture stores the lingering
-height/velocity field left behind by movement. The visible movement particle
-trail is now a tighter velocity-following tail instead of a broad glitter shed.
+to `37 m/s`, with grounded acceleration, counter-steering, and release braking
+tuned for a more slide-y feel. It behaves like a small body pushing through
+water: the shader forms a pressed fabric depression, local bow/wake
+displacement, and small raised rim around the avatar, while a dedicated GPU wake
+texture stores the lingering height/velocity field left behind by movement. The
+visible movement particle trail is now a tighter velocity-following tail instead
+of a broad glitter shed.
 Jumping fades that surface contact while the avatar is airborne, then landing
 stamps a brighter impact ripple back into the field. Touch-button pulses and
 collected Echoes still use analytic ring sources, but ordinary movement no
@@ -165,7 +167,7 @@ Project planning:
 Versioning:
 
 - While the project is still experimental, release tags use alpha prerelease
-  labels. The current baseline is `v0.3.17-ALPHA`.
+  labels. The current baseline is `v0.3.18-ALPHA`.
 
 ## Design Notes
 
