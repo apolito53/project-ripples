@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.3.16-ALPHA - 2026-06-23
+
+### Changed
+
+- Widened the third-person camera pitch clamp so mouse look can reach lower
+  field-level angles and much taller overhead views without crossing into a
+  full orbit flip.
+- Bumped package metadata, README, codebase index, and visible menu version text
+  to `v0.3.16-ALPHA`.
+
 ## 0.3.15-ALPHA - 2026-06-22
 
 ### Changed

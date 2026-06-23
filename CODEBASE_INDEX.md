@@ -9,7 +9,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Vite + strict TypeScript browser app.
 - Three.js renderer, postprocessing composer, Unreal bloom pass, shader-customized
   `InstancedMesh`, additive `Points`, and dynamic lights.
-- Current alpha baseline: `v0.3.15-ALPHA`; keep release tags in alpha prerelease
+- Current alpha baseline: `v0.3.16-ALPHA`; keep release tags in alpha prerelease
   territory until the lab graduates from prototype status.
 - Dedicated dev port `5183`; preview port `4183`.
 
@@ -44,7 +44,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
   defaults, circular arena clamp, scene-input gating, split left/right
   hold-to-look pointer lock, camera/player yaw separation, both-button
   camera-forward movement, WoW-style turn/strafe key semantics, ballistic
-  airborne horizontal momentum, quiet mouse-release unlocks, and camera follow behavior:
+  airborne horizontal momentum, widened vertical camera orbit, quiet
+  mouse-release unlocks, and camera follow behavior:
   `src/controls.ts`
 - Circular shader-displaced instanced hex field, including sampled GPU movement
   wake displacement, Meltdown-calibrated honeycomb orientation, lit hex caps,
@@ -97,14 +98,16 @@ Purpose: compact map for the standalone ripple-field visual lab.
    jumps and emits smaller takeoff plus stronger landing ripples. Desktop mouse
    input uses hold-to-look pointer lock: left-drag orbits only the camera, while
    right-drag orbits the camera and steers avatar facing. Holding both mouse
-   buttons moves forward in the camera-facing direction. `A/D` turn by default,
-   `Q/E` strafe, and right mouse changes `A/D` into strafe keys. Grounded input
-   can accelerate, brake, and redirect planar velocity; airborne movement
-   preserves the horizontal takeoff trajectory until landing. Mouse clicks no
-   longer emit pulse sources. Avatar movement writes a continuous wake influence
-   into a GPU height/velocity texture instead of adding little circular source
-   stamps, and airborne jumps fade that contact before touchdown. Echo-zone
-   timers add persistent collectible markers instead of immediate ambient waves.
+   buttons moves forward in the camera-facing direction. Mouse look uses a wider
+   vertical orbit range for lower field-level angles and taller overhead views.
+   `A/D` turn by default, `Q/E` strafe, and right mouse changes `A/D` into strafe
+   keys. Grounded input can accelerate, brake, and redirect planar velocity;
+   airborne movement preserves the horizontal takeoff trajectory until landing.
+   Mouse clicks no longer emit pulse sources. Avatar movement writes a
+   continuous wake influence into a GPU height/velocity texture instead of
+   adding little circular source stamps, and airborne jumps fade that contact
+   before touchdown. Echo-zone timers add persistent collectible markers instead
+   of immediate ambient waves.
 6. `RippleField` builds hex instances inside the circular arena using the
    active quality, hex-size, and arena-radius settings. Hex geometry is rotated
    to match the staggered lattice, and Meltdown's visible footprint is calibrated

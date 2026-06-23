@@ -7,7 +7,7 @@ This is intentionally separate from `voxel-sandbox-engine`. The goal is to make
 a polished visual lab first, then borrow patterns or ideas later if they deserve
 to graduate into the main voxel engine.
 
-Current version: `v0.3.15-ALPHA`.
+Current version: `v0.3.16-ALPHA`.
 
 ## Quick Start
 
@@ -35,6 +35,8 @@ Open `http://127.0.0.1:5183`.
 - Hold right mouse button to orbit the camera and steer avatar facing together;
   while held, `A` / `D` strafe instead of turning.
 - Hold both mouse buttons to move forward in the camera-facing direction.
+- Mouse look now has a wider vertical orbit range for lower field-level angles
+  and taller overhead views.
 - Releasing one mouse button downgrades to the remaining drag mode; releasing
   the last held scene mouse button restores the cursor.
 - `Mouse wheel` zooms the follow camera in and out.
@@ -163,7 +165,7 @@ Project planning:
 Versioning:
 
 - While the project is still experimental, release tags use alpha prerelease
-  labels. The current baseline is `v0.3.15-ALPHA`.
+  labels. The current baseline is `v0.3.16-ALPHA`.
 
 ## Design Notes
 
@@ -204,9 +206,9 @@ Versioning:
   gating while menus are open, split left/right hold-to-look pointer-lock
   behavior, camera-only orbit yaw, right-drag steering yaw, WoW-style keyboard
   turning/strafe semantics, ballistic airborne horizontal momentum,
-  both-button camera-forward movement, and quiet mouse-release unlocks. The
-  avatar visuals in `src/main.ts` use orbiting motes and segmented additive
-  trails instead of torus rings.
+  both-button camera-forward movement, widened vertical camera orbit, and quiet
+  mouse-release unlocks. The avatar visuals in `src/main.ts` use orbiting motes
+  and segmented additive trails instead of torus rings.
 
 The CPU decides where the player, touch-button pulses, and persistent Echo zones
 are. Manual pulse input is cooldown-gated, Echo zones only become pulse sources

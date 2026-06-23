@@ -47,7 +47,9 @@ const STOP_EPSILON = 0.05;
 const CAMERA_DEFAULT_DISTANCE = 15;
 const CAMERA_DISTANCE_RANGE = { min: 7.5, max: 34 };
 const CAMERA_TARGET_HEIGHT = 0.58;
-const CAMERA_PITCH_RANGE = { min: 0.055, max: 0.82 };
+// Keep the orbit comfortably short of a pole flip, but allow a lower field-level
+// angle and a much taller overhead view than the original conservative clamp.
+const CAMERA_PITCH_RANGE = { min: -0.1, max: 1.2 };
 const CAMERA_SMOOTHING = 1 - Math.exp(-14 / 60);
 const CAMERA_ZOOM_STEP = 1.4;
 const CAMERA_WHEEL_ZOOM_SPEED = 0.018;
