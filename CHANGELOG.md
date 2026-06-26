@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 0.3.20-ALPHA - 2026-06-26
+
+### Added
+
+- Added a strong-facing hover-pod avatar with a bright forward nose, side glow
+  fins, rear thrusters, and rear-biased particle trails so player facing is
+  readable before movement starts.
+
+### Changed
+
+- Shelved the previous glow-orb avatar behind a named legacy avatar factory so
+  its shell, motes, and light tuning can be reused later without staying active.
+- Bumped package metadata, README, codebase index, and visible menu version text
+  to `v0.3.20-ALPHA`.
+
 ## 0.3.19-ALPHA - 2026-06-23
 
 ### Added

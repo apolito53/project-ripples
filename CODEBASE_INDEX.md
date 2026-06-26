@@ -9,7 +9,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Vite + strict TypeScript browser app.
 - Three.js renderer, postprocessing composer, Unreal bloom pass, shader-customized
   `InstancedMesh`, additive `Points`, and dynamic lights.
-- Current alpha baseline: `v0.3.19-ALPHA`; keep release tags in alpha prerelease
+- Current alpha baseline: `v0.3.20-ALPHA`; keep release tags in alpha prerelease
   territory until the lab graduates from prototype status.
 - Dedicated dev port `5183`; preview port `4183`.
 
@@ -57,7 +57,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
   diagnostics: `src/wakeField.ts`
 - Visual-only smooth glowing arena-edge gradient barrier: `src/arenaBarrier.ts`
 - Visible cyan/magenta spotlight fixtures, stage floor, core scene lighting,
-  and player avatar visuals: `src/main.ts`
+  active hover-pod avatar visuals, and shelved legacy glow-orb avatar:
+  `src/main.ts`
 - Lifetime-pruned manual/Echo pulse source list and shader uniform writer:
   `src/rippleSources.ts`
 - Persistent collectible Echo-column lights, bright orb lights, vertical

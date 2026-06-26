@@ -139,11 +139,19 @@ const ECHO_BURST_OPTIONS: RippleSourceOptions = {
 const AVATAR_ORBIT_MOTE_COUNT = 36;
 const AVATAR_ORBIT_TRAIL_SEGMENTS = 6;
 const AVATAR_ORBIT_TRAIL_SECONDS = 0.54;
+const AVATAR_FORWARD_AXIS = new THREE.Vector3(0, 0, 1);
 // A low visual floor remains while the playable surface is still planar. The
 // upcoming sphere pass can delete or replace this without touching RippleField.
 const STAGE_FLOOR_Y = -3.2;
 const KEY_LIGHT_SOURCE_COLOR = 0xbcecff;
 const RIM_LIGHT_SOURCE_COLOR = 0xff7de7;
+
+type AvatarStyle = "hoverPod" | "legacyGlowOrb";
+
+type PlayerAvatar = {
+  readonly object: THREE.Group;
+  update(delta: number, position: THREE.Vector3, movementSpeed: number, facingYaw: number): void;
+};
 
 type AvatarOrbitTrails = {
   readonly points: THREE.Points<THREE.BufferGeometry, THREE.ShaderMaterial>;
@@ -297,7 +305,7 @@ function animate(): void {
   player.update(delta);
   const playerSpeed = player.getSpeed();
   const playerGroundContact = player.getGroundContactStrength();
-  avatar.update(delta, player.position, playerSpeed);
+  avatar.update(delta, player.position, playerSpeed, player.getFacingYaw());
   if (settings.particlesEnabled) {
     particles.spawnAura(player.position, delta, playerSpeed / 18);
     particles.spawnWake(player.position, (playerSpeed / 18) * playerGroundContact, player.velocity);
@@ -1406,12 +1414,280 @@ function updateStageFloor(nextPreset: QualityPreset): void {
   updateSceneLightSources(nextPreset);
 }
 
-function createAvatar(): {
-  readonly object: THREE.Group;
-  update(delta: number, position: THREE.Vector3, movementSpeed: number): void;
-} {
+function createAvatar(activeAvatarStyle: AvatarStyle = "hoverPod"): PlayerAvatar {
+  // Keep the old avatar as a real inactive style path. That makes it easy to
+  // restore or cannibalize later without leaving dead code for TypeScript to
+  // complain about, because apparently the compiler has opinions too.
+  switch (activeAvatarStyle) {
+    case "legacyGlowOrb":
+      return createLegacyGlowAvatar();
+    case "hoverPod":
+    default:
+      return createHoverPodAvatar();
+  }
+}
+
+function createHoverPodAvatar(): PlayerAvatar {
   const object = new THREE.Group();
-  object.name = "Player glow avatar";
+  object.name = "Player hover pod avatar";
+
+  const headingGroup = new THREE.Group();
+  headingGroup.name = "Player hover pod facing group";
+  object.add(headingGroup);
+
+  const bodyMaterial = new THREE.MeshPhysicalMaterial({
+    color: 0x64f6df,
+    emissive: 0x0b8b8f,
+    emissiveIntensity: 0.66,
+    metalness: 0.22,
+    roughness: 0.2,
+    transparent: true,
+    opacity: 0.82,
+    depthWrite: false,
+    transmission: 0.08
+  });
+  const body = new THREE.Mesh(new THREE.IcosahedronGeometry(0.44, 2), bodyMaterial);
+  body.name = "Player hover pod glass body";
+  body.scale.set(0.95, 0.44, 1.5);
+  body.castShadow = true;
+  headingGroup.add(body);
+
+  const planformMaterial = new THREE.MeshBasicMaterial({
+    color: 0x6dffe7,
+    transparent: true,
+    opacity: 0.28,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+  const planform = new THREE.Mesh(createHoverPodPlanformGeometry(), planformMaterial);
+  planform.name = "Player hover pod luminous forward planform";
+  planform.position.y = -0.03;
+  headingGroup.add(planform);
+
+  const coreMaterial = new THREE.MeshBasicMaterial({
+    color: 0x8ffff0,
+    transparent: true,
+    opacity: 0.72,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+  const core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.24, 1), coreMaterial);
+  core.name = "Player hover pod internal plasma core";
+  core.position.z = 0.18;
+  headingGroup.add(core);
+
+  const noseMaterial = new THREE.MeshBasicMaterial({
+    color: 0xb8fff2,
+    transparent: true,
+    opacity: 0.62,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.82, 32, 1, true), noseMaterial);
+  nose.name = "Player hover pod bright forward nose";
+  nose.rotation.x = Math.PI / 2;
+  nose.position.z = 0.78;
+  headingGroup.add(nose);
+
+  const spineMaterial = new THREE.MeshBasicMaterial({
+    color: 0xeaffff,
+    transparent: true,
+    opacity: 0.68,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+  const forwardSpine = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 1.32, 12), spineMaterial);
+  forwardSpine.name = "Player hover pod forward luminous spine";
+  forwardSpine.rotation.x = Math.PI / 2;
+  forwardSpine.position.set(0, 0.08, 0.34);
+  headingGroup.add(forwardSpine);
+
+  const noseGlint = new THREE.Mesh(
+    new THREE.SphereGeometry(0.105, 18, 12),
+    new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.92,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    })
+  );
+  noseGlint.name = "Player hover pod forward glint";
+  noseGlint.position.z = 1.12;
+  headingGroup.add(noseGlint);
+
+  const tailMaterial = new THREE.MeshBasicMaterial({
+    color: 0x4dfff1,
+    transparent: true,
+    opacity: 0.28,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+  const tailGlow = new THREE.Mesh(new THREE.ConeGeometry(0.34, 1.18, 32, 1, true), tailMaterial);
+  tailGlow.name = "Player hover pod rear plasma tail";
+  tailGlow.rotation.x = -Math.PI / 2;
+  tailGlow.position.z = -0.7;
+  headingGroup.add(tailGlow);
+
+  const rearLamp = new THREE.Mesh(
+    new THREE.SphereGeometry(0.14, 16, 10),
+    new THREE.MeshBasicMaterial({
+      color: 0x53ffee,
+      transparent: true,
+      opacity: 0.72,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    })
+  );
+  rearLamp.name = "Player hover pod rear lamp";
+  rearLamp.position.z = -0.58;
+  headingGroup.add(rearLamp);
+
+  const thrusterMaterial = new THREE.MeshBasicMaterial({
+    color: 0x72fff0,
+    transparent: true,
+    opacity: 0.82,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+  const leftThruster = new THREE.Mesh(new THREE.SphereGeometry(0.11, 16, 10), thrusterMaterial);
+  leftThruster.name = "Player hover pod left rear thruster";
+  leftThruster.position.set(-0.28, -0.02, -0.78);
+  const rightThruster = leftThruster.clone();
+  rightThruster.name = "Player hover pod right rear thruster";
+  rightThruster.position.x = 0.28;
+  headingGroup.add(leftThruster, rightThruster);
+
+  const finMaterial = new THREE.MeshBasicMaterial({
+    color: 0x8dc8ff,
+    transparent: true,
+    opacity: 0.46,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+  headingGroup.add(createHoverPodFin(-1, finMaterial), createHoverPodFin(1, finMaterial));
+
+  const orbitTrails = createAvatarOrbitTrails();
+  headingGroup.add(orbitTrails.trails, orbitTrails.points);
+
+  const coreLight = new THREE.PointLight(0x8fffe0, 4.8, 19, 1.65);
+  coreLight.name = "Player hover pod local field light";
+  coreLight.position.y = 0.32;
+  object.add(coreLight);
+
+  const floorLight = new THREE.PointLight(0x55cfff, 2.15, 14, 1.45);
+  floorLight.name = "Player hover pod low cyan field fill";
+  floorLight.position.y = -1.05;
+  object.add(floorLight);
+
+  const noseLight = new THREE.PointLight(0xb8fff2, 1.65, 8.5, 1.8);
+  noseLight.name = "Player hover pod forward readability light";
+  noseLight.position.copy(AVATAR_FORWARD_AXIS).multiplyScalar(1.08);
+  noseLight.position.y = 0.08;
+  headingGroup.add(noseLight);
+
+  return {
+    object,
+    update(delta, position, movementSpeed, facingYaw) {
+      object.position.copy(position);
+      headingGroup.rotation.y = facingYaw;
+
+      const time = clock.elapsedTime;
+      const breathingGlow = Math.sin(time * 4) * 0.5 + 0.5;
+      const movementGlow = THREE.MathUtils.clamp(movementSpeed / 18, 0, 1);
+
+      // The body keeps a directional pod silhouette. The little internal core
+      // gets the old magical spin so the avatar still feels alive, not like a
+      // flat gameplay marker pretending it is art.
+      body.scale.set(0.95 + breathingGlow * 0.025, 0.44 + breathingGlow * 0.015, 1.5 + movementGlow * 0.14);
+      planformMaterial.opacity = 0.22 + breathingGlow * 0.05 + movementGlow * 0.09;
+      core.rotation.x += delta * 1.7;
+      core.rotation.y += delta * 2.4;
+      core.rotation.z -= delta * 0.9;
+      coreMaterial.opacity = 0.58 + breathingGlow * 0.12;
+      bodyMaterial.emissiveIntensity = 0.58 + breathingGlow * 0.22 + movementGlow * 0.18;
+      noseMaterial.opacity = 0.55 + breathingGlow * 0.1 + movementGlow * 0.1;
+      spineMaterial.opacity = 0.48 + breathingGlow * 0.12 + movementGlow * 0.12;
+      tailMaterial.opacity = 0.2 + movementGlow * 0.25 + breathingGlow * 0.07;
+      tailGlow.scale.set(0.85 + movementGlow * 0.18, 0.9 + movementGlow * 0.52, 0.85 + movementGlow * 0.18);
+      rearLamp.scale.setScalar(0.9 + breathingGlow * 0.18 + movementGlow * 0.2);
+      noseGlint.scale.setScalar(0.88 + breathingGlow * 0.22);
+      const thrusterScale = 0.9 + breathingGlow * 0.16 + movementGlow * 0.32;
+      leftThruster.scale.setScalar(thrusterScale);
+      rightThruster.scale.setScalar(thrusterScale);
+      thrusterMaterial.opacity = 0.68 + breathingGlow * 0.12 + movementGlow * 0.16;
+      finMaterial.opacity = 0.34 + breathingGlow * 0.08 + movementGlow * 0.11;
+      updateAvatarHoverTrails(orbitTrails, time, movementGlow);
+
+      // Keep the useful local-light behavior from the old avatar. None of these
+      // lights casts shadows; moving point-light shadows would be extremely
+      // rude to the dense hex field.
+      coreLight.intensity = 4.0 + breathingGlow * 1.0 + movementGlow * 1.55;
+      coreLight.distance = 17 + movementGlow * 5;
+      floorLight.intensity = 1.7 + breathingGlow * 0.44 + movementGlow * 0.95;
+      floorLight.distance = 12 + movementGlow * 4;
+      noseLight.intensity = 1.15 + breathingGlow * 0.28 + movementGlow * 0.72;
+    }
+  };
+}
+
+function createHoverPodFin(side: -1 | 1, material: THREE.MeshBasicMaterial): THREE.Mesh {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute(
+    "position",
+    new THREE.BufferAttribute(
+      new Float32Array([
+        side * 0.18, -0.07, 0.08,
+        side * 0.9, -0.03, -0.35,
+        side * 0.3, 0.16, -0.74
+      ]),
+      3
+    )
+  );
+  geometry.setIndex([0, 1, 2]);
+  geometry.computeVertexNormals();
+
+  const fin = new THREE.Mesh(geometry, material);
+  fin.name = side < 0 ? "Player hover pod left glow fin" : "Player hover pod right glow fin";
+  return fin;
+}
+
+function createHoverPodPlanformGeometry(): THREE.BufferGeometry {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute(
+    "position",
+    new THREE.BufferAttribute(
+      new Float32Array([
+        0, 0, 1.16,
+        -0.66, 0, -0.1,
+        -0.34, 0, -0.72,
+        0, 0, -0.5,
+        0.34, 0, -0.72,
+        0.66, 0, -0.1
+      ]),
+      3
+    )
+  );
+  geometry.setIndex([
+    0, 1, 5,
+    1, 2, 3,
+    1, 3, 5,
+    3, 4, 5
+  ]);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function createLegacyGlowAvatar(): PlayerAvatar {
+  // Shelved in favor of the hover pod on v0.3.20-ALPHA. Keep this intact rather
+  // than deleting it; the glass shell, orbit motes, and local-light tuning are
+  // still useful reference parts for later avatar styles.
+  const object = new THREE.Group();
+  object.name = "Player shelved glow orb avatar";
 
   const core = new THREE.Mesh(
     new THREE.IcosahedronGeometry(0.34, 2),
@@ -1596,6 +1872,74 @@ function updateAvatarOrbitTrails(orbitTrails: AvatarOrbitTrails, time: number, m
   orbitTrails.points.geometry.attributes.aSize.needsUpdate = true;
   orbitTrails.trails.geometry.attributes.position.needsUpdate = true;
   orbitTrails.trails.geometry.attributes.color.needsUpdate = true;
+}
+
+function updateAvatarHoverTrails(orbitTrails: AvatarOrbitTrails, time: number, movementGlow: number): void {
+  orbitTrails.points.material.uniforms.uTime.value = time;
+  orbitTrails.trails.material.opacity = 0.24 + movementGlow * 0.18;
+  const trailStepSeconds = AVATAR_ORBIT_TRAIL_SECONDS / AVATAR_ORBIT_TRAIL_SEGMENTS;
+
+  for (let index = 0; index < AVATAR_ORBIT_MOTE_COUNT; index += 1) {
+    const pointOffset = index * 3;
+    writeAvatarHoverTrailPosition(orbitTrails.positions, pointOffset, orbitTrails, index, time, movementGlow);
+    orbitTrails.alphas[index] = 0.42 + movementGlow * 0.2 + Math.sin(time * 8.2 + orbitTrails.phases[index]) * 0.08;
+    orbitTrails.sizes[index] = 0.62 + movementGlow * 0.24 + Math.sin(time * 5.4 + orbitTrails.phases[index]) * 0.06;
+
+    for (let segment = 0; segment < AVATAR_ORBIT_TRAIL_SEGMENTS; segment += 1) {
+      const segmentOffset = (index * AVATAR_ORBIT_TRAIL_SEGMENTS + segment) * 6;
+      const olderTime = time - (segment + 1) * trailStepSeconds;
+      const newerTime = time - segment * trailStepSeconds;
+      writeAvatarHoverTrailPosition(
+        orbitTrails.trailPositions,
+        segmentOffset,
+        orbitTrails,
+        index,
+        olderTime,
+        movementGlow
+      );
+      writeAvatarHoverTrailPosition(
+        orbitTrails.trailPositions,
+        segmentOffset + 3,
+        orbitTrails,
+        index,
+        newerTime,
+        movementGlow
+      );
+      writeAvatarTrailColor(orbitTrails, index, segmentOffset, segment, false);
+      writeAvatarTrailColor(orbitTrails, index, segmentOffset + 3, segment, true);
+    }
+  }
+
+  orbitTrails.points.geometry.attributes.position.needsUpdate = true;
+  orbitTrails.points.geometry.attributes.aAlpha.needsUpdate = true;
+  orbitTrails.points.geometry.attributes.aSize.needsUpdate = true;
+  orbitTrails.trails.geometry.attributes.position.needsUpdate = true;
+  orbitTrails.trails.geometry.attributes.color.needsUpdate = true;
+}
+
+function writeAvatarHoverTrailPosition(
+  target: Float32Array,
+  offset: number,
+  orbitTrails: AvatarOrbitTrails,
+  index: number,
+  time: number,
+  movementGlow: number
+): void {
+  const phase = orbitTrails.phases[index];
+  const angle = orbitTrails.baseAngles[index] + time * orbitTrails.speeds[index] * 0.56 +
+    Math.sin(time * 1.8 + phase) * 0.14;
+  const tailRank = (index % 6) / 5;
+  const radius = orbitTrails.radii[index] * (0.28 + movementGlow * 0.12);
+  const tailDepth = 0.24 + tailRank * (0.72 + movementGlow * 0.95);
+
+  // The active avatar wants rear wake motes, not a symmetric halo. Keeping the
+  // points in local pod space makes the sparkle tail follow actual player
+  // facing when the heading group rotates.
+  target[offset] = Math.cos(angle) * radius * 0.82;
+  target[offset + 1] = 0.03 + Math.sin(angle * 1.6 + phase) * (0.18 + movementGlow * 0.07) +
+    Math.sin(time * 3.2 + phase) * 0.045;
+  target[offset + 2] = Math.sin(angle) * radius * 0.28 - tailDepth +
+    Math.sin(time * 3.6 + phase) * 0.045;
 }
 
 function writeAvatarOrbitPosition(

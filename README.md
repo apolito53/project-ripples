@@ -7,7 +7,7 @@ This is intentionally separate from `voxel-sandbox-engine`. The goal is to make
 a polished visual lab first, then borrow patterns or ideas later if they deserve
 to graduate into the main voxel engine.
 
-Current version: `v0.3.19-ALPHA`.
+Current version: `v0.3.20-ALPHA`.
 
 ## Quick Start
 
@@ -62,9 +62,10 @@ Raised wave crests carry an extra bounded glow signal, so ripple fronts bloom
 brighter without washing out the whole field.
 Manual touch pulses have a short shared cooldown so the on-screen pulse button
 does not flood the field.
-The avatar itself uses brighter fast orbiting energy motes with long additive
-trails instead of flat rings, so it reads as a moving glow cloud rather than a
-UI target.
+The avatar itself is now a strong-facing hover pod with a bright nose, side glow
+fins, rear thrusters, and rear-biased energy motes, so player facing is readable
+before movement starts. The older glow-orb model is still shelved in code for
+future reuse.
 Sparkling Echo columns spawn around the arena as real local light sources with
 a bright inner orb, a vertically stretched diamond-shaped glow cloud, faster
 core-local orbiting motes, and segmented fading trails. They wait until the
@@ -170,7 +171,7 @@ Project planning:
 Versioning:
 
 - While the project is still experimental, release tags use alpha prerelease
-  labels. The current baseline is `v0.3.19-ALPHA`.
+  labels. The current baseline is `v0.3.20-ALPHA`.
 
 ## Design Notes
 

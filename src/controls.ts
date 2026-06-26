@@ -282,6 +282,12 @@ export class PlayerRig {
     return this.velocity.length();
   }
 
+  getFacingYaw(): number {
+    // Rendering systems should not reach into the rig's private yaw state, but
+    // the avatar needs the true facing direction even while standing still.
+    return this.playerYaw;
+  }
+
   getGroundContactStrength(): number {
     // A small fade band keeps takeoff and touchdown from hard-switching the
     // surface response, while still fully lifting pressure once the avatar is
