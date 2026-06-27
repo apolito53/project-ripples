@@ -9,7 +9,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Vite + strict TypeScript browser app.
 - Three.js renderer, postprocessing composer, Unreal bloom pass, shader-customized
   `InstancedMesh`, additive `Points`, and dynamic lights.
-- Current alpha baseline: `v0.3.20-ALPHA`; keep release tags in alpha prerelease
+- Current alpha baseline: `v0.4.0-ALPHA`; keep release tags in alpha prerelease
   territory until the lab graduates from prototype status.
 - Dedicated dev port `5183`; preview port `4183`.
 
@@ -42,20 +42,25 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `src/fieldScaleGuardrails.ts`
 - Momentum-based avatar movement with visible surface-grip tuning, higher
   carried ground momentum, jump/landing state, hidden speed-tuning defaults,
-  circular arena clamp, scene-input gating, split left/right
-  hold-to-look pointer lock, camera/player yaw separation, both-button
-  camera-forward movement, WoW-style turn/strafe key semantics, ballistic
-  airborne horizontal momentum, full 180-degree vertical camera orbit, quiet
-  mouse-release unlocks, and camera follow behavior:
+  optional track/play-area constraint, circular arena fallback clamp,
+  scene-input gating, split left/right hold-to-look pointer lock,
+  camera/player yaw separation, both-button camera-forward movement, WoW-style
+  turn/strafe key semantics, ballistic airborne horizontal momentum, full
+  180-degree vertical camera orbit, quiet mouse-release unlocks, and camera
+  follow behavior:
   `src/controls.ts`
 - Circular shader-displaced instanced hex field, including sampled GPU movement
   wake displacement, Meltdown-calibrated honeycomb orientation, lit hex caps,
-  animated-height cell tinting, and bounded crest-specific glow:
+  generated race-track mask tinting, animated-height cell tinting, and bounded
+  crest-specific glow:
   `src/rippleField.ts`
 - Ping-pong GPU movement wake heightfield, absorbing edge band, residual-wave
   damping, fallback texture, quality-sized render targets, and `wake.*`
   diagnostics: `src/wakeField.ts`
 - Visual-only smooth glowing arena-edge gradient barrier: `src/arenaBarrier.ts`
+- Wide prototype race-track loop, non-crossing ribbon and wall-edge sampling,
+  ribbon collision, bright glowing edge walls, generated track mask texture,
+  track Echo placement helpers, and `track.*` diagnostics: `src/raceTrack.ts`
 - Visible cyan/magenta spotlight fixtures, stage floor, core scene lighting,
   active hover-pod avatar visuals, and shelved legacy glow-orb avatar:
   `src/main.ts`
@@ -89,14 +94,15 @@ Purpose: compact map for the standalone ripple-field visual lab.
 ## Runtime Flow
 
 1. `index.html` loads `src/main.ts`.
-2. `main.ts` creates the renderer, scene, camera, bloom composer, field, particles,
-   pulse lights, and glow avatar.
+2. `main.ts` creates the renderer, scene, camera, bloom composer, race track,
+   field, particles, pulse lights, and hover-pod avatar.
 3. `SkyboxManager` applies the selected generated panorama to a camera-following
    UV sky dome, chooses 8K textures or 4K fallbacks from GPU texture caps, and
    applies matching fog/clear color so the arena sits inside a distant sci-fi
    horizon instead of a pure void.
 4. `PlayerRig` updates momentum-based planar movement, jump height, surface
-   ground-contact strength, and camera follow every frame.
+   ground-contact strength, track-ribbon containment, and camera follow every
+   frame.
 5. Touch-button pulses add cooldown-gated analytic pulse sources, while `Space`
    jumps and emits smaller takeoff plus stronger landing ripples. Desktop mouse
    input uses hold-to-look pointer lock: left-drag orbits only the camera, while
@@ -114,34 +120,41 @@ Purpose: compact map for the standalone ripple-field visual lab.
    adding little circular source stamps, and airborne jumps fade that contact
    before touchdown. Echo-zone timers add persistent collectible markers instead
    of immediate ambient waves.
-6. `RippleField` builds hex instances inside the circular arena using the
+6. `RaceTrack` keeps the first racing-course prototype alive: a wide closed
+   sweeping non-crossing loop scaled to the active arena radius,
+   slide-and-speed-bleed wall containment, bright glowing energy-wall meshes,
+   and a generated mask texture that the field shader samples for surface
+   highlight and heavy outside-track dimming.
+7. `RippleField` builds hex instances inside the circular arena using the
    active quality, hex-size, and arena-radius settings. Hex geometry is rotated
    to match the staggered lattice, and Meltdown's visible footprint is calibrated
    to read as an interlocked honeycomb while preserving its previous density.
    The field then sends active pulse source/metadata/lifetime uniforms plus the
-   wake texture, player ground-contact strength, wave-medium, and cell-scale
-   values to the shaders; cell matrices stay static while the GPU animates lit
-   cap height, lift/stretch/glow, crest bloom, movement wake memory, and
-   height-based tinting. The old per-cell shaft mesh has been removed to keep
-   the geometry path simpler before the sphere work.
-7. `ArenaBarrier` draws a visual-only smooth glowing gradient curtain at the
+   wake texture, track mask texture, player ground-contact strength,
+   wave-medium, and cell-scale values to the shaders; cell matrices stay static
+   while the GPU animates lit cap height, lift/stretch/glow, crest bloom,
+   movement wake memory, track highlight, and height-based tinting. The old
+   per-cell shaft mesh has been removed to keep the geometry path simpler before
+   the sphere work.
+8. `ArenaBarrier` draws a visual-only smooth glowing gradient curtain at the
    arena radius so the map edge is visible without changing collision logic.
-8. `EchoZoneField` animates live Echo markers and reports run-through triggers.
-9. `ParticleVeil` animates the player sparkle aura, burst clouds, flat Echo
+9. `EchoZoneField` animates live Echo markers placed on the race track and
+   reports run-through triggers.
+10. `ParticleVeil` animates the player sparkle aura, burst clouds, flat Echo
    disc bursts, and velocity-shaped wake-tail motes.
-10. `PulseLightRig` assigns recent pulses and collected Echo detonations to
+11. `PulseLightRig` assigns recent pulses and collected Echo detonations to
    point lights.
-11. The HUD reports FPS, instance counts, base propagation speed, voxel size,
+12. The HUD reports FPS, instance counts, base propagation speed, voxel size,
     arena radius, live Echo count, active pulse count, and newest pulse radius.
     A denser `F2`/pause-menu performance overlay reports frame/update/render
     timing, active particles versus resident budget, rendered pulse-source
     pressure, wake texture mode/pass cost, renderer draw stats, pixel ratio,
     bloom state, and quality.
-12. Esc or the hamburger button opens the centered pause menu, which owns
+13. Esc or the hamburger button opens the centered pause menu, which owns
     tuning controls, a Resume action, and a version changelog button.
     Hidden walk/sprint speed rows remain wired for future tuning, but are not
     currently exposed in the visible menu.
-13. The scene renders through bloom when bloom strength is above zero.
+14. The scene renders through bloom when bloom strength is above zero.
 
 ## Common Change Targets
 
@@ -151,15 +164,20 @@ Purpose: compact map for the standalone ripple-field visual lab.
   and `src/main.ts`
 - Change the visible map-edge barrier color, height, or shimmer:
   `src/arenaBarrier.ts`
+- Change the first race-track shape, width, wall visuals, collision response,
+  generated mask, off-track dimming, or track-scoped Echo placement:
+  `src/raceTrack.ts`, `src/rippleField.ts`, and `src/main.ts`
 - Change generated skybox choices, labels, texture paths, horizon framing, or
   matching fog color: `src/skybox.ts` and `public/skyboxes/`
 - Change ripple math, hex shape, directional water-like movement response,
-  animated-height tint, crest glow, or generic proximity glow:
+  track-surface tinting, animated-height tint, crest glow, or generic proximity
+  glow:
   `src/rippleField.ts`
 - Change continuous GPU movement wake propagation, wake texture size, fallback,
   or wake diagnostics: `src/wakeField.ts` and `src/qualityPresets.ts`
-- Change Echo-zone spawn count, trigger radius, column visuals, or collection
-  behavior: `src/echoZones.ts` and `src/main.ts`
+- Change Echo-zone spawn count, trigger radius, track placement, column visuals,
+  or collection behavior: `src/raceTrack.ts`, `src/echoZones.ts`, and
+  `src/main.ts`
 - Change avatar marker motes, long orbit trails, lights, or shell visuals:
   `src/main.ts`
 - Change particles, wake-tail shape, or burst count: `src/particleVeil.ts` and
@@ -168,8 +186,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Change propagation-speed semantics or medium parameters: `src/waveMedium.ts`,
   `src/labSettings.ts`, and `PROPAGATION_NOTES.md`
 - Change momentum, surface grip, jump feel, hidden speed defaults/limits,
-  movement/camera feel, or the circular player boundary: `src/controls.ts`,
-  `src/labSettings.ts`, and `src/main.ts`
+  movement/camera feel, track containment, or the circular player fallback
+  boundary: `src/controls.ts`, `src/raceTrack.ts`, `src/labSettings.ts`, and
+  `src/main.ts`
 - Change pause-menu layout, changelog behavior, or tuning labels:
   `index.html`, `src/styles.css`, and `src/main.ts`
 - Change the live performance overlay, HUD formatting, frame-hitch payloads, or
@@ -180,6 +199,12 @@ Purpose: compact map for the standalone ripple-field visual lab.
 
 - The field is a visual lab, not voxel terrain. Do not add save data or chunk
   loading here unless the project deliberately changes shape.
+- `RaceTrack` is the first hardcoded racing prototype, not a track editor. Keep
+  shape, mask, wall geometry, and containment together until the gameplay loop
+  proves it needs authoring tools. The field shader samples a mask texture for
+  course highlight; do not rebuild the hex field merely to change track visuals.
+  Wall contact should preserve tangential velocity and bleed only outward
+  pressure so the slide-heavy handling survives track edges.
 - Keep the CPU/GPU contract small: pulse uniforms, player position, player
   ground-contact strength, wake texture, and settings go in; shader animation
   comes out. Movement wake must not add entries to `RippleSourceStore`; that

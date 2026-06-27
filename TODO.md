@@ -6,11 +6,10 @@ concrete follow-ups that we actually intend to revisit.
 ## High Priority
 
 - Shape the lab into a racing-game prototype.
-  Keep the current circular arena as the first handling/playtest space, but
-  start steering new mechanics toward racing: clear facing, acceleration,
-  friction, checkpoint/lap structure, speed-readable effects, and eventually
-  dedicated track design. Track design is a major target, but it should come
-  after the current arena proves the core movement loop is worth building around.
+  First pass now has a wide non-crossing track ribbon inside the arena with
+  bright glowing walls, heavy off-track dimming, track-scoped Echo placement, and
+  slide-and-bleed containment. Next racing steps: checkpoint/lap structure,
+  speed-readable effects, and eventually dedicated track design tooling.
 - Continue replacing brute-force particle density with more deliberate effects.
   Echo detonations now have a first layered poof-disc/glitter pass, but the
   broader particle system still needs a real split between sparkle mass, haze,
@@ -65,3 +64,5 @@ concrete follow-ups that we actually intend to revisit.
 - Pooled Echo collection burst meshes/materials/shard buffers so pickup effects
   reset resident resources instead of allocating and disposing burst geometry
   during gameplay.
+- Added the first wide race-track ribbon inside the arena, with glowing
+  containment walls, off-track dimming, and Echo placement moved onto the course.

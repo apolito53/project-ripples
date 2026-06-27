@@ -31,6 +31,7 @@ import {
   isQualityId,
   type QualityPreset
 } from "./qualityPresets";
+import { RaceTrack } from "./raceTrack";
 import { RippleField } from "./rippleField";
 import { RippleSourceStore, type RippleSourceOptions } from "./rippleSources";
 import { SKYBOX_OPTIONS, SkyboxManager, isSkyboxId } from "./skybox";
@@ -98,6 +99,7 @@ const ECHO_ZONE_RADIUS = 3.05;
 const ECHO_ZONE_TRIGGER_RADIUS = 2.45;
 const ECHO_ZONE_MIN_PLAYER_DISTANCE = 11;
 const ECHO_ZONE_MIN_ZONE_DISTANCE = 12;
+const ECHO_ZONE_TRACK_SEED_FRACTIONS = [0.08, 0.39, 0.68] as const;
 const ECHO_ZONE_BURST_STRENGTH = 0.76;
 const ECHO_ZONE_DISC_BURST_RADIUS = 8.6;
 const ECHO_DISC_BURST_PARTICLE_CAP_RATIO = 0.16;
@@ -251,6 +253,7 @@ composer.addPass(outputPass);
 const rippleSources = new RippleSourceStore();
 const echoZones = new EchoZoneField(scene);
 const wakeField = new WakeField(renderer, preset);
+const raceTrack = new RaceTrack(scene, preset.fieldRadius, settings.arenaRadiusMeters);
 const rippleField = new RippleField(scene, preset, wakeField.supportsVertexTextureSampling());
 let particles = new ParticleVeil(scene, preset.particleBudget, getPixelRatio());
 let pulseLights = new PulseLightRig(scene, preset.pulseLightCount);
@@ -263,6 +266,7 @@ const player = new PlayerRig({
   camera,
   sampleHeight: sampleFieldHeight,
   getBoundaryRadius: () => Math.max(0, preset.fieldRadius - PLAYER_BOUNDARY_PADDING),
+  playAreaConstraint: raceTrack,
   onPulse: (position) => spawnPulse(position, 0.45),
   onQuietPointerUnlock: () => {
     suppressNextPointerUnlockMenu = true;
@@ -273,6 +277,9 @@ const player = new PlayerRig({
   surfaceGrip: settings.surfaceGrip,
   isInputEnabled: areSceneInputsEnabled
 });
+const playerStart = raceTrack.samplePointAt(0);
+player.position.set(playerStart.x, sampleFieldHeight(playerStart.x, playerStart.z) + 1.75, playerStart.z);
+player.setFacingYaw(raceTrack.getFacingYawAt(0), true);
 previousWakePlayerPosition.copy(player.position);
 
 createLighting();
@@ -310,6 +317,7 @@ function animate(): void {
     particles.spawnAura(player.position, delta, playerSpeed / 18);
     particles.spawnWake(player.position, (playerSpeed / 18) * playerGroundContact, player.velocity);
   }
+  raceTrack.update(time);
   arenaBarrier.update(time);
   updateSceneLightSourceVisuals(time);
   echoZones.update(time);
@@ -355,7 +363,9 @@ function animate(): void {
     playerSpeed,
     playerGroundContact,
     wakeField.getTexture(),
-    wakeMetrics
+    wakeMetrics,
+    raceTrack.getMaskTexture(),
+    preset.fieldRadius
   );
   if (effectiveBloomStrength > 0.02) {
     composer.render();
@@ -414,13 +424,12 @@ function triggerLandingRipple(event: PlayerJumpEvent): void {
 }
 
 function seedEchoZones(time: number): void {
-  const startingAngles = [Math.PI * 0.23, Math.PI * 0.92, -Math.PI * 0.46];
-  const startingRadii = [15, 27, 38];
-
   for (let index = 0; index < ECHO_ZONE_INITIAL_COUNT; index += 1) {
-    const angle = startingAngles[index] ?? Math.random() * Math.PI * 2;
-    const radius = startingRadii[index] ?? ECHO_ZONE_MIN_PLAYER_DISTANCE + index * ECHO_ZONE_MIN_ZONE_DISTANCE;
-    if (!spawnEchoZoneAtPolar(time, angle, radius)) {
+    const fraction = ECHO_ZONE_TRACK_SEED_FRACTIONS[index] ?? index / ECHO_ZONE_INITIAL_COUNT;
+    const lateralOffsetMeters = index === 1
+      ? raceTrack.getSafeEchoJitterMeters(ECHO_ZONE_RADIUS) * 0.34
+      : -raceTrack.getSafeEchoJitterMeters(ECHO_ZONE_RADIUS) * 0.22;
+    if (!spawnEchoZoneAtTrackFraction(time, fraction, lateralOffsetMeters)) {
       spawnEchoZone(time);
     }
   }
@@ -445,17 +454,8 @@ function spawnEchoZone(time: number): boolean {
   return true;
 }
 
-function spawnEchoZoneAtPolar(time: number, angle: number, radius: number): boolean {
-  const maxRadius = Math.max(
-    ECHO_ZONE_MIN_PLAYER_DISTANCE + 1,
-    preset.fieldRadius - PLAYER_BOUNDARY_PADDING - ECHO_ZONE_RADIUS
-  );
-  const clampedRadius = THREE.MathUtils.clamp(radius, ECHO_ZONE_MIN_PLAYER_DISTANCE, maxRadius);
-  const position = new THREE.Vector3(
-    Math.cos(angle) * clampedRadius,
-    0,
-    Math.sin(angle) * clampedRadius
-  );
+function spawnEchoZoneAtTrackFraction(time: number, fraction: number, lateralOffsetMeters: number): boolean {
+  const position = raceTrack.samplePointAt(fraction, lateralOffsetMeters);
   if (!echoZones.isPositionClear(position, ECHO_ZONE_MIN_ZONE_DISTANCE)) return false;
 
   position.y = sampleFieldHeight(position.x, position.z) + 0.16;
@@ -473,19 +473,12 @@ function addEchoZoneAtPosition(position: THREE.Vector3, time: number): void {
 }
 
 function createEchoZonePosition(): THREE.Vector3 | null {
-  const maxRadius = Math.max(
-    ECHO_ZONE_MIN_PLAYER_DISTANCE + 1,
-    preset.fieldRadius - PLAYER_BOUNDARY_PADDING - ECHO_ZONE_RADIUS
-  );
+  const maxJitterMeters = raceTrack.getSafeEchoJitterMeters(ECHO_ZONE_RADIUS);
 
   for (let attempt = 0; attempt < ECHO_ZONE_SPAWN_ATTEMPTS; attempt += 1) {
-    const angle = Math.random() * Math.PI * 2;
-    const radius = ECHO_ZONE_MIN_PLAYER_DISTANCE + Math.random() * (maxRadius - ECHO_ZONE_MIN_PLAYER_DISTANCE);
-    const position = new THREE.Vector3(
-      Math.cos(angle) * radius,
-      0,
-      Math.sin(angle) * radius
-    );
+    const fraction = Math.random();
+    const lateralOffsetMeters = (Math.random() * 2 - 1) * maxJitterMeters;
+    const position = raceTrack.samplePointAt(fraction, lateralOffsetMeters);
     const playerDistance = Math.hypot(position.x - player.position.x, position.z - player.position.z);
     if (playerDistance < ECHO_ZONE_MIN_PLAYER_DISTANCE) continue;
     if (!echoZones.isPositionClear(position, ECHO_ZONE_MIN_ZONE_DISTANCE)) continue;
@@ -494,6 +487,11 @@ function createEchoZonePosition(): THREE.Vector3 | null {
     return position;
   }
 
+  debugEvent("track.echoPlacement", "Failed to find a clear Echo position on the race track", {
+    attempts: ECHO_ZONE_SPAWN_ATTEMPTS,
+    activeEchoes: echoZones.getActiveCount(),
+    trackWidthMeters: roundMetric(raceTrack.getTrackWidthMeters())
+  }, "warn");
   return null;
 }
 
@@ -1053,6 +1051,7 @@ function cancelScheduledFieldRebuild(): void {
 
 function rebuildFieldGeometry(nextPreset: QualityPreset): void {
   const rebuildStartedAt = performance.now();
+  raceTrack.setArena(nextPreset.fieldRadius, settings.arenaRadiusMeters, "field-rebuild");
   rippleField.rebuild(nextPreset);
   wakeField.reset("field-rebuild");
   updateStageFloor(nextPreset);

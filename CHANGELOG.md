@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+## 0.4.0-ALPHA - 2026-06-27
+
+### Added
+
+- Added the first racing-game layer: a wide hardcoded sweeping loop inside the
+  arena with bright glowing translucent energy-wall edges, track-surface
+  highlighting, outside-track tile dimming, and sparse `track.*` diagnostics.
+
+### Changed
+
+- Routed player containment through an optional play-area constraint so the new
+  track clamps movement with slide-and-speed-bleed behavior while the circular
+  arena clamp remains the fallback boundary.
+- Spawned the player on a non-crossing centripetal track spline and aligned
+  initial facing to the course so the first frame starts in the racing space.
+- Tuned the prototype track so the sampled centerline and both wide curtain
+  edges avoid self-intersection at every supported arena radius.
+- Moved Echo seeding and random Echo placement onto the race track so
+  collectibles stay reachable inside the playable course.
+- Bumped package metadata, README, codebase index, and visible menu version text
+  to `v0.4.0-ALPHA`.
+
 ## 0.3.20-ALPHA - 2026-06-26
 
 ### Added

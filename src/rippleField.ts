@@ -36,6 +36,9 @@ type RippleShaderUniforms = {
   readonly uWakeFieldRadius: Uniform<number>;
   readonly uWakeStrength: Uniform<number>;
   readonly uWakeTextureEncoding: Uniform<number>;
+  readonly uTrackTexture: Uniform<THREE.Texture>;
+  readonly uTrackFieldRadius: Uniform<number>;
+  readonly uTrackStrength: Uniform<number>;
   readonly uRippleCount: Uniform<number>;
   readonly uRipples: Uniform<THREE.Vector4[]>;
   readonly uRippleMetadata: Uniform<THREE.Vector4[]>;
@@ -51,6 +54,7 @@ type RippleShader = {
 export class RippleField {
   readonly object = new THREE.Group();
   private readonly noOpWakeTexture = createNoOpWakeTexture();
+  private readonly noOpTrackTexture = createNoOpTrackTexture();
   private readonly rippleUniforms = Array.from(
     { length: MAX_SHADER_RIPPLE_SOURCES },
     () => new THREE.Vector4(0, 0, -999, 0)
@@ -152,7 +156,9 @@ export class RippleField {
     playerSpeed: number,
     playerGroundContact: number,
     wakeTexture: THREE.Texture,
-    wakeMetrics: WakeFieldMetrics
+    wakeMetrics: WakeFieldMetrics,
+    trackTexture: THREE.Texture,
+    trackFieldRadius: number
   ): void {
     if (!this.capShader) return;
 
@@ -178,6 +184,8 @@ export class RippleField {
       playerGroundContact,
       wakeTexture,
       wakeMetrics,
+      trackTexture,
+      trackFieldRadius,
       basePropagationSpeed,
       activeCount
     );
@@ -198,6 +206,7 @@ export class RippleField {
   dispose(): void {
     this.disposeMesh();
     this.noOpWakeTexture.dispose();
+    this.noOpTrackTexture.dispose();
     this.object.removeFromParent();
   }
 
@@ -257,6 +266,9 @@ export class RippleField {
       shader.uniforms.uWakeFieldRadius = { value: 92 };
       shader.uniforms.uWakeStrength = { value: 0 };
       shader.uniforms.uWakeTextureEncoding = { value: 1 };
+      shader.uniforms.uTrackTexture = { value: this.noOpTrackTexture };
+      shader.uniforms.uTrackFieldRadius = { value: 92 };
+      shader.uniforms.uTrackStrength = { value: 0 };
       shader.uniforms.uRippleCount = { value: 0 };
       shader.uniforms.uRipples = { value: this.rippleUniforms };
       shader.uniforms.uRippleMetadata = { value: this.rippleMetadataUniforms };
@@ -282,6 +294,9 @@ export class RippleField {
           uniform float uWakeFieldRadius;
           uniform float uWakeStrength;
           uniform float uWakeTextureEncoding;
+          uniform sampler2D uTrackTexture;
+          uniform float uTrackFieldRadius;
+          uniform float uTrackStrength;
           uniform int uRippleCount;
           uniform vec4 uRipples[${MAX_SHADER_RIPPLE_SOURCES}];
           uniform vec4 uRippleMetadata[${MAX_SHADER_RIPPLE_SOURCES}];
@@ -292,6 +307,7 @@ export class RippleField {
           varying float vRippleGlow;
           varying float vCrestGlow;
           varying float vHeightWhiteness;
+          varying vec2 vCellPosition;
           varying vec3 vRippleTint;
 
           float rippleRing(vec4 ripple, vec4 metadata, float lifetime, vec2 cellPosition) {
@@ -347,6 +363,7 @@ export class RippleField {
           "#include <begin_vertex>",
           `vec3 transformed = vec3(position);
           vec2 cellPosition = instanceFieldPosition.xz;
+          vCellPosition = cellPosition;
           vec2 fromPlayer = cellPosition - uPlayerPosition.xz;
           float playerDistance = length(fromPlayer);
           float playerContact = clamp(uPlayerContact, 0.0, 1.0);
@@ -422,28 +439,50 @@ export class RippleField {
           "#include <common>",
           `#include <common>
           uniform float uBloomMood;
+          uniform sampler2D uTrackTexture;
+          uniform float uTrackFieldRadius;
+          uniform float uTrackStrength;
           varying float vRippleGlow;
           varying float vCrestGlow;
           varying float vHeightWhiteness;
+          varying vec2 vCellPosition;
           varying vec3 vRippleTint;`
         )
         .replace(
           "#include <color_fragment>",
           `#include <color_fragment>
+          vec2 trackColorUv = vCellPosition / max(0.001, uTrackFieldRadius * 2.0) + vec2(0.5);
+          vec4 trackColorSample = texture2D(uTrackTexture, clamp(trackColorUv, vec2(0.0), vec2(1.0)));
+          float trackColorActive = clamp(uTrackStrength, 0.0, 1.0);
+          float trackColorBody = mix(1.0, trackColorSample.r, trackColorActive);
+          float trackColorEdge = trackColorSample.g * trackColorActive;
+          float trackColorCenter = trackColorSample.b * trackColorActive;
+          float offTrackDim = mix(0.035, 1.1, smoothstep(0.08, 0.78, trackColorBody));
           diffuseColor.rgb *= vRippleTint * (0.62 + vRippleGlow * 0.05 + vHeightWhiteness * 0.07 + vCrestGlow * 0.2);
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.78, 1.0, 0.94), vCrestGlow * 0.26);`
+          diffuseColor.rgb *= offTrackDim;
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.78, 1.0, 0.94), vCrestGlow * 0.26);
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.1, 0.82, 0.9), trackColorSample.r * trackColorActive * 0.36);
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.82, 1.0, 0.94), trackColorEdge * 0.74 + trackColorCenter * 0.16);`
         )
         .replace(
           "#include <emissivemap_fragment>",
           `#include <emissivemap_fragment>
+          vec2 trackGlowUv = vCellPosition / max(0.001, uTrackFieldRadius * 2.0) + vec2(0.5);
+          vec4 trackGlowSample = texture2D(uTrackTexture, clamp(trackGlowUv, vec2(0.0), vec2(1.0)));
+          float trackGlowActive = clamp(uTrackStrength, 0.0, 1.0);
+          float trackGlowBody = trackGlowSample.r * trackGlowActive;
+          float trackGlowEdge = trackGlowSample.g * trackGlowActive;
+          float trackGlowCenter = trackGlowSample.b * trackGlowActive;
           vec3 crestLight = mix(vRippleTint, vec3(0.7, 1.0, 0.9), 0.55);
           totalEmissiveRadiance += vRippleTint * vRippleGlow * (0.025 + uBloomMood * 0.055);
-          totalEmissiveRadiance += crestLight * vCrestGlow * (0.12 + uBloomMood * 0.32);`
+          totalEmissiveRadiance += crestLight * vCrestGlow * (0.12 + uBloomMood * 0.32);
+          totalEmissiveRadiance += vec3(0.06, 0.74, 0.72) * trackGlowBody * (0.04 + uBloomMood * 0.08);
+          totalEmissiveRadiance += vec3(0.62, 1.0, 0.92) * (trackGlowEdge * 0.68 + trackGlowCenter * 0.08) * (0.44 + uBloomMood);`
         );
     };
 
     material.customProgramCacheKey = () =>
-      `ripple-field-hex-cap-shader-v3-${this.supportsWakeTextureSampling ? "wake" : "no-wake"}`;
+      `ripple-field-hex-cap-shader-v4-${this.supportsWakeTextureSampling ? "wake" : "no-wake"}`;
     return material;
   }
 
@@ -458,6 +497,8 @@ export class RippleField {
     playerGroundContact: number,
     wakeTexture: THREE.Texture,
     wakeMetrics: WakeFieldMetrics,
+    trackTexture: THREE.Texture,
+    trackFieldRadius: number,
     basePropagationSpeed: number,
     activeCount: number
   ): void {
@@ -479,6 +520,9 @@ export class RippleField {
     shader.uniforms.uWakeFieldRadius.value = preset.fieldRadius;
     shader.uniforms.uWakeStrength.value = wakeMetrics.mode === "noop" ? 0 : 1;
     shader.uniforms.uWakeTextureEncoding.value = wakeMetrics.mode === "gpu-half-float" ? 0 : 1;
+    shader.uniforms.uTrackTexture.value = trackTexture;
+    shader.uniforms.uTrackFieldRadius.value = trackFieldRadius;
+    shader.uniforms.uTrackStrength.value = 1;
     shader.uniforms.uRippleCount.value = activeCount;
   }
 
@@ -523,6 +567,13 @@ function createNoOpWakeTexture(): THREE.DataTexture {
   // this a harmless placeholder for no-op and startup frames.
   const texture = new THREE.DataTexture(new Uint8Array([128, 128, 0, 255]), 1, 1, THREE.RGBAFormat);
   texture.name = "No-op field wake texture";
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function createNoOpTrackTexture(): THREE.DataTexture {
+  const texture = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1, THREE.RGBAFormat);
+  texture.name = "No-op race track texture";
   texture.needsUpdate = true;
   return texture;
 }
