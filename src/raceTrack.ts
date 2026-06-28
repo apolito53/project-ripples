@@ -95,12 +95,30 @@ export class RaceTrack implements PlayAreaConstraint {
     this.wallUniforms.uTime.value = time;
   }
 
+  setVisible(visible: boolean): void {
+    // Arena mode keeps the track model loaded so switching modes stays cheap,
+    // but the walls and helpers should not render or receive accidental clicks.
+    this.object.visible = visible;
+  }
+
   getMaskTexture(): THREE.Texture {
     return this.maskTexture;
   }
 
   getTrackWidthMeters(): number {
     return this.trackWidthMeters;
+  }
+
+  getSceneUnitsPerMeter(): number {
+    return this.sceneUnitsPerMeter;
+  }
+
+  containsPoint(x: number, z: number, marginSceneUnits = 0): boolean {
+    // RippleField uses this during rebuild to skip hexes that can never be seen
+    // in Track mode. The extra margin is deliberately caller-controlled so the
+    // gameplay ribbon and the visual safety skirt can evolve separately.
+    const nearest = this.findNearestSample(x, z);
+    return nearest.lateralDistance <= this.trackHalfWidthSceneUnits + Math.max(0, marginSceneUnits);
   }
 
   /**

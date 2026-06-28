@@ -51,6 +51,19 @@ type RippleShader = {
   fragmentShader: string;
 };
 
+export type FieldPlacementClipper = {
+  readonly label: string;
+  containsPoint(x: number, z: number): boolean;
+};
+
+export type RippleFieldBuildStats = {
+  readonly mode: "full" | "clipped";
+  readonly clipperLabel: string;
+  readonly fullHexCount: number;
+  readonly culledHexCount: number;
+  readonly instanceCount: number;
+};
+
 export class RippleField {
   readonly object = new THREE.Group();
   private readonly noOpWakeTexture = createNoOpWakeTexture();
@@ -71,6 +84,13 @@ export class RippleField {
   private instanceCount = 0;
   private renderedRippleSourceCount = 0;
   private renderedRippleSourceLimit = MAX_SHADER_RIPPLE_SOURCES;
+  private buildStats: RippleFieldBuildStats = {
+    mode: "full",
+    clipperLabel: "none",
+    fullHexCount: 0,
+    culledHexCount: 0,
+    instanceCount: 0
+  };
 
   constructor(
     scene: THREE.Scene,
@@ -82,7 +102,7 @@ export class RippleField {
     this.rebuild(preset);
   }
 
-  rebuild(preset: QualityPreset): void {
+  rebuild(preset: QualityPreset, placementClipper: FieldPlacementClipper | null = null): void {
     this.disposeMesh();
     this.capShader = null;
 
@@ -100,10 +120,14 @@ export class RippleField {
     const halfRowCount = Math.ceil(radius / rowSpacing) + 1;
     const placementRadius = radius + spacing * 0.5;
     const placementRadiusSquared = placementRadius * placementRadius;
+    let fullHexCount = 0;
 
     // The arena floor is circular, but the cells live on a flat-top hex lattice.
     // The footprint calibration below makes Meltdown read as an interlocked
-    // honeycomb while preserving the old stress-test density budget.
+    // honeycomb while preserving the old stress-test density budget. Track mode
+    // adds an optional CPU clipper after the circular arena check: that keeps
+    // Arena mode unchanged while letting the race prototype skip off-track
+    // instances before the GPU ever sees them.
     for (let iz = -halfRowCount; iz <= halfRowCount; iz += 1) {
       const rowOffset = Math.abs(iz % 2) === 1 ? spacing * 0.5 : 0;
       const z = iz * rowSpacing;
@@ -111,6 +135,8 @@ export class RippleField {
       for (let ix = -halfColumnCount; ix <= halfColumnCount; ix += 1) {
         const x = ix * spacing + rowOffset;
         if (x * x + z * z > placementRadiusSquared) continue;
+        fullHexCount += 1;
+        if (placementClipper && !placementClipper.containsPoint(x, z)) continue;
 
         const y = sampleFieldHeight(x, z);
         const terrainTint = createTerrainTint(x, y, z);
@@ -122,6 +148,13 @@ export class RippleField {
     }
 
     this.instanceCount = positions.length / 3;
+    this.buildStats = {
+      mode: placementClipper ? "clipped" : "full",
+      clipperLabel: placementClipper?.label ?? "none",
+      fullHexCount,
+      culledHexCount: Math.max(0, fullHexCount - this.instanceCount),
+      instanceCount: this.instanceCount
+    };
     this.capMesh = new THREE.InstancedMesh(this.capGeometry, this.capMaterial, this.instanceCount);
     this.capMesh.name = `${preset.label} ripple hex caps`;
     this.capMesh.frustumCulled = false;
@@ -158,7 +191,8 @@ export class RippleField {
     wakeTexture: THREE.Texture,
     wakeMetrics: WakeFieldMetrics,
     trackTexture: THREE.Texture,
-    trackFieldRadius: number
+    trackFieldRadius: number,
+    trackStrength: number
   ): void {
     if (!this.capShader) return;
 
@@ -186,6 +220,7 @@ export class RippleField {
       wakeMetrics,
       trackTexture,
       trackFieldRadius,
+      trackStrength,
       basePropagationSpeed,
       activeCount
     );
@@ -201,6 +236,14 @@ export class RippleField {
 
   getRenderedRippleSourceLimit(): number {
     return this.renderedRippleSourceLimit;
+  }
+
+  getBuildStats(): RippleFieldBuildStats {
+    return this.buildStats;
+  }
+
+  getNoOpTrackTexture(): THREE.Texture {
+    return this.noOpTrackTexture;
   }
 
   dispose(): void {
@@ -499,6 +542,7 @@ export class RippleField {
     wakeMetrics: WakeFieldMetrics,
     trackTexture: THREE.Texture,
     trackFieldRadius: number,
+    trackStrength: number,
     basePropagationSpeed: number,
     activeCount: number
   ): void {
@@ -522,7 +566,7 @@ export class RippleField {
     shader.uniforms.uWakeTextureEncoding.value = wakeMetrics.mode === "gpu-half-float" ? 0 : 1;
     shader.uniforms.uTrackTexture.value = trackTexture;
     shader.uniforms.uTrackFieldRadius.value = trackFieldRadius;
-    shader.uniforms.uTrackStrength.value = 1;
+    shader.uniforms.uTrackStrength.value = THREE.MathUtils.clamp(trackStrength, 0, 1);
     shader.uniforms.uRippleCount.value = activeCount;
   }
 
@@ -538,6 +582,13 @@ export class RippleField {
     this.capMaterial = null;
     this.capShader = null;
     this.instanceCount = 0;
+    this.buildStats = {
+      mode: "full",
+      clipperLabel: "none",
+      fullHexCount: 0,
+      culledHexCount: 0,
+      instanceCount: 0
+    };
     this.renderedRippleSourceCount = 0;
     this.renderedRippleSourceLimit = MAX_SHADER_RIPPLE_SOURCES;
   }

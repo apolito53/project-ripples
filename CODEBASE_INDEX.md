@@ -9,7 +9,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Vite + strict TypeScript browser app.
 - Three.js renderer, postprocessing composer, Unreal bloom pass, shader-customized
   `InstancedMesh`, additive `Points`, and dynamic lights.
-- Current alpha baseline: `v0.4.0-ALPHA`; keep release tags in alpha prerelease
+- Current alpha baseline: `v0.5.0-ALPHA`; keep release tags in alpha prerelease
   territory until the lab graduates from prototype status.
 - Dedicated dev port `5183`; preview port `4183`.
 
@@ -28,11 +28,11 @@ Purpose: compact map for the standalone ripple-field visual lab.
 
 ## Fast Lookup
 
-- HTML shell, pause menu, changelog dialog, performance overlay, and tuning
-  controls: `index.html`
+- HTML shell, startup mode menu, pause menu, changelog dialog, performance
+  overlay, and tuning controls: `index.html`
 - Visual styling and overlay layout: `src/styles.css`
-- App bootstrap, Three.js scene, render loop, quality wiring, and postprocessing:
-  `src/main.ts`
+- App bootstrap, startup `Arena`/`Track` mode selection, session reset flow,
+  Three.js scene, render loop, quality wiring, and postprocessing: `src/main.ts`
 - Selectable camera-following sky dome, 8K/4K generated skybox texture loading,
   horizon framing, and per-theme fog tuning: `src/skybox.ts` plus
   `public/skyboxes/`
@@ -49,10 +49,10 @@ Purpose: compact map for the standalone ripple-field visual lab.
   180-degree vertical camera orbit, quiet mouse-release unlocks, and camera
   follow behavior:
   `src/controls.ts`
-- Circular shader-displaced instanced hex field, including sampled GPU movement
-  wake displacement, Meltdown-calibrated honeycomb orientation, lit hex caps,
-  generated race-track mask tinting, animated-height cell tinting, and bounded
-  crest-specific glow:
+- Circular shader-displaced instanced hex field, including optional track-mode
+  placement clipping, sampled GPU movement wake displacement,
+  Meltdown-calibrated honeycomb orientation, lit hex caps, generated race-track
+  mask tinting, animated-height cell tinting, and bounded crest-specific glow:
   `src/rippleField.ts`
 - Ping-pong GPU movement wake heightfield, absorbing edge band, residual-wave
   damping, fallback texture, quality-sized render targets, and `wake.*`
@@ -60,7 +60,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Visual-only smooth glowing arena-edge gradient barrier: `src/arenaBarrier.ts`
 - Wide prototype race-track loop, non-crossing ribbon and wall-edge sampling,
   ribbon collision, bright glowing edge walls, generated track mask texture,
-  track Echo placement helpers, and `track.*` diagnostics: `src/raceTrack.ts`
+  track Echo placement helpers, field-cell containment queries, and `track.*`
+  diagnostics: `src/raceTrack.ts`
 - Visible cyan/magenta spotlight fixtures, stage floor, core scene lighting,
   active hover-pod avatar visuals, and shelved legacy glow-orb avatar:
   `src/main.ts`
@@ -95,14 +96,15 @@ Purpose: compact map for the standalone ripple-field visual lab.
 
 1. `index.html` loads `src/main.ts`.
 2. `main.ts` creates the renderer, scene, camera, bloom composer, race track,
-   field, particles, pulse lights, and hover-pod avatar.
+   field, particles, pulse lights, and hover-pod avatar, then holds gameplay on
+   a startup menu until the user chooses `Arena` or `Track`.
 3. `SkyboxManager` applies the selected generated panorama to a camera-following
    UV sky dome, chooses 8K textures or 4K fallbacks from GPU texture caps, and
    applies matching fog/clear color so the arena sits inside a distant sci-fi
    horizon instead of a pure void.
 4. `PlayerRig` updates momentum-based planar movement, jump height, surface
-   ground-contact strength, track-ribbon containment, and camera follow every
-   frame.
+   ground-contact strength, optional track-ribbon containment, circular arena
+   fallback clamping, and camera follow every frame.
 5. Touch-button pulses add cooldown-gated analytic pulse sources, while `Space`
    jumps and emits smaller takeoff plus stronger landing ripples. Desktop mouse
    input uses hold-to-look pointer lock: left-drag orbits only the camera, while
@@ -123,10 +125,13 @@ Purpose: compact map for the standalone ripple-field visual lab.
 6. `RaceTrack` keeps the first racing-course prototype alive: a wide closed
    sweeping non-crossing loop scaled to the active arena radius,
    slide-and-speed-bleed wall containment, bright glowing energy-wall meshes,
-   and a generated mask texture that the field shader samples for surface
-   highlight and heavy outside-track dimming.
+   a generated mask texture that the field shader samples for surface highlight
+   and heavy outside-track dimming, and a field-cell containment query used only
+   by Track mode.
 7. `RippleField` builds hex instances inside the circular arena using the
-   active quality, hex-size, and arena-radius settings. Hex geometry is rotated
+   active quality, hex-size, and arena-radius settings. In Track mode it clips
+   placement to the course ribbon plus a safety skirt; in Arena mode it keeps
+   the full circular sandbox field. Hex geometry is rotated
    to match the staggered lattice, and Meltdown's visible footprint is calibrated
    to read as an interlocked honeycomb while preserving its previous density.
    The field then sends active pulse source/metadata/lifetime uniforms plus the
@@ -144,14 +149,16 @@ Purpose: compact map for the standalone ripple-field visual lab.
    disc bursts, and velocity-shaped wake-tail motes.
 11. `PulseLightRig` assigns recent pulses and collected Echo detonations to
    point lights.
-12. The HUD reports FPS, instance counts, base propagation speed, voxel size,
+12. The HUD reports active mode, FPS, instance counts, culled track hexes when
+    applicable, base propagation speed, voxel size,
     arena radius, live Echo count, active pulse count, and newest pulse radius.
     A denser `F2`/pause-menu performance overlay reports frame/update/render
     timing, active particles versus resident budget, rendered pulse-source
     pressure, wake texture mode/pass cost, renderer draw stats, pixel ratio,
     bloom state, and quality.
-13. Esc or the hamburger button opens the centered pause menu, which owns
-    tuning controls, a Resume action, and a version changelog button.
+13. Esc or the hamburger button opens the centered pause menu after a mode has
+    started. The pause menu owns tuning controls, Resume, Exit To Main Menu, and
+    a version changelog button.
     Hidden walk/sprint speed rows remain wired for future tuning, but are not
     currently exposed in the visible menu.
 14. The scene renders through bloom when bloom strength is above zero.

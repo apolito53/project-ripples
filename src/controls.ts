@@ -5,7 +5,7 @@ export type PlayerRigOptions = {
   readonly camera: THREE.PerspectiveCamera;
   readonly sampleHeight: (x: number, z: number) => number;
   readonly getBoundaryRadius: () => number;
-  readonly playAreaConstraint?: PlayAreaConstraint;
+  readonly playAreaConstraint?: PlayAreaConstraint | null;
   readonly onPulse: (position: THREE.Vector3) => void;
   readonly onQuietPointerUnlock?: () => void;
   readonly onJump?: (event: PlayerJumpEvent) => void;
@@ -137,7 +137,7 @@ export class PlayerRig {
   private readonly camera: THREE.PerspectiveCamera;
   private readonly sampleHeight: (x: number, z: number) => number;
   private readonly getBoundaryRadius: () => number;
-  private readonly playAreaConstraint?: PlayAreaConstraint;
+  private playAreaConstraint: PlayAreaConstraint | null = null;
   private readonly onPulse: (position: THREE.Vector3) => void;
   private readonly onQuietPointerUnlock: () => void;
   private readonly onJump: (event: PlayerJumpEvent) => void;
@@ -170,7 +170,7 @@ export class PlayerRig {
     this.camera = options.camera;
     this.sampleHeight = options.sampleHeight;
     this.getBoundaryRadius = options.getBoundaryRadius;
-    this.playAreaConstraint = options.playAreaConstraint;
+    this.playAreaConstraint = options.playAreaConstraint ?? null;
     this.onPulse = options.onPulse;
     this.onQuietPointerUnlock = options.onQuietPointerUnlock ?? (() => undefined);
     this.onJump = options.onJump ?? (() => undefined);
@@ -306,6 +306,30 @@ export class PlayerRig {
   setFacingYaw(yaw: number, alignCamera = false): void {
     this.playerYaw = yaw;
     if (alignCamera) this.cameraYaw = yaw;
+  }
+
+  setPlayAreaConstraint(playAreaConstraint: PlayAreaConstraint | null): void {
+    // The lab now has separate Arena and Track modes. Keep the movement rig
+    // ignorant of mode names; it only needs to know whether an external
+    // constraint owns collision, or whether it should use the circular fallback.
+    this.playAreaConstraint = playAreaConstraint;
+  }
+
+  resetForSession(position: THREE.Vector3, facingYaw: number): void {
+    // A mode switch is a fresh run, not a teleport with old acceleration,
+    // button holds, jump state, or pointer lock baggage attached.
+    this.keys.clear();
+    this.mobileMoveIntent.set(0, 0);
+    this.mobileLookIntent.set(0, 0);
+    this.releaseCameraDrag();
+    this.velocity.set(0, 0, 0);
+    this.jumpOffset = 0;
+    this.verticalVelocity = 0;
+    this.grounded = true;
+    this.jumpStartedAt = -Infinity;
+    this.position.copy(position);
+    this.setFacingYaw(facingYaw, true);
+    this.updateCamera(1);
   }
 
   getGroundContactStrength(): number {

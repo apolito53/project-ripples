@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+## 0.5.0-ALPHA - 2026-06-28
+
+### Added
+
+- Added a traditional startup main menu with separate `Arena` and `Track`
+  entries so the lab no longer drops straight into the live game world on load.
+- Added a mode-aware app state flow for `mainMenu`, `playing`, and `paused`,
+  including an in-game `Exit To Main Menu` action and a dev shortcut via
+  `?mode=arena` or `?mode=track`.
+- Added track-only hex field clipping. Track mode now builds only cells inside
+  the race ribbon plus a safety skirt, while Arena mode keeps the full circular
+  sandbox field.
+
+### Changed
+
+- Split player containment and Echo placement by mode: Track uses the course
+  walls and track-scoped Echo placement, while Arena uses the circular fallback
+  boundary and disc-wide Echo spawning.
+- Reset pulses, Echo zones, wake state, particles, pulse lights, player motion,
+  and spawn position whenever a mode starts or exits to the main menu.
+- Extended HUD, performance overlay, field rebuild diagnostics, and frame-hitch
+  payloads with active mode plus full/culled hex counts.
+- Bumped package metadata, README, codebase index, and visible menu version text
+  to `v0.5.0-ALPHA`.
+
 ## 0.4.0-ALPHA - 2026-06-27
 
 ### Added

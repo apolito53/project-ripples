@@ -8,6 +8,7 @@ import {
   PlayerRig,
   PLAYER_SPEED_LIMITS,
   SURFACE_GRIP_LIMITS,
+  type PlayAreaConstraint,
   type PlayerJumpEvent,
   getMinimumSprintSpeedMetersPerSecond,
   normalizePlayerSpeedSettings
@@ -32,7 +33,7 @@ import {
   type QualityPreset
 } from "./qualityPresets";
 import { RaceTrack } from "./raceTrack";
-import { RippleField } from "./rippleField";
+import { RippleField, type FieldPlacementClipper } from "./rippleField";
 import { RippleSourceStore, type RippleSourceOptions } from "./rippleSources";
 import { SKYBOX_OPTIONS, SkyboxManager, isSkyboxId } from "./skybox";
 import "./styles.css";
@@ -43,6 +44,11 @@ import changelogMarkdown from "../CHANGELOG.md?raw";
 import packageMetadata from "../package.json";
 
 const app = requireElement<HTMLElement>("#app");
+const mainMenu = requireElement<HTMLElement>("#main-menu");
+const startTrackButton = requireElement<HTMLButtonElement>("#start-track-button");
+const startArenaButton = requireElement<HTMLButtonElement>("#start-arena-button");
+const mainMenuVersionLink = requireElement<HTMLButtonElement>("#main-menu-version-link");
+const hud = requireElement<HTMLElement>("#hud");
 const statsLine = requireElement<HTMLElement>("#stats-line");
 const mediumLine = requireElement<HTMLElement>("#medium-line");
 const qualityBadge = requireElement<HTMLElement>("#quality-badge");
@@ -71,6 +77,7 @@ const menuToggle = requireElement<HTMLButtonElement>("#menu-toggle");
 const sceneMenuBackdrop = requireElement<HTMLDivElement>("#scene-menu-backdrop");
 const sceneMenu = requireElement<HTMLElement>("#scene-menu");
 const resumeButton = requireElement<HTMLButtonElement>("#resume-button");
+const exitToMainMenuButton = requireElement<HTMLButtonElement>("#exit-to-main-menu-button");
 const versionLink = requireElement<HTMLButtonElement>("#version-link");
 const changelogBackdrop = requireElement<HTMLDivElement>("#changelog-backdrop");
 const changelogDialog = requireElement<HTMLElement>("#changelog-dialog");
@@ -91,6 +98,8 @@ const perfWake = requireElement<HTMLElement>("#perf-wake");
 const perfRenderer = requireElement<HTMLElement>("#perf-renderer");
 const APP_VERSION = `v${packageMetadata.version}`;
 const PLAYER_BOUNDARY_PADDING = 1.1;
+const PLAYER_START_HEIGHT = 1.75;
+const TRACK_FIELD_SAFETY_SKIRT_METERS = 10;
 const ECHO_ZONE_MAX_ACTIVE = 5;
 const ECHO_ZONE_INITIAL_COUNT = 3;
 const ECHO_ZONE_SPAWN_ATTEMPTS = 24;
@@ -100,6 +109,11 @@ const ECHO_ZONE_TRIGGER_RADIUS = 2.45;
 const ECHO_ZONE_MIN_PLAYER_DISTANCE = 11;
 const ECHO_ZONE_MIN_ZONE_DISTANCE = 12;
 const ECHO_ZONE_TRACK_SEED_FRACTIONS = [0.08, 0.39, 0.68] as const;
+const ECHO_ZONE_ARENA_SEED_POLAR = [
+  { angle: 0.14, radius: 0.36 },
+  { angle: 0.52, radius: 0.46 },
+  { angle: 0.82, radius: 0.32 }
+] as const;
 const ECHO_ZONE_BURST_STRENGTH = 0.76;
 const ECHO_ZONE_DISC_BURST_RADIUS = 8.6;
 const ECHO_DISC_BURST_PARTICLE_CAP_RATIO = 0.16;
@@ -154,6 +168,9 @@ type PlayerAvatar = {
   readonly object: THREE.Group;
   update(delta: number, position: THREE.Vector3, movementSpeed: number, facingYaw: number): void;
 };
+
+type AppState = "mainMenu" | "playing" | "paused";
+type PlayModeId = "arena" | "track";
 
 type AvatarOrbitTrails = {
   readonly points: THREE.Points<THREE.BufferGeometry, THREE.ShaderMaterial>;
@@ -222,6 +239,8 @@ const previousWakePlayerPosition = new THREE.Vector3();
 const sceneLightSources: SceneLightSource[] = [];
 const mobileQuery = window.matchMedia("(pointer: coarse), (hover: none)");
 const activeTouchSticks = new Map<number, TouchStickState>();
+let appState: AppState = "mainMenu";
+let activePlayMode: PlayModeId | null = null;
 let menuVisible = false;
 let changelogVisible = false;
 let perfOverlayVisible = true;
@@ -254,6 +273,8 @@ const rippleSources = new RippleSourceStore();
 const echoZones = new EchoZoneField(scene);
 const wakeField = new WakeField(renderer, preset);
 const raceTrack = new RaceTrack(scene, preset.fieldRadius, settings.arenaRadiusMeters);
+raceTrack.setVisible(false);
+let raceTrackArenaSignature = `${preset.fieldRadius}:${settings.arenaRadiusMeters}`;
 const rippleField = new RippleField(scene, preset, wakeField.supportsVertexTextureSampling());
 let particles = new ParticleVeil(scene, preset.particleBudget, getPixelRatio());
 let pulseLights = new PulseLightRig(scene, preset.pulseLightCount);
@@ -266,7 +287,6 @@ const player = new PlayerRig({
   camera,
   sampleHeight: sampleFieldHeight,
   getBoundaryRadius: () => Math.max(0, preset.fieldRadius - PLAYER_BOUNDARY_PADDING),
-  playAreaConstraint: raceTrack,
   onPulse: (position) => spawnPulse(position, 0.45),
   onQuietPointerUnlock: () => {
     suppressNextPointerUnlockMenu = true;
@@ -277,9 +297,8 @@ const player = new PlayerRig({
   surfaceGrip: settings.surfaceGrip,
   isInputEnabled: areSceneInputsEnabled
 });
-const playerStart = raceTrack.samplePointAt(0);
-player.position.set(playerStart.x, sampleFieldHeight(playerStart.x, playerStart.z) + 1.75, playerStart.z);
-player.setFacingYaw(raceTrack.getFacingYawAt(0), true);
+const initialPlayerStart = createArenaSpawnPoint();
+player.resetForSession(initialPlayerStart.position, initialPlayerStart.facingYaw);
 previousWakePlayerPosition.copy(player.position);
 
 createLighting();
@@ -296,12 +315,176 @@ window.addEventListener("resize", resize);
 window.visualViewport?.addEventListener("resize", resize);
 window.visualViewport?.addEventListener("scroll", resize);
 
-// Seed a few pulses so the first rendered second already has motion and bloom.
-spawnPulse(new THREE.Vector3(0, sampleFieldHeight(0, 0) + 0.45, 0), 0.28);
-spawnPulse(new THREE.Vector3(9, sampleFieldHeight(9, -7) + 0.45, -7), 0.18);
-seedEchoZones(clock.elapsedTime);
+const requestedMode = readRequestedPlayMode();
+if (requestedMode) {
+  startGame(requestedMode, "query");
+} else {
+  showMainMenu(false, "startup");
+}
 
 renderer.setAnimationLoop(animate);
+
+function startGame(mode: PlayModeId, reason = "menu"): void {
+  activePlayMode = mode;
+  appState = "playing";
+  menuVisible = false;
+  changelogVisible = false;
+  setChangelogVisible(false, false);
+  sceneMenuBackdrop.hidden = true;
+  cancelScheduledFieldRebuild();
+  applyPlayMode(mode, reason);
+  updateAppChrome();
+
+  debugEvent("mode.select", "Started Ripple Field Lab play mode", {
+    mode,
+    reason,
+    quality: preset.id,
+    hexCount: rippleField.getInstanceCount(),
+    buildStats: rippleField.getBuildStats()
+  }, "info");
+}
+
+function showMainMenu(shouldFocus = true, reason = "exit"): void {
+  cancelScheduledFieldRebuild();
+  releaseTouchControls();
+  if (document.pointerLockElement === renderer.domElement) {
+    document.exitPointerLock();
+  }
+
+  activePlayMode = null;
+  appState = "mainMenu";
+  menuVisible = false;
+  resetRuntimeState("main-menu");
+  raceTrack.setVisible(false);
+  player.setPlayAreaConstraint(null);
+  const spawn = createArenaSpawnPoint();
+  player.resetForSession(spawn.position, spawn.facingYaw);
+  previousWakePlayerPosition.copy(player.position);
+  updateAppChrome();
+
+  debugEvent("mode.menu", "Returned to main menu", {
+    reason,
+    quality: preset.id
+  }, "info");
+
+  if (shouldFocus) startTrackButton.focus({ preventScroll: true });
+}
+
+function applyPlayMode(mode: PlayModeId, reason: string): void {
+  const spawn = mode === "track" ? createTrackSpawnPoint() : createArenaSpawnPoint();
+  const playAreaConstraint: PlayAreaConstraint | null = mode === "track" ? raceTrack : null;
+
+  raceTrack.setVisible(mode === "track");
+  player.setPlayAreaConstraint(playAreaConstraint);
+  player.resetForSession(spawn.position, spawn.facingYaw);
+  previousWakePlayerPosition.copy(player.position);
+  resetRuntimeState(`mode-${reason}`);
+  rebuildFieldGeometry(preset, `mode-${reason}`);
+  seedStartupPulses(clock.elapsedTime);
+  seedEchoZones(clock.elapsedTime);
+  updateStats(0, clock.elapsedTime);
+}
+
+function resetRuntimeState(reason: string): void {
+  rippleSources.clear();
+  echoZones.clear();
+  particles.clear();
+  pulseLights.clear();
+  wakeField.reset(reason);
+  nextEchoZoneAt = clock.elapsedTime + ECHO_ZONE_SPAWN_INTERVAL_SECONDS;
+  echoDebugFrameWatchUntil = -Infinity;
+  echoDebugLastFrameLogAt = -Infinity;
+  lastGlobalFrameHitchLogAt = clock.elapsedTime;
+}
+
+function seedStartupPulses(time: number): void {
+  // Put the first visible ripples inside the active playable area. These are
+  // visual wake-up beats, not gameplay state, so they are regenerated every
+  // time a mode starts.
+  if (activePlayMode === "track") {
+    const first = raceTrack.samplePointAt(0.02, -raceTrack.getSafeEchoJitterMeters(ECHO_ZONE_RADIUS) * 0.12);
+    const second = raceTrack.samplePointAt(0.11, raceTrack.getSafeEchoJitterMeters(ECHO_ZONE_RADIUS) * 0.18);
+    first.y = sampleFieldHeight(first.x, first.z) + 0.45;
+    second.y = sampleFieldHeight(second.x, second.z) + 0.45;
+    spawnPulse(first, 0.28, MANUAL_PULSE_OPTIONS, time);
+    spawnPulse(second, 0.18, MANUAL_PULSE_OPTIONS, time);
+    return;
+  }
+
+  spawnPulse(new THREE.Vector3(0, sampleFieldHeight(0, 0) + 0.45, 0), 0.28, MANUAL_PULSE_OPTIONS, time);
+  spawnPulse(new THREE.Vector3(9, sampleFieldHeight(9, -7) + 0.45, -7), 0.18, MANUAL_PULSE_OPTIONS, time);
+}
+
+function createTrackSpawnPoint(): { position: THREE.Vector3; facingYaw: number } {
+  syncRaceTrackArena(preset, "mode-track");
+  const point = raceTrack.samplePointAt(0);
+  return {
+    position: new THREE.Vector3(point.x, sampleFieldHeight(point.x, point.z) + PLAYER_START_HEIGHT, point.z),
+    facingYaw: raceTrack.getFacingYawAt(0)
+  };
+}
+
+function createArenaSpawnPoint(): { position: THREE.Vector3; facingYaw: number } {
+  return {
+    position: new THREE.Vector3(0, sampleFieldHeight(0, 0) + PLAYER_START_HEIGHT, 0),
+    facingYaw: Math.PI * 0.23
+  };
+}
+
+function readRequestedPlayMode(): PlayModeId | null {
+  const requestedMode = new URLSearchParams(window.location.search).get("mode");
+  return requestedMode === "arena" || requestedMode === "track" ? requestedMode : null;
+}
+
+function syncRaceTrackArena(nextPreset: QualityPreset, reason: string): void {
+  const signature = `${nextPreset.fieldRadius}:${settings.arenaRadiusMeters}`;
+  if (raceTrackArenaSignature === signature) return;
+
+  raceTrack.setArena(nextPreset.fieldRadius, settings.arenaRadiusMeters, reason);
+  raceTrackArenaSignature = signature;
+}
+
+function getPlayModeLabel(): string {
+  if (activePlayMode === "arena") return "Arena";
+  if (activePlayMode === "track") return "Track";
+  return "Menu";
+}
+
+function getActiveFieldPlacementClipper(): FieldPlacementClipper | null {
+  if (activePlayMode !== "track") return null;
+
+  const safetySkirtSceneUnits =
+    TRACK_FIELD_SAFETY_SKIRT_METERS * raceTrack.getSceneUnitsPerMeter() + preset.tileSpacing * 2;
+  return {
+    label: "race-track-ribbon",
+    containsPoint: (x, z) => raceTrack.containsPoint(x, z, safetySkirtSceneUnits)
+  };
+}
+
+function getActiveTrackTexture(): THREE.Texture {
+  return activePlayMode === "track" ? raceTrack.getMaskTexture() : rippleField.getNoOpTrackTexture();
+}
+
+function getActiveTrackStrength(): number {
+  return activePlayMode === "track" ? 1 : 0;
+}
+
+function updateAppChrome(): void {
+  const inGameplayShell = appState !== "mainMenu" && activePlayMode !== null;
+  mainMenu.hidden = appState !== "mainMenu";
+  hud.hidden = !inGameplayShell;
+  menuToggle.hidden = !inGameplayShell;
+  sceneMenuBackdrop.hidden = appState !== "paused";
+  document.body.classList.toggle("main-menu-open", appState === "mainMenu");
+  document.body.classList.toggle("menu-open", appState === "paused");
+  menuToggle.setAttribute("aria-expanded", String(appState === "paused"));
+  menuToggle.setAttribute("aria-label", appState === "paused" ? "Close pause menu" : "Open pause menu");
+  qualityBadge.textContent = inGameplayShell
+    ? `${getPlayModeLabel()} / ${preset.label}`
+    : preset.label;
+  updateMobileControlsVisibility();
+  setPerfOverlayVisible(perfOverlayVisible);
+}
 
 function animate(): void {
   const rawDelta = clock.getDelta();
@@ -309,6 +492,21 @@ function animate(): void {
   const time = clock.elapsedTime;
   lastRawDeltaMs = rawDelta * 1000;
   const frameStartedAt = performance.now();
+
+  if (appState === "mainMenu") {
+    // The title screen is a real app state. Render the scene shell behind the
+    // splash if it exists, but do not advance gameplay, Echo timers, pulse
+    // lifetimes, or wake simulation before the player chooses a mode.
+    renderer.info.reset();
+    const renderStartedAt = performance.now();
+    lastFrameUpdateMs = 0;
+    renderSceneFrame();
+    lastFrameRenderMs = performance.now() - renderStartedAt;
+    lastGlobalFrameHitchLogAt = time;
+    previousWakePlayerPosition.copy(player.position);
+    return;
+  }
+
   player.update(delta);
   const playerSpeed = player.getSpeed();
   const playerGroundContact = player.getGroundContactStrength();
@@ -364,19 +562,24 @@ function animate(): void {
     playerGroundContact,
     wakeField.getTexture(),
     wakeMetrics,
-    raceTrack.getMaskTexture(),
-    preset.fieldRadius
+    getActiveTrackTexture(),
+    preset.fieldRadius,
+    getActiveTrackStrength()
   );
-  if (effectiveBloomStrength > 0.02) {
-    composer.render();
-  } else {
-    renderer.render(scene, camera);
-  }
+  renderSceneFrame();
   lastFrameRenderMs = performance.now() - renderStartedAt;
   previousWakePlayerPosition.copy(player.position);
   updateStats(delta, time);
   logGlobalFrameHitch(time, delta, rawDelta, frameStartedAt);
   logEchoDetonationFrame(time, delta, frameStartedAt);
+}
+
+function renderSceneFrame(): void {
+  if (getEffectiveBloomStrength() > 0.02) {
+    composer.render();
+  } else {
+    renderer.render(scene, camera);
+  }
 }
 
 function spawnPulse(
@@ -424,6 +627,11 @@ function triggerLandingRipple(event: PlayerJumpEvent): void {
 }
 
 function seedEchoZones(time: number): void {
+  if (activePlayMode === "arena") {
+    seedArenaEchoZones(time);
+    return;
+  }
+
   for (let index = 0; index < ECHO_ZONE_INITIAL_COUNT; index += 1) {
     const fraction = ECHO_ZONE_TRACK_SEED_FRACTIONS[index] ?? index / ECHO_ZONE_INITIAL_COUNT;
     const lateralOffsetMeters = index === 1
@@ -432,6 +640,20 @@ function seedEchoZones(time: number): void {
     if (!spawnEchoZoneAtTrackFraction(time, fraction, lateralOffsetMeters)) {
       spawnEchoZone(time);
     }
+  }
+  nextEchoZoneAt = time + ECHO_ZONE_SPAWN_INTERVAL_SECONDS;
+}
+
+function seedArenaEchoZones(time: number): void {
+  for (let index = 0; index < ECHO_ZONE_INITIAL_COUNT; index += 1) {
+    const seed = ECHO_ZONE_ARENA_SEED_POLAR[index] ?? { angle: index / ECHO_ZONE_INITIAL_COUNT, radius: 0.4 };
+    const position = createArenaEchoSeedPosition(seed.angle, seed.radius);
+    if (!position || !echoZones.isPositionClear(position, ECHO_ZONE_MIN_ZONE_DISTANCE)) {
+      spawnEchoZone(time);
+      continue;
+    }
+
+    addEchoZoneAtPosition(position, time);
   }
   nextEchoZoneAt = time + ECHO_ZONE_SPAWN_INTERVAL_SECONDS;
 }
@@ -473,6 +695,10 @@ function addEchoZoneAtPosition(position: THREE.Vector3, time: number): void {
 }
 
 function createEchoZonePosition(): THREE.Vector3 | null {
+  if (activePlayMode === "arena") {
+    return createArenaEchoZonePosition();
+  }
+
   const maxJitterMeters = raceTrack.getSafeEchoJitterMeters(ECHO_ZONE_RADIUS);
 
   for (let attempt = 0; attempt < ECHO_ZONE_SPAWN_ATTEMPTS; attempt += 1) {
@@ -493,6 +719,51 @@ function createEchoZonePosition(): THREE.Vector3 | null {
     trackWidthMeters: roundMetric(raceTrack.getTrackWidthMeters())
   }, "warn");
   return null;
+}
+
+function createArenaEchoZonePosition(): THREE.Vector3 | null {
+  const maxSpawnRadius = Math.max(0, preset.fieldRadius - ECHO_ZONE_RADIUS - PLAYER_BOUNDARY_PADDING);
+
+  for (let attempt = 0; attempt < ECHO_ZONE_SPAWN_ATTEMPTS; attempt += 1) {
+    // sqrt keeps the distribution even across a disc instead of clustering at
+    // the center, which matters now that Arena mode is a real sandbox again.
+    const radius = Math.sqrt(Math.random()) * maxSpawnRadius;
+    const angle = Math.random() * Math.PI * 2;
+    const position = new THREE.Vector3(
+      Math.cos(angle) * radius,
+      0,
+      Math.sin(angle) * radius
+    );
+    const playerDistance = Math.hypot(position.x - player.position.x, position.z - player.position.z);
+    if (playerDistance < ECHO_ZONE_MIN_PLAYER_DISTANCE) continue;
+    if (!echoZones.isPositionClear(position, ECHO_ZONE_MIN_ZONE_DISTANCE)) continue;
+
+    position.y = sampleFieldHeight(position.x, position.z) + 0.16;
+    return position;
+  }
+
+  debugEvent("arena.echoPlacement", "Failed to find a clear Echo position in the arena", {
+    attempts: ECHO_ZONE_SPAWN_ATTEMPTS,
+    activeEchoes: echoZones.getActiveCount(),
+    arenaRadiusMeters: roundMetric(settings.arenaRadiusMeters)
+  }, "warn");
+  return null;
+}
+
+function createArenaEchoSeedPosition(angleFraction: number, radiusFraction: number): THREE.Vector3 | null {
+  const maxSpawnRadius = Math.max(0, preset.fieldRadius - ECHO_ZONE_RADIUS - PLAYER_BOUNDARY_PADDING);
+  const radius = THREE.MathUtils.clamp(radiusFraction, 0, 1) * maxSpawnRadius;
+  const angle = angleFraction * Math.PI * 2;
+  const position = new THREE.Vector3(
+    Math.cos(angle) * radius,
+    0,
+    Math.sin(angle) * radius
+  );
+  const playerDistance = Math.hypot(position.x - player.position.x, position.z - player.position.z);
+  if (playerDistance < ECHO_ZONE_MIN_PLAYER_DISTANCE) return null;
+
+  position.y = sampleFieldHeight(position.x, position.z) + 0.16;
+  return position;
 }
 
 function collectEchoZones(time: number): void {
@@ -590,17 +861,31 @@ function triggerEchoZone(echo: TriggeredEchoZone, time: number): void {
 
 function wireControls(): void {
   versionLink.textContent = APP_VERSION;
+  mainMenuVersionLink.textContent = APP_VERSION;
   changelogContent.textContent = changelogMarkdown.trim();
-  setMenuVisible(false, false);
+  updateAppChrome();
 
   menuToggle.addEventListener("click", () => {
+    if (appState === "mainMenu") return;
     setMenuVisible(!menuVisible);
   });
   resumeButton.addEventListener("click", () => {
     setMenuVisible(false);
   });
+  exitToMainMenuButton.addEventListener("click", () => {
+    showMainMenu();
+  });
   sceneMenuBackdrop.addEventListener("pointerdown", (event) => {
     if (event.target === sceneMenuBackdrop) setMenuVisible(false);
+  });
+  startTrackButton.addEventListener("click", () => {
+    startGame("track", "menu");
+  });
+  startArenaButton.addEventListener("click", () => {
+    startGame("arena", "menu");
+  });
+  mainMenuVersionLink.addEventListener("click", () => {
+    setChangelogVisible(true);
   });
   versionLink.addEventListener("click", () => {
     setChangelogVisible(true);
@@ -788,7 +1073,7 @@ function readLocalStorageValue(key: string): string | null {
 }
 
 function areSceneInputsEnabled(): boolean {
-  return !menuVisible && !changelogVisible;
+  return appState === "playing" && !changelogVisible;
 }
 
 function getEffectiveBloomStrength(): number {
@@ -811,7 +1096,7 @@ function updateBinaryToggle(button: HTMLButtonElement, enabled: boolean): void {
 
 function setPerfOverlayVisible(visible: boolean): void {
   perfOverlayVisible = visible;
-  perfOverlay.hidden = !visible;
+  perfOverlay.hidden = appState === "mainMenu" || !visible;
   updateBinaryToggle(perfOverlayToggle, visible);
 }
 
@@ -835,7 +1120,8 @@ function handleGlobalKeyDown(event: KeyboardEvent): void {
     return;
   }
 
-  setMenuVisible(!menuVisible);
+  if (appState === "mainMenu") return;
+  setMenuVisible(appState !== "paused");
 }
 
 function handlePointerLockChange(): void {
@@ -849,15 +1135,14 @@ function handlePointerLockChange(): void {
 }
 
 function setMenuVisible(visible: boolean, shouldFocus = true): void {
+  if (visible && activePlayMode === null) return;
   if (!visible && changelogVisible) {
     setChangelogVisible(false, false);
   }
 
   menuVisible = visible;
-  sceneMenuBackdrop.hidden = !visible;
-  document.body.classList.toggle("menu-open", visible);
-  menuToggle.setAttribute("aria-expanded", String(visible));
-  menuToggle.setAttribute("aria-label", visible ? "Close pause menu" : "Open pause menu");
+  appState = visible ? "paused" : "playing";
+  updateAppChrome();
 
   if (visible) {
     releaseTouchControls();
@@ -868,12 +1153,10 @@ function setMenuVisible(visible: boolean, shouldFocus = true): void {
     // also the best keyboard target for users who opened the menu accidentally.
     if (shouldFocus) resumeButton.focus({ preventScroll: true });
   }
-
-  updateMobileControlsVisibility();
 }
 
 function setChangelogVisible(visible: boolean, shouldFocus = true): void {
-  if (visible && !menuVisible) {
+  if (visible && appState === "playing") {
     setMenuVisible(true, false);
   }
 
@@ -884,6 +1167,8 @@ function setChangelogVisible(visible: boolean, shouldFocus = true): void {
     if (shouldFocus) changelogDialog.focus({ preventScroll: true });
   } else if (shouldFocus && menuVisible) {
     sceneMenu.focus({ preventScroll: true });
+  } else if (shouldFocus && appState === "mainMenu") {
+    mainMenuVersionLink.focus({ preventScroll: true });
   }
 
   updateMobileControlsVisibility();
@@ -1049,11 +1334,13 @@ function cancelScheduledFieldRebuild(): void {
   fieldRebuildTimeoutId = 0;
 }
 
-function rebuildFieldGeometry(nextPreset: QualityPreset): void {
+function rebuildFieldGeometry(nextPreset: QualityPreset, reason = "field-rebuild"): void {
   const rebuildStartedAt = performance.now();
-  raceTrack.setArena(nextPreset.fieldRadius, settings.arenaRadiusMeters, "field-rebuild");
-  rippleField.rebuild(nextPreset);
-  wakeField.reset("field-rebuild");
+  if (activePlayMode === "track") {
+    syncRaceTrackArena(nextPreset, reason);
+  }
+  rippleField.rebuild(nextPreset, getActiveFieldPlacementClipper());
+  wakeField.reset(reason);
   updateStageFloor(nextPreset);
   updateShadowResolution(nextPreset.shadowMapSize, nextPreset.fieldRadius);
   resize();
@@ -1061,10 +1348,15 @@ function rebuildFieldGeometry(nextPreset: QualityPreset): void {
 
   const durationMs = performance.now() - rebuildStartedAt;
   const wakeMetrics = wakeField.getMetrics();
+  const buildStats = rippleField.getBuildStats();
   debugEvent("field.rebuild", "Rebuilt hex tile field geometry", {
     durationMs: roundMetric(durationMs),
+    mode: activePlayMode ?? "none",
     quality: nextPreset.id,
     hexCount: rippleField.getInstanceCount(),
+    fullHexCount: buildStats.fullHexCount,
+    culledHexCount: buildStats.culledHexCount,
+    clipper: buildStats.clipperLabel,
     hexDiameterMeters: roundMetric(settings.voxelSizeMeters),
     arenaRadiusMeters: roundMetric(settings.arenaRadiusMeters),
     sceneRadius: roundMetric(nextPreset.fieldRadius),
@@ -1075,7 +1367,6 @@ function rebuildFieldGeometry(nextPreset: QualityPreset): void {
 }
 
 function applyQualityPreset(nextPreset: QualityPreset, initial: boolean): void {
-  qualityBadge.textContent = nextPreset.label;
   renderer.shadowMap.enabled = nextPreset.shadowMapSize > 0;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   updateSceneFog(nextPreset);
@@ -1092,6 +1383,7 @@ function applyQualityPreset(nextPreset: QualityPreset, initial: boolean): void {
   updateStageFloor(nextPreset);
   updateShadowResolution(nextPreset.shadowMapSize, nextPreset.fieldRadius);
   resize();
+  updateAppChrome();
 }
 
 function updateSceneFog(nextPreset: QualityPreset): void {
@@ -2057,8 +2349,12 @@ function updateStats(delta: number, time: number): void {
   measuredFps = frameCount / fpsAccumulatorSeconds;
   frameCount = 0;
   fpsAccumulatorSeconds = 0;
-  statsLine.textContent = `${Math.round(measuredFps)} fps | ${rippleField.getInstanceCount().toLocaleString()} hexes | ${preset.particleBudget.toLocaleString()} particles`;
-  mediumLine.textContent = `${basePropagationSpeed.toFixed(1)} m/s | ${settings.waveMedium.effectiveDepth.toFixed(1)}m depth | ${formatVoxelSize(settings.voxelSizeMeters)} hex dia | ${settings.arenaRadiusMeters.toFixed(0)}m arena | ${echoZones.getActiveCount()} echoes | ${activeSources.length} pulses | newest ${newestRingRadius.toFixed(1)}m`;
+  const buildStats = rippleField.getBuildStats();
+  const clippedSuffix = buildStats.culledHexCount > 0
+    ? ` (${formatCompactCount(buildStats.culledHexCount)} culled)`
+    : "";
+  statsLine.textContent = `${Math.round(measuredFps)} fps | ${rippleField.getInstanceCount().toLocaleString()} hexes${clippedSuffix} | ${preset.particleBudget.toLocaleString()} particles`;
+  mediumLine.textContent = `${getPlayModeLabel()} | ${basePropagationSpeed.toFixed(1)} m/s | ${settings.waveMedium.effectiveDepth.toFixed(1)}m depth | ${formatVoxelSize(settings.voxelSizeMeters)} hex dia | ${settings.arenaRadiusMeters.toFixed(0)}m arena | ${echoZones.getActiveCount()} echoes | ${activeSources.length} pulses | newest ${newestRingRadius.toFixed(1)}m`;
   updatePerfOverlay(activeSources.length);
 }
 
@@ -2072,12 +2368,15 @@ function updatePerfOverlay(activeSourceCount: number): void {
 
   // Keep the overlay data cheap and human-readable. These values are sampled on
   // the same cadence as the HUD, not every frame, so it can stay on while tuning.
-  perfOverlayQuality.textContent = preset.label;
+  const buildStats = rippleField.getBuildStats();
+  perfOverlayQuality.textContent = `${getPlayModeLabel()} / ${preset.label}`;
   perfFrame.textContent = `${(lastFrameUpdateMs + lastFrameRenderMs).toFixed(1)} ms`;
   perfUpdate.textContent = `${lastFrameUpdateMs.toFixed(1)} ms`;
   perfRender.textContent = `${lastFrameRenderMs.toFixed(1)} ms`;
   perfFps.textContent = `${Math.round(measuredFps)} | raw ${lastRawDeltaMs.toFixed(1)} ms`;
-  perfHexes.textContent = formatCompactCount(rippleField.getInstanceCount());
+  perfHexes.textContent = buildStats.culledHexCount > 0
+    ? `${formatCompactCount(rippleField.getInstanceCount())} | -${formatCompactCount(buildStats.culledHexCount)}`
+    : formatCompactCount(rippleField.getInstanceCount());
   perfParticles.textContent = `${formatCompactCount(activeParticleCount)}/${formatCompactCount(preset.particleBudget)}`;
   perfWaves.textContent = `${activeSourceCount} | GPU ${renderedSourceCount}/${renderedSourceLimit}`;
   perfWake.textContent = `${wakeMetrics.mode} | ${wakeMetrics.textureSize}px | ${wakeMetrics.passMs.toFixed(1)} ms`;
@@ -2148,6 +2447,9 @@ function logGlobalFrameHitch(time: number, delta: number, rawDelta: number, fram
     renderedRippleSources: rippleField.getRenderedRippleSourceCount(),
     renderedRippleSourceLimit: rippleField.getRenderedRippleSourceLimit(),
     wakeMetrics,
+    playMode: activePlayMode ?? "none",
+    fullHexCount: rippleField.getBuildStats().fullHexCount,
+    culledHexCount: rippleField.getBuildStats().culledHexCount,
     quality: preset.id,
     hexDiameterMeters: settings.voxelSizeMeters,
     arenaRadiusMeters: settings.arenaRadiusMeters,

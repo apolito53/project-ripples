@@ -23,6 +23,9 @@ export type GlobalFrameHitchSnapshot = {
   readonly renderedRippleSources: number;
   readonly renderedRippleSourceLimit: number;
   readonly wakeMetrics: WakeFieldMetrics;
+  readonly playMode: string;
+  readonly fullHexCount: number;
+  readonly culledHexCount: number;
   readonly quality: string;
   readonly hexDiameterMeters: number;
   readonly arenaRadiusMeters: number;
@@ -74,6 +77,9 @@ export function createGlobalFrameHitchEvent(snapshot: GlobalFrameHitchSnapshot):
       wakeTextureSize: wakeMetrics.textureSize,
       wakeFallbackReason: wakeMetrics.fallbackReason,
       movementWakeSourceAddsSinceLastHitch: wakeMetrics.movementSourceAddsSinceLastFrame,
+      playMode: snapshot.playMode,
+      fullHexCount: snapshot.fullHexCount,
+      culledHexCount: snapshot.culledHexCount,
       quality: snapshot.quality,
       hexDiameterMeters: roundMetric(snapshot.hexDiameterMeters),
       arenaRadiusMeters: roundMetric(snapshot.arenaRadiusMeters),

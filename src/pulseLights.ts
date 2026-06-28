@@ -25,6 +25,14 @@ export class PulseLightRig {
     return new PulseLightRig(scene, count);
   }
 
+  clear(): void {
+    // Session resets should turn off leftover pulse lights immediately, instead
+    // of waiting for the next update pass to notice that sources disappeared.
+    for (const light of this.lights) {
+      light.intensity = 0;
+    }
+  }
+
   update(
     sources: readonly RippleSource[],
     time: number,

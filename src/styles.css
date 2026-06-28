@@ -32,6 +32,110 @@ canvas {
   height: var(--app-height, 100dvh);
 }
 
+.main-menu {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  display: grid;
+  align-items: end;
+  justify-items: start;
+  padding:
+    max(28px, calc(env(safe-area-inset-top) + 28px))
+    max(24px, calc(env(safe-area-inset-right) + 24px))
+    max(34px, calc(env(safe-area-inset-bottom) + 34px))
+    max(24px, calc(env(safe-area-inset-left) + 24px));
+  background:
+    linear-gradient(90deg, rgba(2, 4, 9, 0.94) 0%, rgba(2, 4, 9, 0.74) 38%, rgba(2, 4, 9, 0.2) 100%),
+    linear-gradient(180deg, rgba(2, 4, 9, 0.1), rgba(2, 4, 9, 0.86)),
+    url("/skyboxes/cyberpunk-skyline-4k.webp") center / cover no-repeat,
+    #020409;
+  color: rgba(237, 247, 255, 0.94);
+  pointer-events: auto;
+}
+
+.main-menu[hidden] {
+  display: none;
+}
+
+.main-menu__content {
+  display: grid;
+  width: min(520px, calc(100vw - 48px));
+  gap: 28px;
+  text-shadow: 0 1px 24px rgba(0, 0, 0, 0.82);
+}
+
+.main-menu__header {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
+
+.main-menu__header h1 {
+  margin: 0;
+  color: #f3fbff;
+  font-size: clamp(38px, 8vw, 76px);
+  line-height: 0.94;
+  font-weight: 1000;
+  letter-spacing: 0;
+}
+
+.main-menu__actions {
+  display: grid;
+  gap: 12px;
+  width: min(420px, 100%);
+}
+
+.mode-button {
+  display: grid;
+  gap: 3px;
+  min-height: 74px;
+  border: 1px solid rgba(142, 218, 255, 0.24);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(11, 35, 51, 0.86), rgba(6, 17, 27, 0.62));
+  color: #edf7ff;
+  font: inherit;
+  cursor: pointer;
+  padding: 14px 18px;
+  text-align: left;
+  box-shadow:
+    0 18px 50px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.mode-button span {
+  font-size: 22px;
+  font-weight: 1000;
+  letter-spacing: 0;
+}
+
+.mode-button small {
+  color: rgba(158, 255, 231, 0.72);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.mode-button:hover,
+.mode-button:focus-visible {
+  border-color: rgba(122, 245, 214, 0.7);
+  background:
+    linear-gradient(90deg, rgba(20, 82, 84, 0.92), rgba(7, 24, 36, 0.72));
+  box-shadow:
+    0 20px 62px rgba(0, 0, 0, 0.42),
+    0 0 36px rgba(117, 255, 215, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.mode-button--track {
+  border-color: rgba(122, 245, 214, 0.44);
+}
+
+.mode-button--arena {
+  border-color: rgba(142, 166, 255, 0.32);
+}
+
 #hud {
   position: fixed;
   z-index: 3;
@@ -250,11 +354,13 @@ canvas {
 
 .pause-actions {
   display: grid;
-  grid-template-columns: minmax(160px, 240px);
+  grid-template-columns: repeat(2, minmax(160px, 240px));
+  gap: 10px;
   justify-content: center;
 }
 
-.resume-button {
+.resume-button,
+.secondary-menu-button {
   min-height: 42px;
   border: 1px solid rgba(122, 245, 214, 0.5);
   border-radius: 8px;
@@ -270,8 +376,17 @@ canvas {
     inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
 
+.secondary-menu-button {
+  border-color: rgba(142, 218, 255, 0.24);
+  background:
+    linear-gradient(180deg, rgba(30, 50, 68, 0.36), rgba(7, 17, 26, 0.54));
+  color: rgba(237, 247, 255, 0.82);
+}
+
 .resume-button:hover,
-.resume-button:focus-visible {
+.resume-button:focus-visible,
+.secondary-menu-button:hover,
+.secondary-menu-button:focus-visible {
   border-color: rgba(158, 255, 231, 0.78);
   background:
     linear-gradient(180deg, rgba(122, 245, 214, 0.34), rgba(24, 87, 92, 0.54));
@@ -352,9 +467,23 @@ input[type="range"] {
     padding: 12px;
   }
 
+  .main-menu {
+    align-items: end;
+    padding: 18px 14px 24px;
+  }
+
+  .main-menu__content {
+    width: 100%;
+    gap: 20px;
+  }
+
   .scene-menu__header h2,
   .changelog-dialog__header h2 {
     font-size: 16px;
+  }
+
+  .pause-actions {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .control-row {

@@ -11,13 +11,32 @@
   </head>
   <body>
     <main id="app">
-      <button id="menu-toggle" class="menu-toggle" type="button" aria-controls="scene-menu" aria-expanded="false" aria-label="Open pause menu">
+      <section id="main-menu" class="main-menu" aria-labelledby="main-menu-title">
+        <div class="main-menu__content">
+          <header class="main-menu__header">
+            <h1 id="main-menu-title">Ripple Field Lab</h1>
+            <button id="main-menu-version-link" class="version-link" type="button" aria-haspopup="dialog">v0.5.0-ALPHA</button>
+          </header>
+          <div class="main-menu__actions" aria-label="Select play mode">
+            <button id="start-track-button" class="mode-button mode-button--track" type="button">
+              <span>Track</span>
+              <small>Prototype Loop</small>
+            </button>
+            <button id="start-arena-button" class="mode-button mode-button--arena" type="button">
+              <span>Arena</span>
+              <small>Open Sandbox</small>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <button id="menu-toggle" class="menu-toggle" type="button" aria-controls="scene-menu" aria-expanded="false" aria-label="Open pause menu" hidden>
         <span></span>
         <span></span>
         <span></span>
       </button>
 
-      <section id="hud" aria-label="Runtime status">
+      <section id="hud" aria-label="Runtime status" hidden>
         <div class="title-lockup">
           <span class="title">Ripple Field Lab</span>
           <span id="quality-badge" class="badge">Pretty</span>
@@ -30,11 +49,12 @@
         <section id="scene-menu" class="scene-menu" aria-label="Pause menu" role="dialog" aria-modal="true" tabindex="-1">
           <header class="scene-menu__header">
             <h2>Paused</h2>
-            <button id="version-link" class="version-link" type="button" aria-haspopup="dialog">v0.4.0-ALPHA</button>
+            <button id="version-link" class="version-link" type="button" aria-haspopup="dialog">v0.5.0-ALPHA</button>
           </header>
 
           <div class="pause-actions" aria-label="Pause actions">
             <button id="resume-button" class="resume-button" type="button">Resume</button>
+            <button id="exit-to-main-menu-button" class="secondary-menu-button" type="button">Exit To Main Menu</button>
           </div>
 
           <section id="panel" class="scene-controls" aria-label="Tuning controls">
@@ -133,7 +153,7 @@
         </section>
       </div>
 
-      <aside id="perf-overlay" class="perf-overlay" aria-label="Performance overlay">
+      <aside id="perf-overlay" class="perf-overlay" aria-label="Performance overlay" hidden>
         <div class="perf-overlay__header">
           <span>Perf</span>
           <span id="perf-overlay-quality">Pretty</span>

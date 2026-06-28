@@ -313,13 +313,20 @@ export class EchoZoneField {
     });
   }
 
-  dispose(): void {
+  clear(): void {
+    // Returning to the main menu or starting the other mode is a hard gameplay
+    // reset. Keep the pools alive, but remove every active marker and burst so
+    // Arena and Track never inherit each other's pickups or detonation effects.
     for (let index = this.zones.length - 1; index >= 0; index -= 1) {
       this.removeAt(index);
     }
     for (let index = this.collectBursts.length - 1; index >= 0; index -= 1) {
       this.removeCollectBurstAt(index);
     }
+  }
+
+  dispose(): void {
+    this.clear();
     for (const burst of this.collectBurstPool) {
       this.disposeCollectBurstPoolItem(burst);
     }

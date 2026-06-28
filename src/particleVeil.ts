@@ -169,14 +169,22 @@ export class ParticleVeil {
     return this.activeCount;
   }
 
-  setEnabled(enabled: boolean): void {
-    this.points.visible = enabled;
-    if (enabled) return;
-
+  clear(): void {
+    // Reused sessions should not inherit a cloud of particles from the previous
+    // mode. This mirrors the disabled path without changing whether particles
+    // are currently visible.
     this.activeCount = 0;
     this.cursor = 0;
     this.auraAccumulator = 0;
     this.geometry.setDrawRange(0, 0);
+    this.clearStaticDirtyRange();
+  }
+
+  setEnabled(enabled: boolean): void {
+    this.points.visible = enabled;
+    if (enabled) return;
+
+    this.clear();
   }
 
   spawnBurst(center: THREE.Vector3, count: number, strength: number): void {

@@ -32,6 +32,12 @@ export type RippleSource = {
 export class RippleSourceStore {
   private readonly sources: RippleSource[] = [];
 
+  clear(): void {
+    // Mode changes start a fresh session. Dropping active pulse sources keeps
+    // old Arena/Track waves from visually leaking into the newly selected mode.
+    this.sources.length = 0;
+  }
+
   add(
     position: THREE.Vector3,
     startTime: number,

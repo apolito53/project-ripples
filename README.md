@@ -7,7 +7,7 @@ This is intentionally separate from `voxel-sandbox-engine`. The goal is to make
 a polished visual lab first, then borrow patterns or ideas later if they deserve
 to graduate into the main voxel engine.
 
-Current version: `v0.4.0-ALPHA`.
+Current version: `v0.5.0-ALPHA`.
 
 ## Quick Start
 
@@ -24,7 +24,9 @@ chmod +x ./start.sh
 ./start.sh
 ```
 
-Open `http://127.0.0.1:5183`.
+Open `http://127.0.0.1:5183`. The app starts on a main menu where you choose
+`Arena` or `Track`. For development smoke tests, `?mode=arena` and
+`?mode=track` skip the menu and enter that mode directly.
 
 ## Controls
 
@@ -46,18 +48,21 @@ Open `http://127.0.0.1:5183`.
   trajectory mid-jump.
 - `Shift` sprints with momentum.
 - `F2` shows or hides the live performance overlay.
-- `Esc` opens/closes the pause menu.
+- `Esc` opens/closes the pause menu after a mode has started.
 - The pause menu's version pill opens the in-app changelog.
+- `Exit To Main Menu` returns to the mode-select splash and starts the next mode
+  from a clean runtime state.
 - The on-screen pulse button drops manual pulses on touch layouts.
 
-The avatar now drives on a wide prototype race-track ribbon inside the circular
-arena. The track is intentionally broad, with bright glowing translucent energy
-walls that clamp the avatar back onto the course, preserve tangent speed, and
-shave a little outward momentum so wall contact feels like a scrape instead of a
-full stop. Tiles outside the track are heavily dimmed so the course reads at a
-glance, and the outer arena edge remains visible as environmental context.
-The avatar is also clamped inside the circular arena edge as the fallback
-play-area boundary.
+The lab now has two startup modes. `Arena` is the full circular sandbox: the
+avatar uses the circular arena edge as its boundary, Echoes spawn across the
+disc, and the entire circular hex field is generated. `Track` is the first
+racing prototype: the avatar drives on a wide ribbon inside the arena, bright
+glowing translucent energy walls clamp the avatar back onto the course,
+wall-contact preserves tangent speed while shaving outward momentum, and Echoes
+spawn on the course. Track mode also clips generated hexes to the course ribbon
+plus a safety skirt, so off-track cells are skipped instead of animated every
+frame. The outer arena edge remains visible as environmental context.
 The arena edge is rendered as a smooth glowing gradient barrier so the playable
 boundary is visible in-world without looking like a tiled wall texture.
 The hex field is drawn as a single shader-animated cap surface, without the old
@@ -115,7 +120,7 @@ propagation and scale tuning have a quick visual sanity check.
 The performance overlay adds a denser tuning cockpit with frame/update/render
 timing, active particles versus resident budget, rendered pulse-source pressure,
 GPU wake texture mode/pass cost, draw calls, triangles, pixel ratio, bloom state,
-and quality mode.
+quality mode, play mode, and clipped-versus-full hex counts.
 Skybox themes use the generated Cyberpunk Skyline, Aurora Observatory, Orbital
 Megastructure, and Neon Arena Skyline panoramas on a camera-following dome.
 Modern GPUs get 8K sky textures; lower texture-cap hardware falls back to 4K,
@@ -178,17 +183,22 @@ Project planning:
 Versioning:
 
 - While the project is still experimental, release tags use alpha prerelease
-  labels. The current baseline is `v0.4.0-ALPHA`.
+  labels. The current baseline is `v0.5.0-ALPHA`.
 
 ## Design Notes
 
+- `src/main.ts` owns the app-level state split between the startup menu,
+  gameplay, and pause, including clean mode starts, `?mode=` shortcuts, and
+  mode-specific player/Echo/runtime resets.
 - `src/raceTrack.ts` owns the first racing-game layer: the hardcoded
   non-crossing sweeping loop, wide-ribbon collision, bright glowing course
-  walls, generated surface mask, and sparse `track.*` diagnostics.
+  walls, generated surface mask, field-placement clip queries, and sparse
+  `track.*` diagnostics.
 - `src/rippleField.ts` owns the circular shader-displaced instanced hex field,
   including the local bow deformation around the moving avatar, sampled GPU
-  wake texture displacement, the generated race-track mask highlight, and
-  shader-side hex footprint/height scaling. It now renders only the lit cap
+  wake texture displacement, optional track-mode placement clipping, the
+  generated race-track mask highlight, and shader-side hex footprint/height
+  scaling. It now renders only the lit cap
   surface, calibrates Meltdown into an interlocked honeycomb without increasing
   its old instance density, then tints cells by animated height so raised caps
   push toward white while troughs stay darker. Wave crests have their own glow
@@ -228,12 +238,12 @@ Versioning:
   `src/main.ts` use orbiting motes and segmented additive trails instead of
   torus rings.
 
-The CPU decides where the player, touch-button pulses, race-track constraint,
-and persistent Echo zones are. Manual pulse input is cooldown-gated, Echo zones
-spawn on the track and only become pulse sources after collection, and pulse
-sources age out by per-source lifetime. Movement wake is fed into a small GPU
-height/velocity texture instead of the pulse source list. The GPU handles wake
-propagation, hex lift, stretch, tint, emissive glow, track-surface highlight,
-and cell footprint/height from the wake texture plus the newest rendered pulse
-uniforms, with dense fields allowed to render fewer pulse sources than the full
-gameplay source list contains.
+The CPU decides where the player, touch-button pulses, optional race-track
+constraint, and persistent Echo zones are. Manual pulse input is cooldown-gated,
+Echo zones only become pulse sources after collection, and pulse sources age out
+by per-source lifetime. Movement wake is fed into a small GPU height/velocity
+texture instead of the pulse source list. The GPU handles wake propagation, hex
+lift, stretch, tint, emissive glow, track-surface highlight, and cell
+footprint/height from the wake texture plus the newest rendered pulse uniforms,
+with dense fields allowed to render fewer pulse sources than the full gameplay
+source list contains.
