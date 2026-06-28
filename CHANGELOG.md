@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 0.5.1-ALPHA - 2026-06-28
+
+### Changed
+
+- Hid the circular arena floor and outer barrier in Track mode so the racing
+  prototype now reads as its own course instead of a track drawn over the Arena
+  sandbox shell.
+- Lifted the full-disc hex-size/arena-radius coupling while Track mode is
+  active. Arena mode still applies the instance-budget guardrail before full
+  circular rebuilds, including when returning from extreme Track settings.
+- Reseeded Echo zones after play-area rebuilds so resizing hex scale, arena
+  radius, or quality no longer leaves collectibles outside the active Track or
+  Arena boundary.
+- Bumped package metadata, README, codebase index, and visible menu version text
+  to `v0.5.1-ALPHA`.
+
 ## 0.5.0-ALPHA - 2026-06-28
 
 ### Added

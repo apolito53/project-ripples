@@ -7,7 +7,7 @@ This is intentionally separate from `voxel-sandbox-engine`. The goal is to make
 a polished visual lab first, then borrow patterns or ideas later if they deserve
 to graduate into the main voxel engine.
 
-Current version: `v0.5.0-ALPHA`.
+Current version: `v0.5.1-ALPHA`.
 
 ## Quick Start
 
@@ -62,7 +62,9 @@ glowing translucent energy walls clamp the avatar back onto the course,
 wall-contact preserves tangent speed while shaving outward momentum, and Echoes
 spawn on the course. Track mode also clips generated hexes to the course ribbon
 plus a safety skirt, so off-track cells are skipped instead of animated every
-frame. The outer arena edge remains visible as environmental context.
+frame. Track hides the circular arena floor and outer arena barrier so the
+course reads as the active play space instead of a path painted over the
+sandbox.
 The arena edge is rendered as a smooth glowing gradient barrier so the playable
 boundary is visible in-world without looking like a tiled wall texture.
 The hex field is drawn as a single shader-animated cap surface, without the old
@@ -110,10 +112,13 @@ radius is expressed in lab meters: `200m` preserves the original scene radius,
 while `400m` doubles it. Depth / Speed changes the medium's effective depth,
 then shows the derived propagation speed from the shallow-water-inspired
 `sqrt(g * depth)` model.
-The lab now clamps extreme hex-size/arena-radius combinations before rebuilding
-the field, using per-quality instance budgets so a casual slider drag cannot
-spawn millions of hexes. If you intentionally want stress-test behavior, open
-the app with `?stress=1` or set `localStorage.rippleStressMode = "1"`.
+Arena mode clamps extreme hex-size/arena-radius combinations before rebuilding
+the full circular field, using per-quality instance budgets so a casual slider
+drag cannot spawn millions of visible hexes. Track mode skips that full-disc
+coupling because it rebuilds only the course ribbon plus safety skirt; switching
+back to Arena reapplies the guardrail before the full disc is rebuilt. If you
+intentionally want stress-test behavior, open the app with `?stress=1` or set
+`localStorage.rippleStressMode = "1"`.
 The HUD shows that derived speed, hex diameter, arena radius, active pulse count,
 and the newest pulse's approximate radius, plus the number of live Echo zones, so
 propagation and scale tuning have a quick visual sanity check.
@@ -183,13 +188,14 @@ Project planning:
 Versioning:
 
 - While the project is still experimental, release tags use alpha prerelease
-  labels. The current baseline is `v0.5.0-ALPHA`.
+  labels. The current baseline is `v0.5.1-ALPHA`.
 
 ## Design Notes
 
 - `src/main.ts` owns the app-level state split between the startup menu,
-  gameplay, and pause, including clean mode starts, `?mode=` shortcuts, and
-  mode-specific player/Echo/runtime resets.
+  gameplay, and pause, including clean mode starts, `?mode=` shortcuts,
+  mode-specific player/Echo/runtime resets, Track-only scale guardrail bypass,
+  and Echo reseeding after play-area rebuilds.
 - `src/raceTrack.ts` owns the first racing-game layer: the hardcoded
   non-crossing sweeping loop, wide-ribbon collision, bright glowing course
   walls, generated surface mask, field-placement clip queries, and sparse
@@ -204,8 +210,8 @@ Versioning:
   push toward white while troughs stay darker. Wave crests have their own glow
   varying so peak brightness can be tuned separately from generic
   player-proximity glow.
-- `src/arenaBarrier.ts` owns the visual-only glowing arena-edge gradient that
-  follows the live arena radius without changing collision behavior.
+- `src/arenaBarrier.ts` owns the Arena-only visual glowing arena-edge gradient
+  that follows the live arena radius without changing collision behavior.
 - `src/skybox.ts` owns the selectable camera-following sky dome, high-res versus
   fallback texture selection, per-theme vertical framing, and fog tuning. The
   current generated skybox assets live in `public/skyboxes/`.

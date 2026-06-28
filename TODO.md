@@ -8,9 +8,10 @@ concrete follow-ups that we actually intend to revisit.
 - Shape the lab into a racing-game prototype.
   First pass now has a wide non-crossing track ribbon inside the arena with
   bright glowing walls, heavy off-track dimming, track-scoped Echo placement,
-  slide-and-bleed containment, a startup Track/Arena split, and track-only hex
-  culling. Next racing steps: checkpoint/lap structure, speed-readable effects,
-  and eventually dedicated track design tooling.
+  slide-and-bleed containment, a startup Track/Arena split, track-only hex
+  culling, hidden circular-arena shell visuals, and independent Track radius /
+  hex-size tuning. Next racing steps: checkpoint/lap structure,
+  speed-readable effects, and eventually dedicated track design tooling.
 - Continue replacing brute-force particle density with more deliberate effects.
   Echo detonations now have a first layered poof-disc/glitter pass, but the
   broader particle system still needs a real split between sparkle mass, haze,
@@ -72,3 +73,5 @@ concrete follow-ups that we actually intend to revisit.
   gameplay.
 - Added track-only hex placement clipping so Track mode skips off-course hexes,
   while Arena mode still renders the full circular field.
+- Hid the circular arena floor/barrier in Track mode, lifted the full-disc
+  radius/hex-size coupling there, and reseeded Echoes after play-area rebuilds.

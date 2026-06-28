@@ -356,6 +356,7 @@ function showMainMenu(shouldFocus = true, reason = "exit"): void {
   menuVisible = false;
   resetRuntimeState("main-menu");
   raceTrack.setVisible(false);
+  syncCircularArenaShellVisibility();
   player.setPlayAreaConstraint(null);
   const spawn = createArenaSpawnPoint();
   player.resetForSession(spawn.position, spawn.facingYaw);
@@ -371,15 +372,26 @@ function showMainMenu(shouldFocus = true, reason = "exit"): void {
 }
 
 function applyPlayMode(mode: PlayModeId, reason: string): void {
+  if (mode === "arena") {
+    // Track mode can safely dial radius and hex size independently because the
+    // field is clipped to the course ribbon. Arena mode still renders the full
+    // disc, so re-entering Arena from extreme Track settings needs the old
+    // safety budget before we rebuild millions of visible cells.
+    enforceFieldInstanceBudget("arena-radius");
+    preset = getQualityPreset(settings);
+    syncFieldScaleControls();
+  }
+
   const spawn = mode === "track" ? createTrackSpawnPoint() : createArenaSpawnPoint();
   const playAreaConstraint: PlayAreaConstraint | null = mode === "track" ? raceTrack : null;
 
   raceTrack.setVisible(mode === "track");
+  syncCircularArenaShellVisibility();
   player.setPlayAreaConstraint(playAreaConstraint);
   player.resetForSession(spawn.position, spawn.facingYaw);
   previousWakePlayerPosition.copy(player.position);
   resetRuntimeState(`mode-${reason}`);
-  rebuildFieldGeometry(preset, `mode-${reason}`);
+  rebuildFieldGeometry(preset, `mode-${reason}`, { reseedEchoes: false });
   seedStartupPulses(clock.elapsedTime);
   seedEchoZones(clock.elapsedTime);
   updateStats(0, clock.elapsedTime);
@@ -627,6 +639,7 @@ function triggerLandingRipple(event: PlayerJumpEvent): void {
 }
 
 function seedEchoZones(time: number): void {
+  if (activePlayMode === null) return;
   if (activePlayMode === "arena") {
     seedArenaEchoZones(time);
     return;
@@ -695,6 +708,7 @@ function addEchoZoneAtPosition(position: THREE.Vector3, time: number): void {
 }
 
 function createEchoZonePosition(): THREE.Vector3 | null {
+  if (activePlayMode === null) return null;
   if (activePlayMode === "arena") {
     return createArenaEchoZonePosition();
   }
@@ -1034,6 +1048,13 @@ function syncSkyboxOptions(): void {
 }
 
 function enforceFieldInstanceBudget(changedControl: FieldScaleChangedControl): void {
+  if (activePlayMode === "track") {
+    // The guardrail estimates the old full circular field. Track mode clips the
+    // rebuild to the ribbon plus skirt, so coupling arena radius and hex size
+    // here makes the UI lie about what the track can actually afford.
+    return;
+  }
+
   const result = applyFieldInstanceBudget(settings, changedControl, fieldStressModeEnabled);
   if (!result.applied) return;
 
@@ -1334,7 +1355,15 @@ function cancelScheduledFieldRebuild(): void {
   fieldRebuildTimeoutId = 0;
 }
 
-function rebuildFieldGeometry(nextPreset: QualityPreset, reason = "field-rebuild"): void {
+type FieldRebuildOptions = {
+  readonly reseedEchoes?: boolean;
+};
+
+function rebuildFieldGeometry(
+  nextPreset: QualityPreset,
+  reason = "field-rebuild",
+  options: FieldRebuildOptions = {}
+): void {
   const rebuildStartedAt = performance.now();
   if (activePlayMode === "track") {
     syncRaceTrackArena(nextPreset, reason);
@@ -1342,6 +1371,10 @@ function rebuildFieldGeometry(nextPreset: QualityPreset, reason = "field-rebuild
   rippleField.rebuild(nextPreset, getActiveFieldPlacementClipper());
   wakeField.reset(reason);
   updateStageFloor(nextPreset);
+  const reseededEchoes = options.reseedEchoes ?? activePlayMode !== null;
+  if (reseededEchoes) {
+    resetEchoZonesAfterPlayAreaRebuild(clock.elapsedTime, reason);
+  }
   updateShadowResolution(nextPreset.shadowMapSize, nextPreset.fieldRadius);
   resize();
   prewarmRenderPipelines();
@@ -1359,11 +1392,30 @@ function rebuildFieldGeometry(nextPreset: QualityPreset, reason = "field-rebuild
     clipper: buildStats.clipperLabel,
     hexDiameterMeters: roundMetric(settings.voxelSizeMeters),
     arenaRadiusMeters: roundMetric(settings.arenaRadiusMeters),
+    echoZonesReseeded: reseededEchoes,
     sceneRadius: roundMetric(nextPreset.fieldRadius),
     tileSpacing: roundMetric(nextPreset.tileSpacing),
     wakeMode: wakeMetrics.mode,
     wakeTextureSize: wakeMetrics.textureSize
   }, durationMs > GLOBAL_FRAME_HITCH_MS ? "warn" : "info");
+}
+
+function resetEchoZonesAfterPlayAreaRebuild(time: number, reason: string): void {
+  if (activePlayMode === null) return;
+
+  // Resizing can move either the Arena boundary or the Track walls under
+  // existing Echoes. Re-seeding is cleaner than trying to project every live
+  // collectible back into a newly shaped play area with stale spacing checks.
+  echoZones.clear();
+  seedEchoZones(time);
+
+  debugEvent("echo.reset", "Reseeded Echo zones after play-area rebuild", {
+    mode: activePlayMode,
+    reason,
+    activeEchoes: echoZones.getActiveCount(),
+    arenaRadiusMeters: roundMetric(settings.arenaRadiusMeters),
+    hexDiameterMeters: roundMetric(settings.voxelSizeMeters)
+  }, "info");
 }
 
 function applyQualityPreset(nextPreset: QualityPreset, initial: boolean): void {
@@ -1702,7 +1754,14 @@ function updateStageFloor(nextPreset: QualityPreset): void {
   const floorRadius = nextPreset.fieldRadius + nextPreset.tileSpacing * 0.5;
   stageFloor.scale.set(floorRadius, floorRadius, 1);
   arenaBarrier.setRadius(floorRadius);
+  syncCircularArenaShellVisibility();
   updateSceneLightSources(nextPreset);
+}
+
+function syncCircularArenaShellVisibility(): void {
+  const visible = activePlayMode === "arena";
+  stageFloor.visible = visible;
+  arenaBarrier.setVisible(visible);
 }
 
 function createAvatar(activeAvatarStyle: AvatarStyle = "hoverPod"): PlayerAvatar {

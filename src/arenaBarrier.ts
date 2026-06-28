@@ -48,6 +48,12 @@ export class ArenaBarrier {
     this.wall.scale.set(this.radius, BARRIER_HEIGHT, this.radius);
   }
 
+  setVisible(visible: boolean): void {
+    // Track mode now has its own course walls, so the circular arena curtain is
+    // an Arena-only visual shell instead of always-on environmental clutter.
+    this.object.visible = visible;
+  }
+
   update(time: number): void {
     this.wallUniforms.uTime.value = time;
   }

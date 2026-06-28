@@ -9,7 +9,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Vite + strict TypeScript browser app.
 - Three.js renderer, postprocessing composer, Unreal bloom pass, shader-customized
   `InstancedMesh`, additive `Points`, and dynamic lights.
-- Current alpha baseline: `v0.5.0-ALPHA`; keep release tags in alpha prerelease
+- Current alpha baseline: `v0.5.1-ALPHA`; keep release tags in alpha prerelease
   territory until the lab graduates from prototype status.
 - Dedicated dev port `5183`; preview port `4183`.
 
@@ -57,7 +57,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Ping-pong GPU movement wake heightfield, absorbing edge band, residual-wave
   damping, fallback texture, quality-sized render targets, and `wake.*`
   diagnostics: `src/wakeField.ts`
-- Visual-only smooth glowing arena-edge gradient barrier: `src/arenaBarrier.ts`
+- Arena-only smooth glowing arena-edge gradient barrier: `src/arenaBarrier.ts`
 - Wide prototype race-track loop, non-crossing ribbon and wall-edge sampling,
   ribbon collision, bright glowing edge walls, generated track mask texture,
   track Echo placement helpers, field-cell containment queries, and `track.*`
@@ -127,11 +127,13 @@ Purpose: compact map for the standalone ripple-field visual lab.
    slide-and-speed-bleed wall containment, bright glowing energy-wall meshes,
    a generated mask texture that the field shader samples for surface highlight
    and heavy outside-track dimming, and a field-cell containment query used only
-   by Track mode.
-7. `RippleField` builds hex instances inside the circular arena using the
-   active quality, hex-size, and arena-radius settings. In Track mode it clips
-   placement to the course ribbon plus a safety skirt; in Arena mode it keeps
-   the full circular sandbox field. Hex geometry is rotated
+   by Track mode. Track mode hides the circular arena floor and outer barrier,
+   so the course walls become the only visible movement boundary.
+7. `RippleField` builds hex instances using the active quality, hex-size, and
+   arena-radius settings. In Track mode it clips placement to the course ribbon
+   plus a safety skirt and skips the full-disc radius/hex coupling guardrail; in
+   Arena mode it keeps the full circular sandbox field and still applies the
+   instance-budget guardrail. Hex geometry is rotated
    to match the staggered lattice, and Meltdown's visible footprint is calibrated
    to read as an interlocked honeycomb while preserving its previous density.
    The field then sends active pulse source/metadata/lifetime uniforms plus the
@@ -141,8 +143,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
    movement wake memory, track highlight, and height-based tinting. The old
    per-cell shaft mesh has been removed to keep the geometry path simpler before
    the sphere work.
-8. `ArenaBarrier` draws a visual-only smooth glowing gradient curtain at the
-   arena radius so the map edge is visible without changing collision logic.
+8. `ArenaBarrier` draws an Arena-only visual smooth glowing gradient curtain at
+   the arena radius so the sandbox edge is visible without changing collision
+   logic.
 9. `EchoZoneField` animates live Echo markers placed on the race track and
    reports run-through triggers.
 10. `ParticleVeil` animates the player sparkle aura, burst clouds, flat Echo
@@ -166,7 +169,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 ## Common Change Targets
 
 - Tune visual density, hex-size ranges, arena-radius ranges, per-quality field
-  instance budgets, or GPU pressure:
+  instance budgets, Track's guardrail bypass, or GPU pressure:
   `src/qualityPresets.ts`, `src/labSettings.ts`, `src/fieldScaleGuardrails.ts`,
   and `src/main.ts`
 - Change the visible map-edge barrier color, height, or shimmer:
