@@ -55,6 +55,7 @@ export class ParticleVeil {
   private cursor = 0;
   private elapsedSeconds = 0;
   private auraAccumulator = 0;
+  private wakeAccumulator = 0;
   private staticDirtyMinIndex = Number.POSITIVE_INFINITY;
   private staticDirtyMaxIndex = -1;
 
@@ -176,6 +177,7 @@ export class ParticleVeil {
     this.activeCount = 0;
     this.cursor = 0;
     this.auraAccumulator = 0;
+    this.wakeAccumulator = 0;
     this.geometry.setDrawRange(0, 0);
     this.clearStaticDirtyRange();
   }
@@ -253,9 +255,9 @@ export class ParticleVeil {
     this.markDirty(true);
   }
 
-  spawnWake(center: THREE.Vector3, movementStrength: number, movementVelocity: THREE.Vector3): void {
+  spawnWake(center: THREE.Vector3, delta: number, movementStrength: number, movementVelocity: THREE.Vector3): void {
     const emissionScale = this.getContinuousEmissionScale();
-    if (movementStrength <= 0.08 || Math.random() > movementStrength * 0.55 * emissionScale) return;
+    if (movementStrength <= 0.08 || delta <= 0 || emissionScale <= 0) return;
 
     TEMP_WAKE_DIRECTION.set(movementVelocity.x, movementVelocity.z);
     if (TEMP_WAKE_DIRECTION.lengthSq() <= 0.0001) return;
@@ -266,7 +268,13 @@ export class ParticleVeil {
     // a directional tail instead of a loose glitter shed: fewer motes, narrower
     // lateral scatter, and a spawn bias behind the current velocity vector.
     const rawCount = WAKE_PARTICLE_COUNT_BASE + Math.floor(movementStrength * WAKE_PARTICLE_COUNT_MOVEMENT_BONUS);
-    const count = Math.max(6, Math.floor(rawCount * emissionScale));
+    const particlesPerSecond = rawCount * movementStrength * 0.55 * emissionScale * emissionScale * 60;
+    this.wakeAccumulator += delta * particlesPerSecond;
+    const frameCap = Math.max(18, Math.floor(rawCount * emissionScale * 4));
+    const count = Math.min(frameCap, Math.floor(this.wakeAccumulator));
+    if (count <= 0) return;
+
+    this.wakeAccumulator -= count;
     const strength = 0.12 + movementStrength * 0.16;
     for (let wakeIndex = 0; wakeIndex < count; wakeIndex += 1) {
       this.emitWakeParticle(center, strength, movementStrength, TEMP_WAKE_DIRECTION, TEMP_WAKE_RIGHT);

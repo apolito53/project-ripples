@@ -98,7 +98,7 @@ const CAMERA_TARGET_HEIGHT = 0.58;
 // Yaw naturally becomes visually ambiguous at the poles, but returns as soon as
 // the camera moves off that exact vertical line.
 const CAMERA_PITCH_RANGE = { min: -Math.PI / 2, max: Math.PI / 2 };
-const CAMERA_SMOOTHING = 1 - Math.exp(-14 / 60);
+const CAMERA_SMOOTHING_RATE = 14;
 const CAMERA_ZOOM_STEP = 1.4;
 const CAMERA_WHEEL_ZOOM_SPEED = 0.018;
 // This is a visual hover height, not a collision capsule. Keeping the avatar
@@ -172,6 +172,7 @@ export class PlayerRig {
   private readonly lookTarget = new THREE.Vector3();
   private readonly mobileMoveIntent = new THREE.Vector2();
   private readonly mobileLookIntent = new THREE.Vector2();
+  private timeSeconds = 0;
   private cameraDistance = CAMERA_DEFAULT_DISTANCE;
   private targetCameraDistance = CAMERA_DEFAULT_DISTANCE;
   private lastPulseSecond = -Infinity;
@@ -236,7 +237,8 @@ export class PlayerRig {
     this.releaseCameraDrag();
   }
 
-  update(delta: number): void {
+  update(delta: number, timeSeconds: number): void {
+    this.timeSeconds = timeSeconds;
     const inputEnabled = this.isInputEnabled();
     if (!inputEnabled) {
       // UI overlays should feel modal. Clearing held inputs every frame avoids
@@ -480,7 +482,7 @@ export class PlayerRig {
   }
 
   private updateCamera(delta: number): void {
-    const smoothing = 1 - Math.pow(1 - CAMERA_SMOOTHING, Math.max(1, delta * 60));
+    const smoothing = 1 - Math.exp(-CAMERA_SMOOTHING_RATE * Math.max(0, delta));
     this.cameraDistance = THREE.MathUtils.lerp(this.cameraDistance, this.targetCameraDistance, smoothing);
 
     const behind = this.getCameraPlanarForward().multiplyScalar(-Math.cos(this.pitch) * this.cameraDistance);
@@ -524,7 +526,7 @@ export class PlayerRig {
       const constrained = this.playAreaConstraint.constrain(this.position, this.velocity);
       if (constrained) {
         this.wallContactCount += 1;
-        this.lastWallContactSecond = performance.now() / 1000;
+        this.lastWallContactSecond = this.timeSeconds;
       }
       return;
     }
@@ -675,7 +677,7 @@ export class PlayerRig {
   };
 
   private tryCreatePulse(): void {
-    const now = performance.now() / 1000;
+    const now = this.timeSeconds;
     if (now - this.lastPulseSecond < PULSE_COOLDOWN_SECONDS) return;
     this.lastPulseSecond = now;
     this.onPulse(this.createPulsePosition());
@@ -740,7 +742,7 @@ export class PlayerRig {
     this.grounded = false;
     this.verticalVelocity = JUMP_INITIAL_SPEED;
     this.jumpOffset = Math.max(this.jumpOffset, 0.02);
-    this.jumpStartedAt = performance.now() / 1000;
+    this.jumpStartedAt = this.timeSeconds;
     this.jumpCount += 1;
     this.onJump({
       position: this.createSurfaceEventPosition(),
@@ -763,7 +765,7 @@ export class PlayerRig {
 
     const impactSpeed = Math.max(0, -this.verticalVelocity);
     const airtimeSeconds = Number.isFinite(this.jumpStartedAt)
-      ? Math.max(0, performance.now() / 1000 - this.jumpStartedAt)
+      ? Math.max(0, this.timeSeconds - this.jumpStartedAt)
       : 0;
     this.jumpOffset = 0;
     this.verticalVelocity = 0;

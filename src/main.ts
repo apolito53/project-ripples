@@ -130,6 +130,10 @@ const ECHO_DEBUG_SLOW_FRAME_MS = 24;
 const GLOBAL_FRAME_HITCH_MS = 45;
 const GLOBAL_FRAME_HITCH_LOG_INTERVAL_SECONDS = 0.75;
 const GLOBAL_FRAME_HITCH_WARMUP_SECONDS = 1;
+const SIM_STEP_SECONDS = 1 / 60;
+const MAX_SIM_FRAME_SECONDS = 0.25;
+const MAX_SIM_STEPS_PER_FRAME = 10;
+const MIN_SIM_REMAINING_SECONDS = 0.000001;
 const FIELD_REBUILD_DEBOUNCE_MS = 180;
 const MANUAL_PULSE_OPTIONS: RippleSourceOptions = {
   kind: "pulse",
@@ -172,7 +176,7 @@ type AvatarStyle = "hoverPod" | "legacyGlowOrb";
 
 type PlayerAvatar = {
   readonly object: THREE.Group;
-  update(delta: number, position: THREE.Vector3, movementSpeed: number, facingYaw: number): void;
+  update(delta: number, time: number, position: THREE.Vector3, movementSpeed: number, facingYaw: number): void;
 };
 
 type AppState = "mainMenu" | "playing" | "paused";
@@ -240,6 +244,9 @@ let lastGlobalFrameHitchLogAt = -Infinity;
 let lastFrameUpdateMs = 0;
 let lastFrameRenderMs = 0;
 let lastRawDeltaMs = 0;
+let simulationTimeSeconds = 0;
+let lastSimulatedDeltaSeconds = 0;
+let lastSimStepCount = 0;
 let fieldRebuildTimeoutId = 0;
 const previousWakePlayerPosition = new THREE.Vector3();
 const sceneLightSources: SceneLightSource[] = [];
@@ -365,6 +372,7 @@ function showMainMenu(shouldFocus = true, reason = "exit"): void {
   activePlayMode = null;
   appState = "mainMenu";
   menuVisible = false;
+  resetSimulationClock();
   resetRuntimeState("main-menu");
   raceTrack.setVisible(false);
   syncCircularArenaShellVisibility();
@@ -402,15 +410,22 @@ function applyPlayMode(mode: PlayModeId, reason: string): void {
   player.setPlayAreaConstraint(playAreaConstraint);
   player.resetForSession(spawn.position, spawn.facingYaw);
   previousWakePlayerPosition.copy(player.position);
+  resetSimulationClock();
   resetRuntimeState(`mode-${reason}`);
   rebuildFieldGeometry(preset, `mode-${reason}`, { reseedEchoes: false });
   if (mode === "training") {
-    trainingRun.start(clock.elapsedTime, player.position, player.getTelemetry(), raceTrack);
+    trainingRun.start(simulationTimeSeconds, player.position, player.getTelemetry(), raceTrack);
   } else {
-    seedStartupPulses(clock.elapsedTime);
-    seedEchoZones(clock.elapsedTime);
+    seedStartupPulses(simulationTimeSeconds);
+    seedEchoZones(simulationTimeSeconds);
   }
-  updateStats(0, clock.elapsedTime);
+  updateStats(0, simulationTimeSeconds);
+}
+
+function resetSimulationClock(): void {
+  simulationTimeSeconds = 0;
+  lastSimulatedDeltaSeconds = 0;
+  lastSimStepCount = 0;
 }
 
 function resetRuntimeState(reason: string): void {
@@ -420,10 +435,10 @@ function resetRuntimeState(reason: string): void {
   particles.clear();
   pulseLights.clear();
   wakeField.reset(reason);
-  nextEchoZoneAt = clock.elapsedTime + ECHO_ZONE_SPAWN_INTERVAL_SECONDS;
+  nextEchoZoneAt = simulationTimeSeconds + ECHO_ZONE_SPAWN_INTERVAL_SECONDS;
   echoDebugFrameWatchUntil = -Infinity;
   echoDebugLastFrameLogAt = -Infinity;
-  lastGlobalFrameHitchLogAt = clock.elapsedTime;
+  lastGlobalFrameHitchLogAt = simulationTimeSeconds;
 }
 
 function seedStartupPulses(time: number): void {
@@ -550,38 +565,38 @@ function renderTrainingProgress(state: TrainingHudState): void {
 
 function animate(): void {
   const rawDelta = clock.getDelta();
-  const delta = Math.min(rawDelta, 1 / 24);
-  const time = clock.elapsedTime;
   lastRawDeltaMs = rawDelta * 1000;
   const frameStartedAt = performance.now();
+  const simulatedDeltaThisFrame = runSimulationFrame(rawDelta);
 
-  if (appState === "mainMenu") {
-    // The title screen is a real app state. Render the scene shell behind the
-    // splash if it exists, but do not advance gameplay, Echo timers, pulse
-    // lifetimes, or wake simulation before the player chooses a mode.
-    renderer.info.reset();
-    const renderStartedAt = performance.now();
-    lastFrameUpdateMs = 0;
-    renderSceneFrame();
-    lastFrameRenderMs = performance.now() - renderStartedAt;
-    lastGlobalFrameHitchLogAt = time;
-    previousWakePlayerPosition.copy(player.position);
-    return;
+  renderPresentation(rawDelta, simulatedDeltaThisFrame, frameStartedAt);
+}
+
+function runSimulationFrame(rawDelta: number): number {
+  lastSimStepCount = 0;
+  if (appState !== "playing") {
+    lastSimulatedDeltaSeconds = 0;
+    return 0;
   }
 
-  player.update(delta);
+  let remainingDelta = Math.min(Math.max(0, rawDelta), MAX_SIM_FRAME_SECONDS);
+  let simulatedDelta = 0;
+  while (remainingDelta > MIN_SIM_REMAINING_SECONDS && lastSimStepCount < MAX_SIM_STEPS_PER_FRAME) {
+    const stepDelta = Math.min(SIM_STEP_SECONDS, remainingDelta);
+    simulationTimeSeconds += stepDelta;
+    updateSimulationStep(stepDelta, simulationTimeSeconds);
+    simulatedDelta += stepDelta;
+    remainingDelta -= stepDelta;
+    lastSimStepCount += 1;
+  }
+
+  lastSimulatedDeltaSeconds = simulatedDelta;
+  return simulatedDelta;
+}
+
+function updateSimulationStep(delta: number, time: number): void {
+  player.update(delta, time);
   const playerTelemetry = player.getTelemetry();
-  const playerSpeed = player.getSpeed();
-  const playerGroundContact = player.getGroundContactStrength();
-  avatar.update(delta, player.position, playerSpeed, player.getFacingYaw());
-  if (settings.particlesEnabled) {
-    particles.spawnAura(player.position, delta, playerSpeed / 18);
-    particles.spawnWake(player.position, (playerSpeed / 18) * playerGroundContact, player.velocity);
-  }
-  raceTrack.update(time);
-  arenaBarrier.update(time);
-  updateSceneLightSourceVisuals(time);
-  echoZones.update(time);
   if (activePlayMode === "training") {
     trainingRun.update({
       time,
@@ -593,9 +608,22 @@ function animate(): void {
   }
   collectEchoZones(time);
   maybeSpawnEchoZone(time);
-  if (settings.particlesEnabled) {
-    particles.update(delta);
+}
+
+function renderPresentation(rawDelta: number, simulatedDeltaThisFrame: number, frameStartedAt: number): void {
+  const time = simulationTimeSeconds;
+  const playerSpeed = player.getSpeed();
+  const playerGroundContact = player.getGroundContactStrength();
+  avatar.update(simulatedDeltaThisFrame, time, player.position, playerSpeed, player.getFacingYaw());
+  if (appState === "playing" && settings.particlesEnabled && simulatedDeltaThisFrame > 0) {
+    particles.spawnAura(player.position, simulatedDeltaThisFrame, playerSpeed / 18);
+    particles.spawnWake(player.position, simulatedDeltaThisFrame, (playerSpeed / 18) * playerGroundContact, player.velocity);
+    particles.update(simulatedDeltaThisFrame);
   }
+  raceTrack.update(time);
+  arenaBarrier.update(time);
+  updateSceneLightSourceVisuals(time);
+  echoZones.update(time);
   const effectiveBloomStrength = getEffectiveBloomStrength();
   pulseLights.update(
     rippleSources.getActiveLightSources(time),
@@ -607,21 +635,23 @@ function animate(): void {
   const renderStartedAt = performance.now();
   lastFrameUpdateMs = renderStartedAt - frameStartedAt;
   renderer.info.reset();
-  wakeField.render({
-    time,
-    delta,
-    fieldRadius: preset.fieldRadius,
-    playerPosition: player.position,
-    previousPlayerPosition: previousWakePlayerPosition,
-    playerVelocity: player.velocity,
-    playerSpeed,
-    playerGroundContact,
-    waveMedium: settings.waveMedium,
-    activeRippleSourceCount: rippleSources.getActiveSources(time).length,
-    renderedRippleSourceCount: rippleField.getRenderedRippleSourceCount(),
-    hexCount: rippleField.getInstanceCount(),
-    qualityId: preset.id
-  });
+  if (appState === "playing" && simulatedDeltaThisFrame > 0) {
+    wakeField.render({
+      time,
+      delta: simulatedDeltaThisFrame,
+      fieldRadius: preset.fieldRadius,
+      playerPosition: player.position,
+      previousPlayerPosition: previousWakePlayerPosition,
+      playerVelocity: player.velocity,
+      playerSpeed,
+      playerGroundContact,
+      waveMedium: settings.waveMedium,
+      activeRippleSourceCount: rippleSources.getActiveSources(time).length,
+      renderedRippleSourceCount: rippleField.getRenderedRippleSourceCount(),
+      hexCount: rippleField.getInstanceCount(),
+      qualityId: preset.id
+    });
+  }
   const wakeMetrics = wakeField.getMetrics();
   rippleField.update(
     time,
@@ -641,9 +671,9 @@ function animate(): void {
   renderSceneFrame();
   lastFrameRenderMs = performance.now() - renderStartedAt;
   previousWakePlayerPosition.copy(player.position);
-  updateStats(delta, time);
-  logGlobalFrameHitch(time, delta, rawDelta, frameStartedAt);
-  logEchoDetonationFrame(time, delta, frameStartedAt);
+  updateStats(rawDelta, time);
+  logGlobalFrameHitch(time, simulatedDeltaThisFrame, rawDelta, frameStartedAt);
+  logEchoDetonationFrame(time, simulatedDeltaThisFrame, frameStartedAt);
 }
 
 function renderSceneFrame(): void {
@@ -658,7 +688,7 @@ function spawnPulse(
   position: THREE.Vector3,
   strength: number,
   options = MANUAL_PULSE_OPTIONS,
-  startTime = clock.elapsedTime
+  startTime = simulationTimeSeconds
 ): void {
   rippleSources.add(position, startTime, strength, options);
 
@@ -681,7 +711,7 @@ function triggerJumpRipple(event: PlayerJumpEvent): void {
   // but intentionally quieter than the landing impact.
   spawnPulse(event.position, event.strength, JUMP_TAKEOFF_OPTIONS);
   debugEvent("player.jump", "Player jumped from field surface", {
-    time: roundMetric(clock.elapsedTime),
+    time: roundMetric(simulationTimeSeconds),
     strength: roundMetric(event.strength),
     position: vectorPayload(event.position)
   }, "info");
@@ -690,7 +720,7 @@ function triggerJumpRipple(event: PlayerJumpEvent): void {
 function triggerLandingRipple(event: PlayerJumpEvent): void {
   spawnPulse(event.position, event.strength, JUMP_LANDING_OPTIONS);
   debugEvent("player.jump", "Player landed on field surface", {
-    time: roundMetric(clock.elapsedTime),
+    time: roundMetric(simulationTimeSeconds),
     strength: roundMetric(event.strength),
     airtimeSeconds: roundMetric(event.airtimeSeconds),
     impactSpeed: roundMetric(event.impactSpeed),
@@ -1457,7 +1487,7 @@ function rebuildFieldGeometry(
   updateStageFloor(nextPreset);
   const reseededEchoes = options.reseedEchoes ?? activePlayMode !== null;
   if (reseededEchoes) {
-    resetEchoZonesAfterPlayAreaRebuild(clock.elapsedTime, reason);
+    resetEchoZonesAfterPlayAreaRebuild(simulationTimeSeconds, reason);
   }
   updateShadowResolution(nextPreset.shadowMapSize, nextPreset.fieldRadius);
   resize();
@@ -1543,7 +1573,7 @@ function updateSceneFog(nextPreset: QualityPreset): void {
 }
 
 function prewarmRenderPipelines(): void {
-  const time = clock.elapsedTime;
+  const time = simulationTimeSeconds;
 
   // Keep startup/rebuild hitches out of the first visible gameplay frame by
   // compiling the field material and running a neutral wake pass immediately
@@ -2038,11 +2068,10 @@ function createHoverPodAvatar(): PlayerAvatar {
 
   return {
     object,
-    update(delta, position, movementSpeed, facingYaw) {
+    update(delta, time, position, movementSpeed, facingYaw) {
       object.position.copy(position);
       headingGroup.rotation.y = facingYaw;
 
-      const time = clock.elapsedTime;
       const breathingGlow = Math.sin(time * 4) * 0.5 + 0.5;
       const movementGlow = THREE.MathUtils.clamp(movementSpeed / 18, 0, 1);
 
@@ -2179,15 +2208,15 @@ function createLegacyGlowAvatar(): PlayerAvatar {
 
   return {
     object,
-    update(delta, position, movementSpeed) {
+    update(delta, time, position, movementSpeed) {
       object.position.copy(position);
       core.rotation.x += delta * 1.3;
       core.rotation.y += delta * 1.9;
       shell.rotation.x -= delta * 0.55;
       shell.rotation.y += delta * 0.7;
-      const breathingGlow = Math.sin(clock.elapsedTime * 4) * 0.5 + 0.5;
+      const breathingGlow = Math.sin(time * 4) * 0.5 + 0.5;
       const movementGlow = THREE.MathUtils.clamp(movementSpeed / 18, 0, 1);
-      updateAvatarOrbitTrails(orbitTrails, clock.elapsedTime, movementGlow);
+      updateAvatarOrbitTrails(orbitTrails, time, movementGlow);
 
       // The player should now behave like an actual local light source for the
       // hex field. Keep shadows off for this moving light pair; point-light
@@ -2528,7 +2557,8 @@ function updatePerfOverlay(activeSourceCount: number): void {
   perfFrame.textContent = `${(lastFrameUpdateMs + lastFrameRenderMs).toFixed(1)} ms`;
   perfUpdate.textContent = `${lastFrameUpdateMs.toFixed(1)} ms`;
   perfRender.textContent = `${lastFrameRenderMs.toFixed(1)} ms`;
-  perfFps.textContent = `${Math.round(measuredFps)} | raw ${lastRawDeltaMs.toFixed(1)} ms`;
+  perfFps.textContent =
+    `${Math.round(measuredFps)} | raw ${lastRawDeltaMs.toFixed(1)} ms | sim ${(lastSimulatedDeltaSeconds * 1000).toFixed(1)} ms/${lastSimStepCount}`;
   perfHexes.textContent = buildStats.culledHexCount > 0
     ? `${formatCompactCount(rippleField.getInstanceCount())} | -${formatCompactCount(buildStats.culledHexCount)}`
     : formatCompactCount(rippleField.getInstanceCount());
