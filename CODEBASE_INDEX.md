@@ -94,7 +94,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Prioritized concrete follow-up work: `TODO.md`
 - Loose visual, interaction, and engine ideas: `SPITBALL_IDEAS.md`
 - Research notes and plan for physically inspired propagation:
-  `PROPAGATION_NOTES.md`
+  `devlog/PROPAGATION_NOTES.md`
 - Before/after notes for the frame-rate-independent simulation loop:
   `devlog/FRAME_RATE_TIMING_NOTES.md`
 
@@ -210,7 +210,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `src/main.ts`
 - Change pulse source strength or cooldown: `src/main.ts`
 - Change propagation-speed semantics or medium parameters: `src/waveMedium.ts`,
-  `src/labSettings.ts`, and `PROPAGATION_NOTES.md`
+  `src/labSettings.ts`, and `devlog/PROPAGATION_NOTES.md`
 - Change momentum, surface grip, jump feel, hidden speed defaults/limits,
   movement/camera feel, track containment, or the circular player fallback
   boundary: `src/controls.ts`, `src/raceTrack.ts`, `src/labSettings.ts`, and
