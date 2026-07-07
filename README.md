@@ -38,7 +38,7 @@ mode directly.
 - Hold right mouse button to orbit the camera and steer avatar facing together;
   while held, `A` / `D` strafe instead of turning.
 - Hold both mouse buttons to move forward in the camera-facing direction.
-- Mouse look now has a full 180-degree vertical orbit range from straight below
+- Mouse look supports a full 180-degree vertical orbit range from straight below
   the avatar to straight overhead.
 - Releasing one mouse button downgrades to the remaining drag mode; releasing
   the last held scene mouse button restores the cursor.
@@ -55,87 +55,121 @@ mode directly.
   from a clean runtime state.
 - The on-screen pulse button drops manual pulses on touch layouts.
 
-The lab now has three startup modes. `Training Run` is a short guided course
-warmup that teaches left-drag camera orbit, right-drag steering, keyboard
-movement, boosting, both-button camera-forward movement, momentum/braking,
-jumping, Echo collection, and track wall sliding with a compact HUD and one
-scripted Echo.
+## Startup Modes
+
+The lab has three startup modes: `Training Run`, `Track`, and `Arena`.
+
+`Training Run` is a short guided course warmup that teaches left-drag camera
+orbit, right-drag steering, keyboard movement, boosting, both-button
+camera-forward movement, momentum/braking, jumping, Echo collection, and track
+wall sliding with a compact HUD and one scripted Echo.
+
 Training uses the same course walls, track-only hex culling, and hidden circular
 Arena shell as Track mode, but disables random Echo spawning so the lesson is
-deterministic. `Arena` is the full circular sandbox: the
-avatar uses the circular arena edge as its boundary, Echoes spawn across the
-disc, and the entire circular hex field is generated. `Track` is the first
-racing prototype: the avatar drives on a wide ribbon inside the arena, bright
-glowing translucent energy walls clamp the avatar back onto the course,
-wall-contact preserves tangent speed while shaving outward momentum, and Echoes
-spawn on the course. Track mode also clips generated hexes to the course ribbon
-plus a safety skirt, so off-track cells are skipped instead of animated every
-frame. Track hides the circular arena floor and outer arena barrier so the
-course reads as the active play space instead of a path painted over the
-sandbox.
+deterministic.
+
+`Track` is the first racing prototype. The avatar drives on a wide ribbon inside
+the arena, bright glowing translucent energy walls clamp the avatar back onto
+the course, wall-contact preserves tangent speed while shaving outward momentum,
+and Echoes spawn on the course.
+
+Track mode also clips generated hexes to the course ribbon plus a safety skirt,
+so off-track cells are skipped instead of animated every frame. It hides the
+circular arena floor and outer arena barrier so the course reads as the active
+play space instead of a path painted over the sandbox.
+
+`Arena` is the full circular sandbox. The avatar uses the circular arena edge as
+its boundary, Echoes spawn across the disc, and the entire circular hex field is
+generated.
+
+## Field And Visuals
+
 The arena edge is rendered as a smooth glowing gradient barrier so the playable
 boundary is visible in-world without looking like a tiled wall texture.
-The hex field is drawn as a single shader-animated cap surface, without the old
-per-cell vertical shafts, so the renderer is cleaner for the upcoming spherical
-arena pass. Meltdown uses a calibrated honeycomb footprint so tiny hexes
-visually interlock without raising the old stress-test instance count, while
-lighter quality modes keep more breathing room.
+
+The hex field is drawn as a single shader-animated cap surface. The render path
+keeps the field focused on lit hex caps for the upcoming spherical arena pass.
+
+Meltdown uses a calibrated honeycomb footprint for visually interlocked tiny
+hexes, while lighter quality modes keep more breathing room.
+
 Raised wave crests carry an extra bounded glow signal, so ripple fronts bloom
-brighter without washing out the whole field.
-Manual touch pulses have a short shared cooldown so the on-screen pulse button
-does not flood the field.
-The avatar itself is now a strong-facing hover pod with a bright nose, side glow
+brighter without washing out the whole field. Manual touch pulses have a short
+shared cooldown so the on-screen pulse button does not flood the field.
+
+The avatar is a strong-facing hover pod with a bright nose, side glow
 fins, rear thrusters, and rear-biased energy motes, so player facing is readable
-before movement starts. The older glow-orb model is still shelved in code for
-future reuse.
+before movement starts.
+
 Sparkling Echo columns spawn on the race track as real local light sources with
 a bright inner orb, a vertically stretched diamond-shaped glow cloud, faster
-core-local orbiting motes, and segmented fading trails. They wait until the
-avatar runs through them, then detonate into a wider pulse, a flat disc burst of
-sparks, and a short local orb-shatter effect without geometric ring markers.
-Movement has acceleration, braking, and stronger carried momentum instead of
-snapping instantly to full speed. Base pace defaults to `10 m/s` and boost
-defaults to `37 m/s`, with grounded acceleration, counter-steering, and release
-braking tuned for a more slide-y feel. The pause menu's `Surface Grip` slider
-scales that grounded response from slicker low-grip handling to tighter
-high-grip handling without changing base or boost top speed. It behaves like a
-small body pushing through water: the shader forms a pressed fabric depression,
-local bow/wake displacement, and small raised rim around the avatar, while a
-dedicated GPU wake texture stores the lingering height/velocity field left
-behind by movement. The visible movement particle trail is now a tighter
-velocity-following tail instead of a broad glitter shed.
+core-local orbiting motes, and segmented fading trails.
+
+Echo columns wait until the avatar runs through them, then detonate into a wider
+pulse, a flat disc burst of sparks, and a short local orb-shatter effect without
+geometric ring markers.
+
+## Movement Model
+
+Movement uses acceleration, braking, and carried momentum.
+
+Base pace defaults to `10 m/s` and boost defaults to `37 m/s`, with grounded
+acceleration, counter-steering, and release braking tuned for a more slide-y
+feel. The pause menu's `Surface Grip` slider scales that grounded response from
+slicker low-grip handling to tighter high-grip handling without changing base or
+boost top speed.
+
+The avatar behaves like a small body pushing through water: the shader forms a
+pressed fabric depression, local bow/wake displacement, and small raised rim
+around the avatar, while a dedicated GPU wake texture stores the lingering
+height/velocity field left behind by movement.
+
+The visible movement particle trail is a tight velocity-following tail.
+
 Jumping fades that surface contact while the avatar is airborne, then landing
 stamps a brighter impact ripple back into the field. Touch-button pulses and
-collected Echoes still use analytic ring sources, but ordinary movement no
-longer adds little circular wave sources while the avatar runs.
+collected Echoes use analytic ring sources; ordinary movement uses the GPU wake
+texture for continuous surface response.
+
+## Runtime Tuning
 
 The Esc/hamburger pause menu changes quality, skybox theme, hex size, arena
 radius, surface grip, ripple height/radius, Depth / Speed, particle density,
 bloom strength, and the live performance overlay while the scene is running.
-Hex size treats
-the current cell scale as `1m`, ranges from `25cm` to `2m`, and measures the regular
-hexagon's widest point-to-point diameter. Changing it rebuilds the instanced
-field after a short debounce so slider drags do not spam geometry work. Arena
-radius is expressed in lab meters: `200m` preserves the original scene radius,
-while `400m` doubles it. Depth / Speed changes the medium's effective depth,
-then shows the derived propagation speed from the shallow-water-inspired
+
+Hex size treats the current cell scale as `1m`, ranges from `25cm` to `2m`, and
+measures the regular hexagon's widest point-to-point diameter. Changing it
+rebuilds the instanced field after a short debounce so slider drags do not spam
+geometry work.
+
+Arena radius is expressed in lab meters: `200m` preserves the original scene
+radius, while `400m` doubles it. Depth / Speed changes the medium's effective
+depth, then shows the derived propagation speed from the shallow-water-inspired
 `sqrt(g * depth)` model.
+
 Arena mode clamps extreme hex-size/arena-radius combinations before rebuilding
 the full circular field, using per-quality instance budgets so a casual slider
-drag cannot spawn millions of visible hexes. Track mode skips that full-disc
-coupling because it rebuilds only the course ribbon plus safety skirt; switching
-back to Arena reapplies the guardrail before the full disc is rebuilt. If you
-intentionally want stress-test behavior, open the app with `?stress=1` or set
-`localStorage.rippleStressMode = "1"`.
-The HUD shows that derived speed, hex diameter, arena radius, active pulse count,
-and the newest pulse's approximate radius, plus the number of live Echo zones, so
-propagation and scale tuning have a quick visual sanity check.
+drag cannot spawn millions of visible hexes.
+
+Track mode skips that full-disc coupling because it rebuilds only the course
+ribbon plus safety skirt; switching back to Arena reapplies the guardrail before
+the full disc is rebuilt. To intentionally run stress-test behavior, open the
+app with `?stress=1` or set `localStorage.rippleStressMode = "1"`.
+
+## HUD, Perf Overlay, And Skyboxes
+
+The HUD shows derived speed, hex diameter, arena radius, active pulse count, the
+newest pulse's approximate radius, and live Echo zone count so propagation and
+scale tuning have a quick visual sanity check.
+
 The performance overlay adds a denser tuning cockpit with frame/update/render
 timing, active particles versus resident budget, rendered pulse-source pressure,
 GPU wake texture mode/pass cost, draw calls, triangles, pixel ratio, bloom state,
 quality mode, play mode, and clipped-versus-full hex counts.
+
 Skybox themes use the generated Cyberpunk Skyline, Aurora Observatory, Orbital
 Megastructure, and Neon Arena Skyline panoramas on a camera-following dome.
+
 Modern GPUs get 8K sky textures; lower texture-cap hardware falls back to 4K,
 and the aurora/orbital themes have custom vertical framing so their horizons sit
 closer to the arena instead of sinking below the play surface.
@@ -160,12 +194,12 @@ npm.cmd run validate
 ```
 
 Local runs emit debug logs for Echo detonations, including particle burst counts
-and frame timings around collection. They also report broader frame warnings
-when a frame stalls outside the Echo watch window. New logs split those warnings
-into `frame.renderHitch`, `frame.updateHitch`, `frame.mixedHitch`, and
-`frame.clockGap` so true render pressure is not blended with sleep/reload/browser
-clock gaps. Console lines include inline JSON so Chrome automation can read the
-numbers instead of collapsed `Object` payloads. In DevTools, call
+and frame timings around collection. Broader frame warnings cover stalls outside
+the Echo watch window and use
+`frame.renderHitch`, `frame.updateHitch`, `frame.mixedHitch`, and
+`frame.clockGap` channels so true render pressure is not blended with
+sleep/reload/browser clock gaps. Console lines include inline JSON so Chrome
+automation can read numeric payloads directly. In DevTools, call
 `window.__rippleDebugDump()` to inspect the retained in-page log.
 
 For file-backed local logging, run `npm.cmd run debug:logs` in a second terminal.
@@ -215,12 +249,10 @@ Versioning:
   including the local bow deformation around the moving avatar, sampled GPU
   wake texture displacement, optional track-mode placement clipping, the
   generated race-track mask highlight, and shader-side hex footprint/height
-  scaling. It now renders only the lit cap
-  surface, calibrates Meltdown into an interlocked honeycomb without increasing
-  its old instance density, then tints cells by animated height so raised caps
-  push toward white while troughs stay darker. Wave crests have their own glow
-  varying so peak brightness can be tuned separately from generic
-  player-proximity glow.
+  scaling. It renders the lit cap surface, calibrates Meltdown into an
+  interlocked honeycomb, and tints cells by animated height so raised caps push
+  toward white while troughs stay darker. Wave crests have their own glow varying
+  so peak brightness can be tuned separately from generic player-proximity glow.
 - `src/arenaBarrier.ts` owns the Arena-only visual glowing arena-edge gradient
   that follows the live arena radius without changing collision behavior.
 - `src/skybox.ts` owns the selectable camera-following sky dome, high-res versus
@@ -253,14 +285,13 @@ Versioning:
   horizontal momentum, both-button camera-forward movement, full 180-degree
   vertical camera orbit, quiet mouse-release unlocks, and read-only tutorial
   telemetry. The avatar visuals in `src/main.ts` use orbiting motes and
-  segmented additive trails instead of torus rings.
+  segmented additive trails.
 
 The CPU decides where the player, touch-button pulses, optional race-track
 constraint, and persistent Echo zones are. Manual pulse input is cooldown-gated,
 Echo zones only become pulse sources after collection, and pulse sources age out
 by per-source lifetime. Movement wake is fed into a small GPU height/velocity
-texture instead of the pulse source list. The GPU handles wake propagation, hex
-lift, stretch, tint, emissive glow, track-surface highlight, and cell
-footprint/height from the wake texture plus the newest rendered pulse uniforms,
-with dense fields allowed to render fewer pulse sources than the full gameplay
-source list contains.
+texture. The GPU handles wake propagation, hex lift, stretch, tint, emissive
+glow, track-surface highlight, and cell footprint/height from the wake texture
+plus the newest rendered pulse uniforms, with dense fields allowed to render
+fewer pulse sources than the full gameplay source list contains.
