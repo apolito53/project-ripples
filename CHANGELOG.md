@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.5.3-ALPHA - 2026-07-07
+
+### Changed
+
+- Changed gameplay timing to use bounded simulation catch-up so player movement,
+  jumping, Echo timing, particles, and ripple aging no longer slow down just
+  because rendering drops below the old capped-frame threshold.
+- Froze gameplay simulation while paused or on the main menu while keeping
+  rendering and performance diagnostics alive.
+- Changed movement wake particles to emit from simulated time instead of a
+  per-render-frame chance so wake density stays steadier across frame rates.
+- Bumped package metadata, README, codebase index, and visible menu version text
+  to `v0.5.3-ALPHA`.
+
 ## 0.5.2-ALPHA - 2026-07-06
 
 ### Added
