@@ -96,7 +96,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Research notes and plan for physically inspired propagation:
   `PROPAGATION_NOTES.md`
 - Before/after notes for the frame-rate-independent simulation loop:
-  `FRAME_RATE_TIMING_NOTES.md`
+  `devlog/FRAME_RATE_TIMING_NOTES.md`
 
 ## Runtime Flow
 
