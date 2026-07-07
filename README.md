@@ -7,7 +7,7 @@ This is intentionally separate from `voxel-sandbox-engine`. The goal is to make
 a polished visual lab first, then borrow patterns or ideas later if they deserve
 to graduate into the main voxel engine.
 
-Current version: `v0.5.3-ALPHA`.
+Current version: `v0.5.3-1-ALPHA`.
 
 ## Quick Start
 
@@ -47,7 +47,7 @@ mode directly.
 - `Space` jumps high, with small takeoff and stronger landing ripples. Airborne
   movement preserves takeoff momentum instead of letting input redirect the
   trajectory mid-jump.
-- `Shift` sprints with momentum.
+- `Shift` boosts from base pace with momentum.
 - `F2` shows or hides the live performance overlay.
 - `Esc` opens/closes the pause menu after a mode has started.
 - The pause menu's version pill opens the in-app changelog.
@@ -57,8 +57,9 @@ mode directly.
 
 The lab now has three startup modes. `Training Run` is a short guided course
 warmup that teaches left-drag camera orbit, right-drag steering, keyboard
-movement, both-button camera-forward movement, momentum/braking, jumping, Echo
-collection, and track wall sliding with a compact HUD and one scripted Echo.
+movement, boosting, both-button camera-forward movement, momentum/braking,
+jumping, Echo collection, and track wall sliding with a compact HUD and one
+scripted Echo.
 Training uses the same course walls, track-only hex culling, and hidden circular
 Arena shell as Track mode, but disables random Echo spawning so the lesson is
 deterministic. `Arena` is the full circular sandbox: the
@@ -93,15 +94,15 @@ core-local orbiting motes, and segmented fading trails. They wait until the
 avatar runs through them, then detonate into a wider pulse, a flat disc burst of
 sparks, and a short local orb-shatter effect without geometric ring markers.
 Movement has acceleration, braking, and stronger carried momentum instead of
-snapping instantly to full speed. Walk defaults to `10 m/s` and sprint defaults
-to `37 m/s`, with grounded acceleration, counter-steering, and release braking
-tuned for a more slide-y feel. The pause menu's `Surface Grip` slider scales
-that grounded response from slicker low-grip handling to tighter high-grip
-handling without changing walk or sprint top speed. It behaves like a small body
-pushing through water: the shader forms a pressed fabric depression, local
-bow/wake displacement, and small raised rim around the avatar, while a dedicated
-GPU wake texture stores the lingering height/velocity field left behind by
-movement. The visible movement particle trail is now a tighter
+snapping instantly to full speed. Base pace defaults to `10 m/s` and boost
+defaults to `37 m/s`, with grounded acceleration, counter-steering, and release
+braking tuned for a more slide-y feel. The pause menu's `Surface Grip` slider
+scales that grounded response from slicker low-grip handling to tighter
+high-grip handling without changing base or boost top speed. It behaves like a
+small body pushing through water: the shader forms a pressed fabric depression,
+local bow/wake displacement, and small raised rim around the avatar, while a
+dedicated GPU wake texture stores the lingering height/velocity field left
+behind by movement. The visible movement particle trail is now a tighter
 velocity-following tail instead of a broad glitter shed.
 Jumping fades that surface contact while the avatar is airborne, then landing
 stamps a brighter impact ripple back into the field. Touch-button pulses and
@@ -195,7 +196,7 @@ Project planning:
 Versioning:
 
 - While the project is still experimental, release tags use alpha prerelease
-  labels. The current baseline is `v0.5.3-ALPHA`.
+  labels. The current baseline is `v0.5.3-1-ALPHA`.
 
 ## Design Notes
 

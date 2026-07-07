@@ -16,8 +16,8 @@ export type PlayerRigOptions = {
 };
 
 export type PlayerSpeedSettings = {
-  readonly walkSpeedMetersPerSecond: number;
-  readonly sprintSpeedMetersPerSecond: number;
+  readonly baseSpeedMetersPerSecond: number;
+  readonly boostSpeedMetersPerSecond: number;
 };
 
 export type PlayAreaConstraint = {
@@ -54,7 +54,7 @@ export type PlayerControlTelemetry = {
   readonly turnRightInput: boolean;
   readonly strafeLeftInput: boolean;
   readonly strafeRightInput: boolean;
-  readonly sprintInput: boolean;
+  readonly boostInput: boolean;
   readonly movementInputActive: boolean;
   readonly braking: boolean;
   readonly grounded: boolean;
@@ -66,13 +66,13 @@ export type PlayerControlTelemetry = {
 };
 
 export const PLAYER_SPEED_LIMITS = {
-  walk: { min: 1, max: 30, step: 0.5 },
-  sprint: { min: 20, max: 50, step: 0.5, minimumGapFromWalk: 5 }
+  base: { min: 1, max: 30, step: 0.5 },
+  boost: { min: 20, max: 50, step: 0.5, minimumGapFromBase: 5 }
 } as const;
 
 export const DEFAULT_PLAYER_SPEED_SETTINGS: PlayerSpeedSettings = {
-  walkSpeedMetersPerSecond: 10,
-  sprintSpeedMetersPerSecond: 37
+  baseSpeedMetersPerSecond: 10,
+  boostSpeedMetersPerSecond: 37
 };
 
 export const SURFACE_GRIP_LIMITS = {
@@ -85,7 +85,7 @@ export const SURFACE_GRIP_LIMITS = {
 // These are exponential velocity response rates, not raw meters/second forces.
 // Halving them roughly doubles how long the avatar carries momentum during
 // grounded movement, which gives the lab the slide-y feel without changing the
-// visible walk/sprint top speeds.
+// visible base/boost top speeds.
 const MOVE_ACCELERATION = 3.75;
 const MOVE_COUNTER_STEER_ACCELERATION = 5.25;
 const MOVE_BRAKE = 1.68;
@@ -128,28 +128,28 @@ const MOUSE_BUTTON_RIGHT_MASK = 2;
 
 
 export function normalizePlayerSpeedSettings(settings: PlayerSpeedSettings): PlayerSpeedSettings {
-  const walkSpeedMetersPerSecond = THREE.MathUtils.clamp(
-    settings.walkSpeedMetersPerSecond,
-    PLAYER_SPEED_LIMITS.walk.min,
-    PLAYER_SPEED_LIMITS.walk.max
+  const baseSpeedMetersPerSecond = THREE.MathUtils.clamp(
+    settings.baseSpeedMetersPerSecond,
+    PLAYER_SPEED_LIMITS.base.min,
+    PLAYER_SPEED_LIMITS.base.max
   );
-  const minimumSprintSpeed = getMinimumSprintSpeedMetersPerSecond(walkSpeedMetersPerSecond);
-  const sprintSpeedMetersPerSecond = THREE.MathUtils.clamp(
-    settings.sprintSpeedMetersPerSecond,
-    minimumSprintSpeed,
-    PLAYER_SPEED_LIMITS.sprint.max
+  const minimumBoostSpeed = getMinimumBoostSpeedMetersPerSecond(baseSpeedMetersPerSecond);
+  const boostSpeedMetersPerSecond = THREE.MathUtils.clamp(
+    settings.boostSpeedMetersPerSecond,
+    minimumBoostSpeed,
+    PLAYER_SPEED_LIMITS.boost.max
   );
 
   return {
-    walkSpeedMetersPerSecond,
-    sprintSpeedMetersPerSecond
+    baseSpeedMetersPerSecond,
+    boostSpeedMetersPerSecond
   };
 }
 
-export function getMinimumSprintSpeedMetersPerSecond(walkSpeedMetersPerSecond: number): number {
+export function getMinimumBoostSpeedMetersPerSecond(baseSpeedMetersPerSecond: number): number {
   return Math.max(
-    PLAYER_SPEED_LIMITS.sprint.min,
-    walkSpeedMetersPerSecond + PLAYER_SPEED_LIMITS.sprint.minimumGapFromWalk
+    PLAYER_SPEED_LIMITS.boost.min,
+    baseSpeedMetersPerSecond + PLAYER_SPEED_LIMITS.boost.minimumGapFromBase
   );
 }
 
@@ -286,10 +286,10 @@ export class PlayerRig {
 
     const hasIntent = intent.lengthSq() > 0;
     if (hasIntent) intent.normalize();
-    const isSprinting = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight");
-    const targetSpeed = isSprinting
-      ? this.speedSettings.sprintSpeedMetersPerSecond
-      : this.speedSettings.walkSpeedMetersPerSecond;
+    const isBoosting = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight");
+    const targetSpeed = isBoosting
+      ? this.speedSettings.boostSpeedMetersPerSecond
+      : this.speedSettings.baseSpeedMetersPerSecond;
     const targetVelocity = intent.multiplyScalar(targetSpeed);
     const hasPlanarVelocity = this.velocity.lengthSq() > STOP_EPSILON * STOP_EPSILON;
     const isCounterSteering = hasIntent && hasPlanarVelocity && targetVelocity.dot(this.velocity) < 0;
@@ -315,7 +315,7 @@ export class PlayerRig {
       !this.isRightMouseHeld && this.keys.has("KeyD"),
       this.keys.has("KeyQ") || (this.isRightMouseHeld && this.keys.has("KeyA")),
       this.keys.has("KeyE") || (this.isRightMouseHeld && this.keys.has("KeyD")),
-      isSprinting,
+      isBoosting,
       hasIntent,
       inputEnabled && !hasIntent && hasPlanarVelocity && this.grounded,
       inputEnabled
@@ -400,7 +400,7 @@ export class PlayerRig {
   }
 
   setSpeedSettings(settings: PlayerSpeedSettings): void {
-    // Keep the hidden speed controls and any future callers honest: sprint
+    // Keep the hidden speed controls and any future callers honest: boost
     // should remain meaningfully faster even while the visible UI is simplified.
     this.speedSettings = normalizePlayerSpeedSettings(settings);
   }
@@ -798,7 +798,7 @@ export class PlayerRig {
     turnRightInput: boolean,
     strafeLeftInput: boolean,
     strafeRightInput: boolean,
-    sprintInput: boolean,
+    boostInput: boolean,
     movementInputActive: boolean,
     braking: boolean,
     inputEnabled: boolean
@@ -816,7 +816,7 @@ export class PlayerRig {
       turnRightInput: inputEnabled && turnRightInput,
       strafeLeftInput: inputEnabled && strafeLeftInput,
       strafeRightInput: inputEnabled && strafeRightInput,
-      sprintInput: inputEnabled && sprintInput,
+      boostInput: inputEnabled && boostInput,
       movementInputActive: inputEnabled && movementInputActive,
       braking,
       grounded: this.grounded,

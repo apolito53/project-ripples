@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.5.3-1-ALPHA - 2026-07-07
+
+### Added
+
+- Added a dedicated Training Run `Boost` objective that teaches holding `Shift`
+  while moving before the mouse-forward and momentum lessons.
+
+### Changed
+
+- Renamed current movement speed terminology to base/boost across
+  player-facing controls, docs, and speed-setting code.
+- Bumped package metadata, README, codebase index, and visible menu version text
+  to `v0.5.3-1-ALPHA`.
+
 ## 0.5.3-ALPHA - 2026-07-07
 
 ### Changed

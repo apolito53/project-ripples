@@ -10,7 +10,7 @@ import {
   SURFACE_GRIP_LIMITS,
   type PlayAreaConstraint,
   type PlayerJumpEvent,
-  getMinimumSprintSpeedMetersPerSecond,
+  getMinimumBoostSpeedMetersPerSecond,
   normalizePlayerSpeedSettings
 } from "./controls";
 import { debugEvent, debugMeasure, roundMetric, vectorPayload, type RippleDebugPayload } from "./debugLog";
@@ -64,10 +64,10 @@ const voxelSizeSlider = requireElement<HTMLInputElement>("#voxel-size-slider");
 const voxelSizeValue = requireElement<HTMLOutputElement>("#voxel-size-value");
 const arenaRadiusSlider = requireElement<HTMLInputElement>("#arena-radius-slider");
 const arenaRadiusValue = requireElement<HTMLOutputElement>("#arena-radius-value");
-const walkSpeedSlider = requireElement<HTMLInputElement>("#walk-speed-slider");
-const walkSpeedValue = requireElement<HTMLOutputElement>("#walk-speed-value");
-const sprintSpeedSlider = requireElement<HTMLInputElement>("#sprint-speed-slider");
-const sprintSpeedValue = requireElement<HTMLOutputElement>("#sprint-speed-value");
+const baseSpeedSlider = requireElement<HTMLInputElement>("#base-speed-slider");
+const baseSpeedValue = requireElement<HTMLOutputElement>("#base-speed-value");
+const boostSpeedSlider = requireElement<HTMLInputElement>("#boost-speed-slider");
+const boostSpeedValue = requireElement<HTMLOutputElement>("#boost-speed-value");
 const surfaceGripSlider = requireElement<HTMLInputElement>("#surface-grip-slider");
 const surfaceGripValue = requireElement<HTMLOutputElement>("#surface-grip-value");
 const heightSlider = requireElement<HTMLInputElement>("#height-slider");
@@ -1070,11 +1070,11 @@ function wireControls(): void {
     syncFieldScaleControls();
     scheduleFieldRebuild();
   });
-  walkSpeedSlider.addEventListener("input", () => {
-    updatePlayerSpeedSettingsFromControls("walk");
+  baseSpeedSlider.addEventListener("input", () => {
+    updatePlayerSpeedSettingsFromControls("base");
   });
-  sprintSpeedSlider.addEventListener("input", () => {
-    updatePlayerSpeedSettingsFromControls("sprint");
+  boostSpeedSlider.addEventListener("input", () => {
+    updatePlayerSpeedSettingsFromControls("boost");
   });
   surfaceGripSlider.addEventListener("input", () => {
     settings.surfaceGrip = THREE.MathUtils.clamp(
@@ -1128,11 +1128,11 @@ function syncControlValues(): void {
   arenaRadiusSlider.step = "5";
   arenaRadiusSlider.value = String(settings.arenaRadiusMeters);
   syncFieldScaleControls();
-  walkSpeedSlider.min = String(PLAYER_SPEED_LIMITS.walk.min);
-  walkSpeedSlider.max = String(PLAYER_SPEED_LIMITS.walk.max);
-  walkSpeedSlider.step = String(PLAYER_SPEED_LIMITS.walk.step);
-  sprintSpeedSlider.max = String(PLAYER_SPEED_LIMITS.sprint.max);
-  sprintSpeedSlider.step = String(PLAYER_SPEED_LIMITS.sprint.step);
+  baseSpeedSlider.min = String(PLAYER_SPEED_LIMITS.base.min);
+  baseSpeedSlider.max = String(PLAYER_SPEED_LIMITS.base.max);
+  baseSpeedSlider.step = String(PLAYER_SPEED_LIMITS.base.step);
+  boostSpeedSlider.max = String(PLAYER_SPEED_LIMITS.boost.max);
+  boostSpeedSlider.step = String(PLAYER_SPEED_LIMITS.boost.step);
   syncPlayerSpeedControls();
   surfaceGripSlider.min = String(SURFACE_GRIP_LIMITS.min);
   surfaceGripSlider.max = String(SURFACE_GRIP_LIMITS.max);
@@ -1414,15 +1414,15 @@ function updateArenaRadiusValue(): void {
   arenaRadiusValue.textContent = `${Math.round(settings.arenaRadiusMeters)} m`;
 }
 
-function updatePlayerSpeedSettingsFromControls(changedSlider: "walk" | "sprint"): void {
-  const requestedWalkSpeed = changedSlider === "walk"
-    ? Number(walkSpeedSlider.value)
-    : settings.playerSpeed.walkSpeedMetersPerSecond;
-  const requestedSprintSpeed = Number(sprintSpeedSlider.value);
+function updatePlayerSpeedSettingsFromControls(changedSlider: "base" | "boost"): void {
+  const requestedBaseSpeed = changedSlider === "base"
+    ? Number(baseSpeedSlider.value)
+    : settings.playerSpeed.baseSpeedMetersPerSecond;
+  const requestedBoostSpeed = Number(boostSpeedSlider.value);
 
   settings.playerSpeed = normalizePlayerSpeedSettings({
-    walkSpeedMetersPerSecond: requestedWalkSpeed,
-    sprintSpeedMetersPerSecond: requestedSprintSpeed
+    baseSpeedMetersPerSecond: requestedBaseSpeed,
+    boostSpeedMetersPerSecond: requestedBoostSpeed
   });
   player.setSpeedSettings(settings.playerSpeed);
   syncPlayerSpeedControls();
@@ -1431,18 +1431,18 @@ function updatePlayerSpeedSettingsFromControls(changedSlider: "walk" | "sprint")
 function syncPlayerSpeedControls(): void {
   // These rows are hidden for now, but keeping the DOM state valid means we can
   // unhide them later without relearning this exact constraint dance.
-  const minimumSprintSpeed = getMinimumSprintSpeedMetersPerSecond(
-    settings.playerSpeed.walkSpeedMetersPerSecond
+  const minimumBoostSpeed = getMinimumBoostSpeedMetersPerSecond(
+    settings.playerSpeed.baseSpeedMetersPerSecond
   );
-  sprintSpeedSlider.min = String(minimumSprintSpeed);
-  walkSpeedSlider.value = String(settings.playerSpeed.walkSpeedMetersPerSecond);
-  sprintSpeedSlider.value = String(settings.playerSpeed.sprintSpeedMetersPerSecond);
+  boostSpeedSlider.min = String(minimumBoostSpeed);
+  baseSpeedSlider.value = String(settings.playerSpeed.baseSpeedMetersPerSecond);
+  boostSpeedSlider.value = String(settings.playerSpeed.boostSpeedMetersPerSecond);
   updatePlayerSpeedValues();
 }
 
 function updatePlayerSpeedValues(): void {
-  walkSpeedValue.textContent = `${settings.playerSpeed.walkSpeedMetersPerSecond.toFixed(1)} m/s`;
-  sprintSpeedValue.textContent = `${settings.playerSpeed.sprintSpeedMetersPerSecond.toFixed(1)} m/s`;
+  baseSpeedValue.textContent = `${settings.playerSpeed.baseSpeedMetersPerSecond.toFixed(1)} m/s`;
+  boostSpeedValue.textContent = `${settings.playerSpeed.boostSpeedMetersPerSecond.toFixed(1)} m/s`;
 }
 
 function updateSurfaceGripValue(): void {

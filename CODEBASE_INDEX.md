@@ -9,7 +9,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Vite + strict TypeScript browser app.
 - Three.js renderer, postprocessing composer, Unreal bloom pass, shader-customized
   `InstancedMesh`, additive `Points`, and dynamic lights.
-- Current alpha baseline: `v0.5.3-ALPHA`; keep release tags in alpha prerelease
+- Current alpha baseline: `v0.5.3-1-ALPHA`; keep release tags in alpha prerelease
   territory until the lab graduates from prototype status.
 - Dedicated dev port `5183`; preview port `4183`.
 
@@ -128,7 +128,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
    before touchdown. Echo-zone timers add persistent collectible markers instead
    of immediate ambient waves.
 6. `TrainingRun` optionally guides the player through the current control set
-   inside the course mode: camera orbit, steering, keyboard movement,
+   inside the course mode: camera orbit, steering, keyboard movement, boosting,
    both-button movement, momentum braking, jumping, scripted Echo pickup, and
    wall sliding. It observes read-only `PlayerRig` telemetry and requests
    existing Echo/pulse effects instead of changing movement rules.
@@ -173,7 +173,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 14. Esc or the hamburger button opens the centered pause menu after a mode has
     started. The pause menu owns tuning controls, Resume, Exit To Main Menu, and
     a version changelog button.
-    Hidden walk/sprint speed rows remain wired for future tuning, but are not
+    Hidden base/boost speed rows remain wired for future tuning, but are not
     currently exposed in the visible menu.
 15. The scene renders through bloom when bloom strength is above zero.
 

@@ -7,6 +7,7 @@ type TrainingStepId =
   | "camera-orbit"
   | "steer-facing"
   | "keyboard-movement"
+  | "boost"
   | "mouse-forward"
   | "momentum-brake"
   | "jump"
@@ -86,44 +87,52 @@ const TRAINING_STEPS: readonly TrainingStep[] = [
     lateralOffsetMeters: -5
   },
   {
+    id: "boost",
+    title: "Boost",
+    instruction: "Hold Shift while moving to kick from base pace into boost.",
+    fraction: 0.2,
+    lateralOffsetMeters: -2
+  },
+  {
     id: "mouse-forward",
     title: "Mouse Run",
     instruction: "Hold left and right mouse together to move forward toward the camera heading.",
-    fraction: 0.23,
+    fraction: 0.27,
     lateralOffsetMeters: 0
   },
   {
     id: "momentum-brake",
     title: "Carry Momentum",
     instruction: "Build speed, release movement, and feel the pod slide before it settles.",
-    fraction: 0.32,
+    fraction: 0.36,
     lateralOffsetMeters: 4
   },
   {
     id: "jump",
     title: "Jump",
     instruction: "Press Space and watch the surface response when you leave the field.",
-    fraction: 0.42,
+    fraction: 0.45,
     lateralOffsetMeters: 0
   },
   {
     id: "echo-pickup",
     title: "Collect Echo",
     instruction: "Run through the scripted Echo column and let it detonate.",
-    fraction: 0.54,
+    fraction: 0.57,
     lateralOffsetMeters: -4
   },
   {
     id: "wall-slide",
     title: "Wall Slide",
     instruction: "Scrape a glowing track wall and recover without killing your speed.",
-    fraction: 0.64,
+    fraction: 0.68,
     lateralOffsetMeters: 16
   }
 ];
 
 const CAMERA_YAW_GOAL = 0.2;
 const PLAYER_YAW_GOAL = 0.2;
+const BOOST_SPEED_GOAL = 12;
 const MOUSE_FORWARD_SPEED_GOAL = 2;
 const MOMENTUM_SPEED_GOAL = 7.5;
 const MOMENTUM_SLIDE_SPEED_GOAL = 2;
@@ -145,6 +154,8 @@ export class TrainingRun {
   private stepStartedAt = 0;
   private echoSpawned = false;
   private carriedMomentum = false;
+  private boostMoved = false;
+  private boostHeld = false;
   private baseline: TrainingStepBaseline = {
     cameraYawTravel: 0,
     playerYawTravel: 0,
@@ -191,6 +202,8 @@ export class TrainingRun {
     this.startedAt = 0;
     this.echoSpawned = false;
     this.carriedMomentum = false;
+    this.boostMoved = false;
+    this.boostHeld = false;
     this.resetKeyboardProgress();
     this.object.visible = false;
   }
@@ -270,6 +283,13 @@ export class TrainingRun {
           this.completeCurrentStep(input.time, "keyboard-set", telemetry, input.raceTrack);
         }
         return;
+      case "boost":
+        this.boostMoved ||= telemetry.movementInputActive;
+        this.boostHeld ||= telemetry.boostInput;
+        if (this.boostMoved && this.boostHeld && telemetry.speed >= BOOST_SPEED_GOAL) {
+          this.completeCurrentStep(input.time, "boost", telemetry, input.raceTrack);
+        }
+        return;
       case "mouse-forward":
         if (telemetry.mouseForwardMoveActive && telemetry.speed >= MOUSE_FORWARD_SPEED_GOAL) {
           this.completeCurrentStep(input.time, "mouse-forward", telemetry, input.raceTrack);
@@ -345,6 +365,8 @@ export class TrainingRun {
     };
     this.echoSpawned = false;
     this.carriedMomentum = false;
+    this.boostMoved = false;
+    this.boostHeld = false;
     this.resetKeyboardProgress();
 
     const step = this.currentStep();
@@ -387,6 +409,11 @@ export class TrainingRun {
         return [{ label: "Right drag", complete: false }];
       case "mouse-forward":
         return [{ label: "Both buttons", complete: false }];
+      case "boost":
+        return [
+          { label: "Move", complete: this.boostMoved },
+          { label: "Shift", complete: this.boostHeld }
+        ];
       case "momentum-brake":
         return [
           { label: "Build speed", complete: this.carriedMomentum },
