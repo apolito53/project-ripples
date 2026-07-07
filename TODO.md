@@ -8,10 +8,11 @@ concrete follow-ups that we actually intend to revisit.
 - Shape the lab into a racing-game prototype.
   First pass now has a wide non-crossing track ribbon inside the arena with
   bright glowing walls, heavy off-track dimming, track-scoped Echo placement,
-  slide-and-bleed containment, a startup Track/Arena split, track-only hex
-  culling, hidden circular-arena shell visuals, and independent Track radius /
-  hex-size tuning. Next racing steps: checkpoint/lap structure,
-  speed-readable effects, and eventually dedicated track design tooling.
+  slide-and-bleed containment, a startup Training/Track/Arena split, track-only
+  hex culling, hidden circular-arena shell visuals, and independent Track radius
+  / hex-size tuning. Training Run now teaches the current handling kit before
+  free driving. Next racing steps: checkpoint/lap structure, speed-readable
+  effects, and eventually dedicated track design tooling.
 - Continue replacing brute-force particle density with more deliberate effects.
   Echo detonations now have a first layered poof-disc/glitter pass, but the
   broader particle system still needs a real split between sparkle mass, haze,
@@ -75,3 +76,5 @@ concrete follow-ups that we actually intend to revisit.
   while Arena mode still renders the full circular field.
 - Hid the circular arena floor/barrier in Track mode, lifted the full-disc
   radius/hex-size coupling there, and reseeded Echoes after play-area rebuilds.
+- Added Training Run as a guided startup mode with a compact objective HUD,
+  read-only control telemetry, scripted Echo pickup, and course-wall lesson.

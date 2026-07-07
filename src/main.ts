@@ -38,6 +38,7 @@ import { RippleSourceStore, type RippleSourceOptions } from "./rippleSources";
 import { SKYBOX_OPTIONS, SkyboxManager, isSkyboxId } from "./skybox";
 import "./styles.css";
 import { sampleFieldHeight } from "./terrain";
+import { TrainingRun, type TrainingHudState } from "./trainingRun";
 import { WakeField } from "./wakeField";
 import { getBasePropagationSpeedMetersPerSecond } from "./waveMedium";
 import changelogMarkdown from "../CHANGELOG.md?raw";
@@ -45,6 +46,7 @@ import packageMetadata from "../package.json";
 
 const app = requireElement<HTMLElement>("#app");
 const mainMenu = requireElement<HTMLElement>("#main-menu");
+const startTrainingButton = requireElement<HTMLButtonElement>("#start-training-button");
 const startTrackButton = requireElement<HTMLButtonElement>("#start-track-button");
 const startArenaButton = requireElement<HTMLButtonElement>("#start-arena-button");
 const mainMenuVersionLink = requireElement<HTMLButtonElement>("#main-menu-version-link");
@@ -52,6 +54,10 @@ const hud = requireElement<HTMLElement>("#hud");
 const statsLine = requireElement<HTMLElement>("#stats-line");
 const mediumLine = requireElement<HTMLElement>("#medium-line");
 const qualityBadge = requireElement<HTMLElement>("#quality-badge");
+const trainingHud = requireElement<HTMLElement>("#training-hud");
+const trainingTitle = requireElement<HTMLElement>("#training-title");
+const trainingInstruction = requireElement<HTMLElement>("#training-instruction");
+const trainingProgress = requireElement<HTMLElement>("#training-progress");
 const qualitySelect = requireElement<HTMLSelectElement>("#quality-select");
 const skyboxSelect = requireElement<HTMLSelectElement>("#skybox-select");
 const voxelSizeSlider = requireElement<HTMLInputElement>("#voxel-size-slider");
@@ -170,7 +176,7 @@ type PlayerAvatar = {
 };
 
 type AppState = "mainMenu" | "playing" | "paused";
-type PlayModeId = "arena" | "track";
+type PlayModeId = "arena" | "track" | "training";
 
 type AvatarOrbitTrails = {
   readonly points: THREE.Points<THREE.BufferGeometry, THREE.ShaderMaterial>;
@@ -276,6 +282,11 @@ const raceTrack = new RaceTrack(scene, preset.fieldRadius, settings.arenaRadiusM
 raceTrack.setVisible(false);
 let raceTrackArenaSignature = `${preset.fieldRadius}:${settings.arenaRadiusMeters}`;
 const rippleField = new RippleField(scene, preset, wakeField.supportsVertexTextureSampling());
+const trainingRun = new TrainingRun(scene, {
+  sampleHeight: sampleFieldHeight,
+  spawnEchoAtTrackFraction: spawnTrainingEchoAtTrackFraction,
+  spawnCelebrationPulse: spawnTrainingCelebrationPulse
+});
 let particles = new ParticleVeil(scene, preset.particleBudget, getPixelRatio());
 let pulseLights = new PulseLightRig(scene, preset.pulseLightCount);
 
@@ -368,7 +379,7 @@ function showMainMenu(shouldFocus = true, reason = "exit"): void {
     quality: preset.id
   }, "info");
 
-  if (shouldFocus) startTrackButton.focus({ preventScroll: true });
+  if (shouldFocus) startTrainingButton.focus({ preventScroll: true });
 }
 
 function applyPlayMode(mode: PlayModeId, reason: string): void {
@@ -382,24 +393,30 @@ function applyPlayMode(mode: PlayModeId, reason: string): void {
     syncFieldScaleControls();
   }
 
-  const spawn = mode === "track" ? createTrackSpawnPoint() : createArenaSpawnPoint();
-  const playAreaConstraint: PlayAreaConstraint | null = mode === "track" ? raceTrack : null;
+  const usesCourse = isCourseMode(mode);
+  const spawn = usesCourse ? createTrackSpawnPoint() : createArenaSpawnPoint();
+  const playAreaConstraint: PlayAreaConstraint | null = usesCourse ? raceTrack : null;
 
-  raceTrack.setVisible(mode === "track");
+  raceTrack.setVisible(usesCourse);
   syncCircularArenaShellVisibility();
   player.setPlayAreaConstraint(playAreaConstraint);
   player.resetForSession(spawn.position, spawn.facingYaw);
   previousWakePlayerPosition.copy(player.position);
   resetRuntimeState(`mode-${reason}`);
   rebuildFieldGeometry(preset, `mode-${reason}`, { reseedEchoes: false });
-  seedStartupPulses(clock.elapsedTime);
-  seedEchoZones(clock.elapsedTime);
+  if (mode === "training") {
+    trainingRun.start(clock.elapsedTime, player.position, player.getTelemetry(), raceTrack);
+  } else {
+    seedStartupPulses(clock.elapsedTime);
+    seedEchoZones(clock.elapsedTime);
+  }
   updateStats(0, clock.elapsedTime);
 }
 
 function resetRuntimeState(reason: string): void {
   rippleSources.clear();
   echoZones.clear();
+  trainingRun.reset(reason);
   particles.clear();
   pulseLights.clear();
   wakeField.reset(reason);
@@ -413,7 +430,7 @@ function seedStartupPulses(time: number): void {
   // Put the first visible ripples inside the active playable area. These are
   // visual wake-up beats, not gameplay state, so they are regenerated every
   // time a mode starts.
-  if (activePlayMode === "track") {
+  if (isCourseMode(activePlayMode)) {
     const first = raceTrack.samplePointAt(0.02, -raceTrack.getSafeEchoJitterMeters(ECHO_ZONE_RADIUS) * 0.12);
     const second = raceTrack.samplePointAt(0.11, raceTrack.getSafeEchoJitterMeters(ECHO_ZONE_RADIUS) * 0.18);
     first.y = sampleFieldHeight(first.x, first.z) + 0.45;
@@ -445,7 +462,13 @@ function createArenaSpawnPoint(): { position: THREE.Vector3; facingYaw: number }
 
 function readRequestedPlayMode(): PlayModeId | null {
   const requestedMode = new URLSearchParams(window.location.search).get("mode");
-  return requestedMode === "arena" || requestedMode === "track" ? requestedMode : null;
+  return requestedMode === "arena" || requestedMode === "track" || requestedMode === "training"
+    ? requestedMode
+    : null;
+}
+
+function isCourseMode(mode: PlayModeId | null): boolean {
+  return mode === "track" || mode === "training";
 }
 
 function syncRaceTrackArena(nextPreset: QualityPreset, reason: string): void {
@@ -459,11 +482,12 @@ function syncRaceTrackArena(nextPreset: QualityPreset, reason: string): void {
 function getPlayModeLabel(): string {
   if (activePlayMode === "arena") return "Arena";
   if (activePlayMode === "track") return "Track";
+  if (activePlayMode === "training") return "Training";
   return "Menu";
 }
 
 function getActiveFieldPlacementClipper(): FieldPlacementClipper | null {
-  if (activePlayMode !== "track") return null;
+  if (!isCourseMode(activePlayMode)) return null;
 
   const safetySkirtSceneUnits =
     TRACK_FIELD_SAFETY_SKIRT_METERS * raceTrack.getSceneUnitsPerMeter() + preset.tileSpacing * 2;
@@ -474,11 +498,11 @@ function getActiveFieldPlacementClipper(): FieldPlacementClipper | null {
 }
 
 function getActiveTrackTexture(): THREE.Texture {
-  return activePlayMode === "track" ? raceTrack.getMaskTexture() : rippleField.getNoOpTrackTexture();
+  return isCourseMode(activePlayMode) ? raceTrack.getMaskTexture() : rippleField.getNoOpTrackTexture();
 }
 
 function getActiveTrackStrength(): number {
-  return activePlayMode === "track" ? 1 : 0;
+  return isCourseMode(activePlayMode) ? 1 : 0;
 }
 
 function updateAppChrome(): void {
@@ -494,8 +518,34 @@ function updateAppChrome(): void {
   qualityBadge.textContent = inGameplayShell
     ? `${getPlayModeLabel()} / ${preset.label}`
     : preset.label;
+  updateTrainingHud();
   updateMobileControlsVisibility();
   setPerfOverlayVisible(perfOverlayVisible);
+}
+
+function updateTrainingHud(): void {
+  const state = trainingRun.getHudState();
+  const visible = activePlayMode === "training" && appState !== "mainMenu" && state.visible;
+  trainingHud.hidden = !visible;
+  if (!visible) return;
+
+  trainingTitle.textContent = state.title;
+  trainingInstruction.textContent = state.complete
+    ? state.instruction
+    : `${state.stepIndex + 1}/${state.stepCount} - ${state.instruction}`;
+  renderTrainingProgress(state);
+}
+
+function renderTrainingProgress(state: TrainingHudState): void {
+  trainingProgress.replaceChildren();
+  for (const chip of state.chips) {
+    const chipElement = document.createElement("span");
+    chipElement.className = chip.complete
+      ? "training-progress__chip training-progress__chip--complete"
+      : "training-progress__chip";
+    chipElement.textContent = chip.label;
+    trainingProgress.append(chipElement);
+  }
 }
 
 function animate(): void {
@@ -520,6 +570,7 @@ function animate(): void {
   }
 
   player.update(delta);
+  const playerTelemetry = player.getTelemetry();
   const playerSpeed = player.getSpeed();
   const playerGroundContact = player.getGroundContactStrength();
   avatar.update(delta, player.position, playerSpeed, player.getFacingYaw());
@@ -531,6 +582,15 @@ function animate(): void {
   arenaBarrier.update(time);
   updateSceneLightSourceVisuals(time);
   echoZones.update(time);
+  if (activePlayMode === "training") {
+    trainingRun.update({
+      time,
+      playerPosition: player.position,
+      telemetry: playerTelemetry,
+      raceTrack
+    });
+    updateTrainingHud();
+  }
   collectEchoZones(time);
   maybeSpawnEchoZone(time);
   if (settings.particlesEnabled) {
@@ -640,6 +700,7 @@ function triggerLandingRipple(event: PlayerJumpEvent): void {
 
 function seedEchoZones(time: number): void {
   if (activePlayMode === null) return;
+  if (activePlayMode === "training") return;
   if (activePlayMode === "arena") {
     seedArenaEchoZones(time);
     return;
@@ -672,6 +733,7 @@ function seedArenaEchoZones(time: number): void {
 }
 
 function maybeSpawnEchoZone(time: number): void {
+  if (activePlayMode === "training") return;
   if (time < nextEchoZoneAt) return;
   if (echoZones.getActiveCount() >= ECHO_ZONE_MAX_ACTIVE) {
     nextEchoZoneAt = time + 1;
@@ -709,6 +771,7 @@ function addEchoZoneAtPosition(position: THREE.Vector3, time: number): void {
 
 function createEchoZonePosition(): THREE.Vector3 | null {
   if (activePlayMode === null) return null;
+  if (activePlayMode === "training") return null;
   if (activePlayMode === "arena") {
     return createArenaEchoZonePosition();
   }
@@ -733,6 +796,18 @@ function createEchoZonePosition(): THREE.Vector3 | null {
     trackWidthMeters: roundMetric(raceTrack.getTrackWidthMeters())
   }, "warn");
   return null;
+}
+
+function spawnTrainingEchoAtTrackFraction(fraction: number, lateralOffsetMeters: number, time: number): boolean {
+  // Training owns exactly one scripted Echo. Clearing first keeps the lesson
+  // deterministic even if the user changes settings mid-run and restarts it.
+  echoZones.clear();
+  nextEchoZoneAt = Infinity;
+  return spawnEchoZoneAtTrackFraction(time, fraction, lateralOffsetMeters);
+}
+
+function spawnTrainingCelebrationPulse(position: THREE.Vector3, time: number): void {
+  spawnPulse(position, 0.46, ECHO_BURST_OPTIONS, time);
 }
 
 function createArenaEchoZonePosition(): THREE.Vector3 | null {
@@ -807,6 +882,11 @@ function triggerEchoZone(echo: TriggeredEchoZone, time: number): void {
   const position = echo.position.clone();
   position.y = sampleFieldHeight(position.x, position.z) + 0.45;
   const effectPosition = echo.effectPosition.clone();
+
+  if (activePlayMode === "training") {
+    trainingRun.handleEchoCollected(time, player.getTelemetry(), raceTrack);
+    updateTrainingHud();
+  }
 
   // Echoes are map pickups, but once collected they become ordinary pulse
   // sources so the shader, lights, and HUD can reuse the existing wave path.
@@ -891,6 +971,9 @@ function wireControls(): void {
   });
   sceneMenuBackdrop.addEventListener("pointerdown", (event) => {
     if (event.target === sceneMenuBackdrop) setMenuVisible(false);
+  });
+  startTrainingButton.addEventListener("click", () => {
+    startGame("training", "menu");
   });
   startTrackButton.addEventListener("click", () => {
     startGame("track", "menu");
@@ -1048,10 +1131,11 @@ function syncSkyboxOptions(): void {
 }
 
 function enforceFieldInstanceBudget(changedControl: FieldScaleChangedControl): void {
-  if (activePlayMode === "track") {
+  if (isCourseMode(activePlayMode)) {
     // The guardrail estimates the old full circular field. Track mode clips the
-    // rebuild to the ribbon plus skirt, so coupling arena radius and hex size
-    // here makes the UI lie about what the track can actually afford.
+    // rebuild to the ribbon plus skirt; Training reuses that same course path.
+    // Coupling arena radius and hex size here makes the UI lie about what the
+    // course modes can actually afford.
     return;
   }
 
@@ -1365,7 +1449,7 @@ function rebuildFieldGeometry(
   options: FieldRebuildOptions = {}
 ): void {
   const rebuildStartedAt = performance.now();
-  if (activePlayMode === "track") {
+  if (isCourseMode(activePlayMode)) {
     syncRaceTrackArena(nextPreset, reason);
   }
   rippleField.rebuild(nextPreset, getActiveFieldPlacementClipper());
@@ -1402,6 +1486,18 @@ function rebuildFieldGeometry(
 
 function resetEchoZonesAfterPlayAreaRebuild(time: number, reason: string): void {
   if (activePlayMode === null) return;
+
+  if (activePlayMode === "training") {
+    echoZones.clear();
+    trainingRun.reset(reason);
+    trainingRun.start(time, player.position, player.getTelemetry(), raceTrack);
+    debugEvent("training.reset", "Restarted Training Run after play-area rebuild", {
+      reason,
+      arenaRadiusMeters: roundMetric(settings.arenaRadiusMeters),
+      hexDiameterMeters: roundMetric(settings.voxelSizeMeters)
+    }, "info");
+    return;
+  }
 
   // Resizing can move either the Arena boundary or the Track walls under
   // existing Echoes. Re-seeding is cleaner than trying to project every live

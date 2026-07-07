@@ -7,7 +7,7 @@ This is intentionally separate from `voxel-sandbox-engine`. The goal is to make
 a polished visual lab first, then borrow patterns or ideas later if they deserve
 to graduate into the main voxel engine.
 
-Current version: `v0.5.1-ALPHA`.
+Current version: `v0.5.2-ALPHA`.
 
 ## Quick Start
 
@@ -25,8 +25,9 @@ chmod +x ./start.sh
 ```
 
 Open `http://127.0.0.1:5183`. The app starts on a main menu where you choose
-`Arena` or `Track`. For development smoke tests, `?mode=arena` and
-`?mode=track` skip the menu and enter that mode directly.
+`Training Run`, `Track`, or `Arena`. For development smoke tests,
+`?mode=training`, `?mode=track`, and `?mode=arena` skip the menu and enter that
+mode directly.
 
 ## Controls
 
@@ -54,7 +55,13 @@ Open `http://127.0.0.1:5183`. The app starts on a main menu where you choose
   from a clean runtime state.
 - The on-screen pulse button drops manual pulses on touch layouts.
 
-The lab now has two startup modes. `Arena` is the full circular sandbox: the
+The lab now has three startup modes. `Training Run` is a short guided course
+warmup that teaches left-drag camera orbit, right-drag steering, keyboard
+movement, both-button camera-forward movement, momentum/braking, jumping, Echo
+collection, and track wall sliding with a compact HUD and one scripted Echo.
+Training uses the same course walls, track-only hex culling, and hidden circular
+Arena shell as Track mode, but disables random Echo spawning so the lesson is
+deterministic. `Arena` is the full circular sandbox: the
 avatar uses the circular arena edge as its boundary, Echoes spawn across the
 disc, and the entire circular hex field is generated. `Track` is the first
 racing prototype: the avatar drives on a wide ribbon inside the arena, bright
@@ -188,14 +195,17 @@ Project planning:
 Versioning:
 
 - While the project is still experimental, release tags use alpha prerelease
-  labels. The current baseline is `v0.5.1-ALPHA`.
+  labels. The current baseline is `v0.5.2-ALPHA`.
 
 ## Design Notes
 
 - `src/main.ts` owns the app-level state split between the startup menu,
   gameplay, and pause, including clean mode starts, `?mode=` shortcuts,
-  mode-specific player/Echo/runtime resets, Track-only scale guardrail bypass,
-  and Echo reseeding after play-area rebuilds.
+  mode-specific player/Echo/runtime resets, course-mode scale guardrail bypass,
+  Training Run lifecycle, and Echo reseeding after play-area rebuilds.
+- `src/trainingRun.ts` owns the guided Training Run director: step definitions,
+  current objective checks, marker placement, scripted Echo requests, completion
+  pulse trigger, tutorial HUD state, and `training.*` diagnostics.
 - `src/raceTrack.ts` owns the first racing-game layer: the hardcoded
   non-crossing sweeping loop, wide-ribbon collision, bright glowing course
   walls, generated surface mask, field-placement clip queries, and sparse
@@ -240,9 +250,9 @@ Versioning:
   camera-only orbit yaw, right-drag steering yaw, WoW-style keyboard
   turning/strafe semantics, surface-grip handling response, ballistic airborne
   horizontal momentum, both-button camera-forward movement, full 180-degree
-  vertical camera orbit, and quiet mouse-release unlocks. The avatar visuals in
-  `src/main.ts` use orbiting motes and segmented additive trails instead of
-  torus rings.
+  vertical camera orbit, quiet mouse-release unlocks, and read-only tutorial
+  telemetry. The avatar visuals in `src/main.ts` use orbiting motes and
+  segmented additive trails instead of torus rings.
 
 The CPU decides where the player, touch-button pulses, optional race-track
 constraint, and persistent Echo zones are. Manual pulse input is cooldown-gated,

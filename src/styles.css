@@ -132,6 +132,12 @@ canvas {
   border-color: rgba(122, 245, 214, 0.44);
 }
 
+.mode-button--training {
+  border-color: rgba(255, 125, 231, 0.44);
+  background:
+    linear-gradient(90deg, rgba(54, 21, 67, 0.86), rgba(6, 17, 27, 0.62));
+}
+
 .mode-button--arena {
   border-color: rgba(142, 166, 255, 0.32);
 }
@@ -182,6 +188,78 @@ canvas {
 
 .medium-line {
   color: rgba(158, 255, 231, 0.62);
+}
+
+.training-hud {
+  position: fixed;
+  top: max(120px, calc(env(safe-area-inset-top) + 120px));
+  left: max(20px, calc(env(safe-area-inset-left) + 20px));
+  z-index: 3;
+  display: grid;
+  width: min(360px, calc(100vw - 40px));
+  gap: 8px;
+  border: 1px solid rgba(255, 125, 231, 0.24);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(7, 18, 29, 0.78), rgba(2, 8, 16, 0.58));
+  box-shadow:
+    0 18px 54px rgba(0, 0, 0, 0.34),
+    0 0 34px rgba(255, 125, 231, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  color: rgba(237, 247, 255, 0.9);
+  padding: 12px 14px;
+  pointer-events: none;
+  text-shadow: 0 1px 14px rgba(0, 0, 0, 0.74);
+  backdrop-filter: blur(10px);
+}
+
+.training-hud[hidden] {
+  display: none;
+}
+
+.training-hud__eyebrow {
+  color: rgba(158, 255, 231, 0.68);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.training-hud h2 {
+  margin: 0;
+  color: #f4fbff;
+  font-size: 18px;
+  line-height: 1.1;
+}
+
+.training-hud p {
+  margin: 0;
+  color: rgba(237, 247, 255, 0.72);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.training-progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.training-progress__chip {
+  border: 1px solid rgba(142, 218, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(3, 10, 18, 0.58);
+  color: rgba(237, 247, 255, 0.58);
+  font-size: 10px;
+  font-weight: 950;
+  padding: 4px 7px;
+}
+
+.training-progress__chip--complete {
+  border-color: rgba(122, 245, 214, 0.54);
+  background: rgba(18, 95, 84, 0.34);
+  color: rgba(158, 255, 231, 0.9);
 }
 
 .perf-overlay {
@@ -457,6 +535,12 @@ input[type="range"] {
     left: 12px;
   }
 
+  .training-hud {
+    top: 88px;
+    left: 12px;
+    width: min(360px, calc(100vw - 24px));
+  }
+
   .scene-menu-backdrop {
     padding: 12px;
   }
@@ -645,6 +729,21 @@ input[type="range"] {
 
   .stats-line,
   .medium-line {
+    font-size: 11px;
+  }
+
+  .training-hud {
+    top: max(72px, calc(env(safe-area-inset-top) + 72px));
+    left: max(10px, calc(env(safe-area-inset-left) + 10px));
+    width: min(340px, calc(100vw - 20px));
+    padding: 9px 10px;
+  }
+
+  .training-hud h2 {
+    font-size: 15px;
+  }
+
+  .training-hud p {
     font-size: 11px;
   }
 

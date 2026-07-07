@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+## 0.5.2-ALPHA - 2026-07-06
+
+### Added
+
+- Added a `Training Run` startup mode that reuses the course track, track wall
+  constraint, track-only hex culling, and hidden circular Arena shell to teach
+  current controls in a short guided warmup.
+- Added a lightweight Training director with a neon objective gate, compact HUD
+  objectives, progress chips, scripted Echo placement, completion pulse, and
+  sparse `training.*` diagnostics.
+- Added read-only control telemetry from `PlayerRig` so tutorial steps can
+  observe camera drag mode, keyboard movement, mouse-forward movement, braking,
+  jump events, and wall contact without changing movement rules.
+
+### Changed
+
+- Disabled ambient/random Echo spawning during Training so the tutorial uses
+  only its scripted pickup.
+- Bumped package metadata, README, codebase index, and visible menu version text
+  to `v0.5.2-ALPHA`.
+
 ## 0.5.1-ALPHA - 2026-06-28
 
 ### Changed

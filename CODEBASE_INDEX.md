@@ -9,7 +9,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Vite + strict TypeScript browser app.
 - Three.js renderer, postprocessing composer, Unreal bloom pass, shader-customized
   `InstancedMesh`, additive `Points`, and dynamic lights.
-- Current alpha baseline: `v0.5.1-ALPHA`; keep release tags in alpha prerelease
+- Current alpha baseline: `v0.5.2-ALPHA`; keep release tags in alpha prerelease
   territory until the lab graduates from prototype status.
 - Dedicated dev port `5183`; preview port `4183`.
 
@@ -28,11 +28,12 @@ Purpose: compact map for the standalone ripple-field visual lab.
 
 ## Fast Lookup
 
-- HTML shell, startup mode menu, pause menu, changelog dialog, performance
-  overlay, and tuning controls: `index.html`
+- HTML shell, startup mode menu, Training HUD, pause menu, changelog dialog,
+  performance overlay, and tuning controls: `index.html`
 - Visual styling and overlay layout: `src/styles.css`
-- App bootstrap, startup `Arena`/`Track` mode selection, session reset flow,
-  Three.js scene, render loop, quality wiring, and postprocessing: `src/main.ts`
+- App bootstrap, startup `Training`/`Arena`/`Track` mode selection, session
+  reset flow, Three.js scene, render loop, quality wiring, and postprocessing:
+  `src/main.ts`
 - Selectable camera-following sky dome, 8K/4K generated skybox texture loading,
   horizon framing, and per-theme fog tuning: `src/skybox.ts` plus
   `public/skyboxes/`
@@ -60,8 +61,11 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Arena-only smooth glowing arena-edge gradient barrier: `src/arenaBarrier.ts`
 - Wide prototype race-track loop, non-crossing ribbon and wall-edge sampling,
   ribbon collision, bright glowing edge walls, generated track mask texture,
-  track Echo placement helpers, field-cell containment queries, and `track.*`
+  course Echo placement helpers, field-cell containment queries, and `track.*`
   diagnostics: `src/raceTrack.ts`
+- Guided Training Run director, tutorial objective gate, compact HUD state,
+  scripted Echo request, completion pulse trigger, and `training.*`
+  diagnostics: `src/trainingRun.ts`
 - Visible cyan/magenta spotlight fixtures, stage floor, core scene lighting,
   active hover-pod avatar visuals, and shelved legacy glow-orb avatar:
   `src/main.ts`
@@ -96,8 +100,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
 
 1. `index.html` loads `src/main.ts`.
 2. `main.ts` creates the renderer, scene, camera, bloom composer, race track,
-   field, particles, pulse lights, and hover-pod avatar, then holds gameplay on
-   a startup menu until the user chooses `Arena` or `Track`.
+   Training Run director, field, particles, pulse lights, and hover-pod avatar,
+   then holds gameplay on a startup menu until the user chooses `Training Run`,
+   `Arena`, or `Track`.
 3. `SkyboxManager` applies the selected generated panorama to a camera-following
    UV sky dome, chooses 8K textures or 4K fallbacks from GPU texture caps, and
    applies matching fog/clear color so the arena sits inside a distant sci-fi
@@ -122,18 +127,24 @@ Purpose: compact map for the standalone ripple-field visual lab.
    adding little circular source stamps, and airborne jumps fade that contact
    before touchdown. Echo-zone timers add persistent collectible markers instead
    of immediate ambient waves.
-6. `RaceTrack` keeps the first racing-course prototype alive: a wide closed
+6. `TrainingRun` optionally guides the player through the current control set
+   inside the course mode: camera orbit, steering, keyboard movement,
+   both-button movement, momentum braking, jumping, scripted Echo pickup, and
+   wall sliding. It observes read-only `PlayerRig` telemetry and requests
+   existing Echo/pulse effects instead of changing movement rules.
+7. `RaceTrack` keeps the first racing-course prototype alive: a wide closed
    sweeping non-crossing loop scaled to the active arena radius,
    slide-and-speed-bleed wall containment, bright glowing energy-wall meshes,
    a generated mask texture that the field shader samples for surface highlight
-   and heavy outside-track dimming, and a field-cell containment query used only
-   by Track mode. Track mode hides the circular arena floor and outer barrier,
-   so the course walls become the only visible movement boundary.
-7. `RippleField` builds hex instances using the active quality, hex-size, and
+   and heavy outside-track dimming, and a field-cell containment query used by
+   course modes. Track and Training hide the circular arena floor and outer
+   barrier, so the course walls become the only visible movement boundary.
+8. `RippleField` builds hex instances using the active quality, hex-size, and
    arena-radius settings. In Track mode it clips placement to the course ribbon
-   plus a safety skirt and skips the full-disc radius/hex coupling guardrail; in
-   Arena mode it keeps the full circular sandbox field and still applies the
-   instance-budget guardrail. Hex geometry is rotated
+   plus a safety skirt; Training mode uses that same clipped course path and
+   skips the full-disc radius/hex coupling guardrail. In Arena mode it keeps the
+   full circular sandbox field and still applies the instance-budget guardrail.
+   Hex geometry is rotated
    to match the staggered lattice, and Meltdown's visible footprint is calibrated
    to read as an interlocked honeycomb while preserving its previous density.
    The field then sends active pulse source/metadata/lifetime uniforms plus the
@@ -143,28 +154,28 @@ Purpose: compact map for the standalone ripple-field visual lab.
    movement wake memory, track highlight, and height-based tinting. The old
    per-cell shaft mesh has been removed to keep the geometry path simpler before
    the sphere work.
-8. `ArenaBarrier` draws an Arena-only visual smooth glowing gradient curtain at
+9. `ArenaBarrier` draws an Arena-only visual smooth glowing gradient curtain at
    the arena radius so the sandbox edge is visible without changing collision
    logic.
-9. `EchoZoneField` animates live Echo markers placed on the race track and
+10. `EchoZoneField` animates live Echo markers placed on the race track and
    reports run-through triggers.
-10. `ParticleVeil` animates the player sparkle aura, burst clouds, flat Echo
+11. `ParticleVeil` animates the player sparkle aura, burst clouds, flat Echo
    disc bursts, and velocity-shaped wake-tail motes.
-11. `PulseLightRig` assigns recent pulses and collected Echo detonations to
+12. `PulseLightRig` assigns recent pulses and collected Echo detonations to
    point lights.
-12. The HUD reports active mode, FPS, instance counts, culled track hexes when
+13. The HUD reports active mode, FPS, instance counts, culled track hexes when
     applicable, base propagation speed, voxel size,
     arena radius, live Echo count, active pulse count, and newest pulse radius.
     A denser `F2`/pause-menu performance overlay reports frame/update/render
     timing, active particles versus resident budget, rendered pulse-source
     pressure, wake texture mode/pass cost, renderer draw stats, pixel ratio,
     bloom state, and quality.
-13. Esc or the hamburger button opens the centered pause menu after a mode has
+14. Esc or the hamburger button opens the centered pause menu after a mode has
     started. The pause menu owns tuning controls, Resume, Exit To Main Menu, and
     a version changelog button.
     Hidden walk/sprint speed rows remain wired for future tuning, but are not
     currently exposed in the visible menu.
-14. The scene renders through bloom when bloom strength is above zero.
+15. The scene renders through bloom when bloom strength is above zero.
 
 ## Common Change Targets
 
@@ -177,6 +188,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Change the first race-track shape, width, wall visuals, collision response,
   generated mask, off-track dimming, or track-scoped Echo placement:
   `src/raceTrack.ts`, `src/rippleField.ts`, and `src/main.ts`
+- Change Training Run objectives, objective marker placement, scripted Echo
+  behavior, HUD progress chips, or training diagnostics:
+  `src/trainingRun.ts`, `src/main.ts`, and `index.html`
 - Change generated skybox choices, labels, texture paths, horizon framing, or
   matching fog color: `src/skybox.ts` and `public/skyboxes/`
 - Change ripple math, hex shape, directional water-like movement response,

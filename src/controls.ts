@@ -39,7 +39,31 @@ export type PlayerJumpEvent = {
   readonly impactSpeed: number;
 };
 
-type CameraDragMode = "camera" | "steer";
+export type CameraDragMode = "camera" | "steer";
+
+export type PlayerControlTelemetry = {
+  readonly cameraDragMode: CameraDragMode | null;
+  readonly leftMouseHeld: boolean;
+  readonly rightMouseHeld: boolean;
+  readonly mouseForwardMoveActive: boolean;
+  readonly cameraYawTravel: number;
+  readonly playerYawTravel: number;
+  readonly forwardInput: boolean;
+  readonly backwardInput: boolean;
+  readonly turnLeftInput: boolean;
+  readonly turnRightInput: boolean;
+  readonly strafeLeftInput: boolean;
+  readonly strafeRightInput: boolean;
+  readonly sprintInput: boolean;
+  readonly movementInputActive: boolean;
+  readonly braking: boolean;
+  readonly grounded: boolean;
+  readonly speed: number;
+  readonly jumpCount: number;
+  readonly landCount: number;
+  readonly wallContactCount: number;
+  readonly lastWallContactSecond: number;
+};
 
 export const PLAYER_SPEED_LIMITS = {
   walk: { min: 1, max: 30, step: 0.5 },
@@ -164,6 +188,13 @@ export class PlayerRig {
   private cameraYaw = Math.PI * 0.23;
   private playerYaw = Math.PI * 0.23;
   private pitch = 0.45;
+  private cameraYawTravel = 0;
+  private playerYawTravel = 0;
+  private jumpCount = 0;
+  private landCount = 0;
+  private wallContactCount = 0;
+  private lastWallContactSecond = -Infinity;
+  private telemetry: PlayerControlTelemetry = this.createTelemetrySnapshot(false, false, false, false, false, false, false, false, false, false);
 
   constructor(options: PlayerRigOptions) {
     this.canvas = options.canvas;
@@ -275,6 +306,18 @@ export class PlayerRig {
         this.velocity.set(0, 0, 0);
       }
     }
+    this.telemetry = this.createTelemetrySnapshot(
+      this.keys.has("KeyW"),
+      this.keys.has("KeyS"),
+      !this.isRightMouseHeld && this.keys.has("KeyA"),
+      !this.isRightMouseHeld && this.keys.has("KeyD"),
+      this.keys.has("KeyQ") || (this.isRightMouseHeld && this.keys.has("KeyA")),
+      this.keys.has("KeyE") || (this.isRightMouseHeld && this.keys.has("KeyD")),
+      isSprinting,
+      hasIntent,
+      inputEnabled && !hasIntent && hasPlanarVelocity && this.grounded,
+      inputEnabled
+    );
     this.position.addScaledVector(this.velocity, delta);
     this.clampToArenaBoundary();
     this.updateJump(delta);
@@ -303,6 +346,10 @@ export class PlayerRig {
     return this.playerYaw;
   }
 
+  getTelemetry(): PlayerControlTelemetry {
+    return { ...this.telemetry };
+  }
+
   setFacingYaw(yaw: number, alignCamera = false): void {
     this.playerYaw = yaw;
     if (alignCamera) this.cameraYaw = yaw;
@@ -329,6 +376,13 @@ export class PlayerRig {
     this.jumpStartedAt = -Infinity;
     this.position.copy(position);
     this.setFacingYaw(facingYaw, true);
+    this.cameraYawTravel = 0;
+    this.playerYawTravel = 0;
+    this.jumpCount = 0;
+    this.landCount = 0;
+    this.wallContactCount = 0;
+    this.lastWallContactSecond = -Infinity;
+    this.telemetry = this.createTelemetrySnapshot(false, false, false, false, false, false, false, false, false, true);
     this.updateCamera(1);
   }
 
@@ -393,8 +447,12 @@ export class PlayerRig {
   }
 
   private applyLookDelta(yawDelta: number, pitchDelta: number, steersPlayer: boolean): void {
+    const previousCameraYaw = this.cameraYaw;
+    const previousPlayerYaw = this.playerYaw;
     this.cameraYaw += yawDelta;
     if (steersPlayer) this.playerYaw = this.cameraYaw;
+    this.cameraYawTravel += Math.abs(this.cameraYaw - previousCameraYaw);
+    this.playerYawTravel += Math.abs(this.playerYaw - previousPlayerYaw);
     this.pitch = THREE.MathUtils.clamp(
       this.pitch + pitchDelta,
       CAMERA_PITCH_RANGE.min,
@@ -463,7 +521,11 @@ export class PlayerRig {
 
   private clampToArenaBoundary(): void {
     if (this.playAreaConstraint) {
-      this.playAreaConstraint.constrain(this.position, this.velocity);
+      const constrained = this.playAreaConstraint.constrain(this.position, this.velocity);
+      if (constrained) {
+        this.wallContactCount += 1;
+        this.lastWallContactSecond = performance.now() / 1000;
+      }
       return;
     }
 
@@ -679,6 +741,7 @@ export class PlayerRig {
     this.verticalVelocity = JUMP_INITIAL_SPEED;
     this.jumpOffset = Math.max(this.jumpOffset, 0.02);
     this.jumpStartedAt = performance.now() / 1000;
+    this.jumpCount += 1;
     this.onJump({
       position: this.createSurfaceEventPosition(),
       strength: JUMP_TAKEOFF_STRENGTH,
@@ -706,6 +769,7 @@ export class PlayerRig {
     this.verticalVelocity = 0;
     this.grounded = true;
     this.jumpStartedAt = -Infinity;
+    this.landCount += 1;
     if (impactSpeed < JUMP_LANDING_MIN_IMPACT_SPEED) return;
 
     const impact01 = THREE.MathUtils.clamp((impactSpeed - JUMP_LANDING_MIN_IMPACT_SPEED) / 6.8, 0, 1);
@@ -723,5 +787,42 @@ export class PlayerRig {
       this.sampleHeight(this.position.x, this.position.z) + 0.45,
       this.position.z
     );
+  }
+
+  private createTelemetrySnapshot(
+    forwardInput: boolean,
+    backwardInput: boolean,
+    turnLeftInput: boolean,
+    turnRightInput: boolean,
+    strafeLeftInput: boolean,
+    strafeRightInput: boolean,
+    sprintInput: boolean,
+    movementInputActive: boolean,
+    braking: boolean,
+    inputEnabled: boolean
+  ): PlayerControlTelemetry {
+    return {
+      cameraDragMode: inputEnabled ? this.cameraDragMode : null,
+      leftMouseHeld: inputEnabled && this.isLeftMouseHeld,
+      rightMouseHeld: inputEnabled && this.isRightMouseHeld,
+      mouseForwardMoveActive: inputEnabled && this.isMouseForwardMoveActive(),
+      cameraYawTravel: this.cameraYawTravel,
+      playerYawTravel: this.playerYawTravel,
+      forwardInput: inputEnabled && forwardInput,
+      backwardInput: inputEnabled && backwardInput,
+      turnLeftInput: inputEnabled && turnLeftInput,
+      turnRightInput: inputEnabled && turnRightInput,
+      strafeLeftInput: inputEnabled && strafeLeftInput,
+      strafeRightInput: inputEnabled && strafeRightInput,
+      sprintInput: inputEnabled && sprintInput,
+      movementInputActive: inputEnabled && movementInputActive,
+      braking,
+      grounded: this.grounded,
+      speed: this.getSpeed(),
+      jumpCount: this.jumpCount,
+      landCount: this.landCount,
+      wallContactCount: this.wallContactCount,
+      lastWallContactSecond: this.lastWallContactSecond
+    };
   }
 }

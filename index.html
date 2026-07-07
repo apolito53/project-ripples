@@ -15,9 +15,13 @@
         <div class="main-menu__content">
           <header class="main-menu__header">
             <h1 id="main-menu-title">Ripple Field Lab</h1>
-            <button id="main-menu-version-link" class="version-link" type="button" aria-haspopup="dialog">v0.5.1-ALPHA</button>
+            <button id="main-menu-version-link" class="version-link" type="button" aria-haspopup="dialog">v0.5.2-ALPHA</button>
           </header>
           <div class="main-menu__actions" aria-label="Select play mode">
+            <button id="start-training-button" class="mode-button mode-button--training" type="button">
+              <span>Training Run</span>
+              <small>Controls Warmup</small>
+            </button>
             <button id="start-track-button" class="mode-button mode-button--track" type="button">
               <span>Track</span>
               <small>Prototype Loop</small>
@@ -45,11 +49,18 @@
         <div id="medium-line" class="medium-line">medium pending</div>
       </section>
 
+      <section id="training-hud" class="training-hud" aria-label="Training objective" hidden>
+        <div class="training-hud__eyebrow">Training Run</div>
+        <h2 id="training-title">Objective</h2>
+        <p id="training-instruction">Follow the next prompt.</p>
+        <div id="training-progress" class="training-progress" aria-label="Training progress"></div>
+      </section>
+
       <div id="scene-menu-backdrop" class="scene-menu-backdrop" hidden>
         <section id="scene-menu" class="scene-menu" aria-label="Pause menu" role="dialog" aria-modal="true" tabindex="-1">
           <header class="scene-menu__header">
             <h2>Paused</h2>
-            <button id="version-link" class="version-link" type="button" aria-haspopup="dialog">v0.5.1-ALPHA</button>
+            <button id="version-link" class="version-link" type="button" aria-haspopup="dialog">v0.5.2-ALPHA</button>
           </header>
 
           <div class="pause-actions" aria-label="Pause actions">
