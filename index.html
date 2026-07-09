@@ -15,7 +15,7 @@
         <div class="main-menu__content">
           <header class="main-menu__header">
             <h1 id="main-menu-title">Ripple Field Lab</h1>
-            <button id="main-menu-version-link" class="version-link" type="button" aria-haspopup="dialog">v0.5.3-1-ALPHA</button>
+            <button id="main-menu-version-link" class="version-link" type="button" aria-haspopup="dialog">v0.5.3-2-ALPHA</button>
           </header>
           <div class="main-menu__actions" aria-label="Select play mode">
             <button id="start-training-button" class="mode-button mode-button--training" type="button">
@@ -45,8 +45,8 @@
           <span class="title">Ripple Field Lab</span>
           <span id="quality-badge" class="badge">Pretty</span>
         </div>
-        <div id="stats-line" class="stats-line">booting</div>
-        <div id="medium-line" class="medium-line">medium pending</div>
+        <div id="stats-line" class="stats-line" hidden>booting</div>
+        <div id="medium-line" class="medium-line" hidden>medium pending</div>
       </section>
 
       <section id="training-hud" class="training-hud" aria-label="Training objective" hidden>
@@ -60,7 +60,7 @@
         <section id="scene-menu" class="scene-menu" aria-label="Pause menu" role="dialog" aria-modal="true" tabindex="-1">
           <header class="scene-menu__header">
             <h2>Paused</h2>
-            <button id="version-link" class="version-link" type="button" aria-haspopup="dialog">v0.5.3-1-ALPHA</button>
+            <button id="version-link" class="version-link" type="button" aria-haspopup="dialog">v0.5.3-2-ALPHA</button>
           </header>
 
           <div class="pause-actions" aria-label="Pause actions">
@@ -83,8 +83,8 @@
               <select id="skybox-select"></select>
             </label>
             <label class="control-row">
-              <span>Perf Overlay</span>
-              <button id="perf-overlay-toggle" class="effect-toggle effect-toggle--wide" type="button" aria-pressed="true">On</button>
+              <span>Diagnostics</span>
+              <button id="perf-overlay-toggle" class="effect-toggle effect-toggle--wide" type="button" aria-pressed="false">Off</button>
             </label>
             <label class="control-row">
               <span>Hex Size</span>

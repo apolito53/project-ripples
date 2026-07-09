@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.5.3-2-ALPHA - 2026-07-08
+
+### Changed
+
+- Changed the live performance overlay to start hidden by default instead of
+  appearing as soon as gameplay starts.
+- Changed the top-left runtime debug readout to share that diagnostics toggle,
+  leaving only the title and active mode/quality badge visible until `F2` or the
+  pause-menu Diagnostics toggle is used.
+- Bumped package metadata, README, codebase index, and visible menu version text
+  to `v0.5.3-2-ALPHA`.
+
 ## 0.5.3-1-ALPHA - 2026-07-07
 
 ### Added

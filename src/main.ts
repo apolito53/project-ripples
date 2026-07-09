@@ -256,7 +256,7 @@ let appState: AppState = "mainMenu";
 let activePlayMode: PlayModeId | null = null;
 let menuVisible = false;
 let changelogVisible = false;
-let perfOverlayVisible = true;
+let perfOverlayVisible = false;
 let pointerLockWasActive = false;
 // Mouse-button release is now normal camera behavior, while Esc/unexpected
 // unlocks still mean "pause." This one-shot flag separates those two paths.
@@ -1231,6 +1231,12 @@ function updateBinaryToggle(button: HTMLButtonElement, enabled: boolean): void {
 
 function setPerfOverlayVisible(visible: boolean): void {
   perfOverlayVisible = visible;
+  // Treat the dense perf panel and the top-left runtime counters as one
+  // diagnostics cockpit. The title/badge stay visible for orientation, while
+  // F2 or the pause-menu toggle brings the numbers back when tuning.
+  const hideDiagnostics = appState === "mainMenu" || !visible;
+  statsLine.hidden = hideDiagnostics;
+  mediumLine.hidden = hideDiagnostics;
   perfOverlay.hidden = appState === "mainMenu" || !visible;
   updateBinaryToggle(perfOverlayToggle, visible);
 }

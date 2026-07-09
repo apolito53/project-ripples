@@ -9,7 +9,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Vite + strict TypeScript browser app.
 - Three.js renderer, postprocessing composer, Unreal bloom pass, shader-customized
   `InstancedMesh`, additive `Points`, and dynamic lights.
-- Current alpha baseline: `v0.5.3-1-ALPHA`; keep release tags in alpha prerelease
+- Current alpha baseline: `v0.5.3-2-ALPHA`; keep release tags in alpha prerelease
   territory until the lab graduates from prototype status.
 - Dedicated dev port `5183`; preview port `4183`.
 
@@ -165,13 +165,15 @@ Purpose: compact map for the standalone ripple-field visual lab.
    disc bursts, and velocity-shaped wake-tail motes.
 12. `PulseLightRig` assigns recent pulses and collected Echo detonations to
    point lights.
-13. The HUD reports active mode, FPS, instance counts, culled track hexes when
-    applicable, base propagation speed, voxel size,
-    arena radius, live Echo count, active pulse count, and newest pulse radius.
-    A denser `F2`/pause-menu performance overlay reports frame/update/render
-    timing, active particles versus resident budget, rendered pulse-source
-    pressure, wake texture mode/pass cost, renderer draw stats, pixel ratio,
-    bloom state, and quality.
+13. The HUD keeps active mode and quality visible by default. The top-left
+    debug readout reports FPS, instance counts, culled track hexes when
+    applicable, base propagation speed, voxel size, arena radius, live Echo
+    count, active pulse count, and newest pulse radius only after diagnostics
+    are enabled. A denser `F2`/pause-menu Diagnostics overlay reports
+    frame/update/render timing, active particles versus resident budget,
+    rendered pulse-source pressure, wake texture mode/pass cost, renderer draw
+    stats, pixel ratio, bloom state, and quality. Both debug surfaces start
+    hidden by default.
 14. Esc or the hamburger button opens the centered pause menu after a mode has
     started. The pause menu owns tuning controls, Resume, Exit To Main Menu, and
     a version changelog button.

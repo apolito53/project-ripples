@@ -7,7 +7,7 @@ This is intentionally separate from `voxel-sandbox-engine`. The goal is to make
 a polished visual lab first, then borrow patterns or ideas later if they deserve
 to graduate into the main voxel engine.
 
-Current version: `v0.5.3-1-ALPHA`.
+Current version: `v0.5.3-2-ALPHA`.
 
 ## Quick Start
 
@@ -48,7 +48,7 @@ mode directly.
   movement preserves takeoff momentum instead of letting input redirect the
   trajectory mid-jump.
 - `Shift` boosts from base pace with momentum.
-- `F2` shows or hides the live performance overlay.
+- `F2` shows or hides the live performance overlay and top-left debug readout.
 - `Esc` opens/closes the pause menu after a mode has started.
 - The pause menu's version pill opens the in-app changelog.
 - `Exit To Main Menu` returns to the mode-select splash and starts the next mode
@@ -135,7 +135,7 @@ texture for continuous surface response.
 
 The Esc/hamburger pause menu changes quality, skybox theme, hex size, arena
 radius, surface grip, ripple height/radius, Depth / Speed, particle density,
-bloom strength, and the live performance overlay while the scene is running.
+bloom strength, and the diagnostics readouts while the scene is running.
 
 Hex size treats the current cell scale as `1m`, ranges from `25cm` to `2m`, and
 measures the regular hexagon's widest point-to-point diameter. Changing it
@@ -158,14 +158,18 @@ app with `?stress=1` or set `localStorage.rippleStressMode = "1"`.
 
 ## HUD, Perf Overlay, And Skyboxes
 
-The HUD shows derived speed, hex diameter, arena radius, active pulse count, the
-newest pulse's approximate radius, and live Echo zone count so propagation and
-scale tuning have a quick visual sanity check.
+The HUD keeps the title and active quality/mode badge visible during play. The
+derived speed, hex diameter, arena radius, active pulse count, newest pulse
+radius, and Echo count are hidden by default, then return with `F2` or the pause
+menu Diagnostics toggle when propagation and scale tuning need a quick visual
+sanity check.
 
-The performance overlay adds a denser tuning cockpit with frame/update/render
-timing, active particles versus resident budget, rendered pulse-source pressure,
-GPU wake texture mode/pass cost, draw calls, triangles, pixel ratio, bloom state,
-quality mode, play mode, and clipped-versus-full hex counts.
+The performance overlay is also hidden by default. When diagnostics are enabled,
+it adds a
+denser tuning cockpit with frame/update/render timing, active particles versus
+resident budget, rendered pulse-source pressure, GPU wake texture mode/pass
+cost, draw calls, triangles, pixel ratio, bloom state, quality mode, play mode,
+and clipped-versus-full hex counts.
 
 Skybox themes use the generated Cyberpunk Skyline, Aurora Observatory, Orbital
 Megastructure, and Neon Arena Skyline panoramas on a camera-following dome.
@@ -230,7 +234,7 @@ Project planning:
 Versioning:
 
 - While the project is still experimental, release tags use alpha prerelease
-  labels. The current baseline is `v0.5.3-1-ALPHA`.
+  labels. The current baseline is `v0.5.3-2-ALPHA`.
 
 ## Design Notes
 
