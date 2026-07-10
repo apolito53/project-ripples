@@ -5,6 +5,7 @@ export type PlayerRigOptions = {
   readonly camera: THREE.PerspectiveCamera;
   readonly sampleHeight: (x: number, z: number) => number;
   readonly getBoundaryRadius: () => number;
+  readonly playAreaConstraint?: PlayAreaConstraint | null;
   readonly onPulse: (position: THREE.Vector3) => void;
   readonly onQuietPointerUnlock?: () => void;
   readonly onJump?: (event: PlayerJumpEvent) => void;
@@ -17,6 +18,18 @@ export type PlayerRigOptions = {
 export type PlayerSpeedSettings = {
   readonly walkSpeedMetersPerSecond: number;
   readonly sprintSpeedMetersPerSecond: number;
+};
+
+export type PlayAreaConstraint = {
+  /**
+   * Correct a moving player into the playable area and update velocity so wall
+   * contact feels physical. Returns true when it changed the position.
+   */
+  constrain(position: THREE.Vector3, velocity: THREE.Vector3): boolean;
+  /**
+   * Correct a gameplay point, such as a pulse origin, without touching velocity.
+   */
+  clampPoint(point: THREE.Vector3): boolean;
 };
 
 export type PlayerJumpEvent = {
@@ -124,6 +137,7 @@ export class PlayerRig {
   private readonly camera: THREE.PerspectiveCamera;
   private readonly sampleHeight: (x: number, z: number) => number;
   private readonly getBoundaryRadius: () => number;
+  private playAreaConstraint: PlayAreaConstraint | null;
   private readonly onPulse: (position: THREE.Vector3) => void;
   private readonly onQuietPointerUnlock: () => void;
   private readonly onJump: (event: PlayerJumpEvent) => void;
@@ -156,6 +170,7 @@ export class PlayerRig {
     this.camera = options.camera;
     this.sampleHeight = options.sampleHeight;
     this.getBoundaryRadius = options.getBoundaryRadius;
+    this.playAreaConstraint = options.playAreaConstraint ?? null;
     this.onPulse = options.onPulse;
     this.onQuietPointerUnlock = options.onQuietPointerUnlock ?? (() => undefined);
     this.onJump = options.onJump ?? (() => undefined);
@@ -261,7 +276,7 @@ export class PlayerRig {
       }
     }
     this.position.addScaledVector(this.velocity, delta);
-    this.clampToArenaBoundary();
+    this.clampToPlayArea();
     this.updateJump(delta);
 
     const groundY = this.sampleHeight(this.position.x, this.position.z) + PLAYER_HEIGHT;
@@ -273,13 +288,45 @@ export class PlayerRig {
 
   createPulsePosition(): THREE.Vector3 {
     const pulse = this.position.clone().addScaledVector(this.getPlanarForward(), PULSE_DISTANCE);
-    this.clampVectorToArenaBoundary(pulse);
+    this.clampVectorToPlayArea(pulse);
     pulse.y = this.sampleHeight(pulse.x, pulse.z) + 0.4;
     return pulse;
   }
 
   getSpeed(): number {
     return this.velocity.length();
+  }
+
+  getFacingYaw(): number {
+    return this.playerYaw;
+  }
+
+  setFacingYaw(yaw: number, alignCamera = false): void {
+    this.playerYaw = yaw;
+    if (alignCamera) this.cameraYaw = yaw;
+  }
+
+  setPlayAreaConstraint(playAreaConstraint: PlayAreaConstraint | null): void {
+    // The rig stays mode-agnostic: it either asks a CPU constraint to own
+    // collision or falls back to the circular arena clamp.
+    this.playAreaConstraint = playAreaConstraint;
+  }
+
+  resetForSession(position: THREE.Vector3, facingYaw: number): void {
+    // Mode switches are fresh runs, not teleports with old acceleration, held
+    // buttons, jump state, or pointer-lock baggage still attached.
+    this.keys.clear();
+    this.mobileMoveIntent.set(0, 0);
+    this.mobileLookIntent.set(0, 0);
+    this.releaseCameraDrag();
+    this.velocity.set(0, 0, 0);
+    this.jumpOffset = 0;
+    this.verticalVelocity = 0;
+    this.grounded = true;
+    this.jumpStartedAt = -Infinity;
+    this.position.copy(position);
+    this.setFacingYaw(facingYaw, true);
+    this.updateCamera(1);
   }
 
   getGroundContactStrength(): number {
@@ -324,9 +371,9 @@ export class PlayerRig {
     );
   }
 
-  triggerPulse(): void {
-    if (!this.isInputEnabled()) return;
-    this.tryCreatePulse();
+  triggerPulse(): boolean {
+    if (!this.isInputEnabled()) return false;
+    return this.tryCreatePulse();
   }
 
   private applyMobileLook(delta: number): void {
@@ -411,6 +458,15 @@ export class PlayerRig {
     return new THREE.Vector3(Math.sin(this.cameraYaw), 0, Math.cos(this.cameraYaw)).normalize();
   }
 
+  private clampToPlayArea(): void {
+    if (this.playAreaConstraint) {
+      this.playAreaConstraint.constrain(this.position, this.velocity);
+      return;
+    }
+
+    this.clampToArenaBoundary();
+  }
+
   private clampToArenaBoundary(): void {
     const wasClamped = this.clampVectorToArenaBoundary(this.position);
     if (!wasClamped) return;
@@ -428,6 +484,12 @@ export class PlayerRig {
 
     this.velocity.x -= normalX * outwardSpeed;
     this.velocity.z -= normalZ * outwardSpeed;
+  }
+
+  private clampVectorToPlayArea(vector: THREE.Vector3): boolean {
+    return this.playAreaConstraint
+      ? this.playAreaConstraint.clampPoint(vector)
+      : this.clampVectorToArenaBoundary(vector);
   }
 
   private clampVectorToArenaBoundary(vector: THREE.Vector3): boolean {
@@ -551,11 +613,12 @@ export class PlayerRig {
     this.adjustZoom(event.deltaY * CAMERA_WHEEL_ZOOM_SPEED);
   };
 
-  private tryCreatePulse(): void {
+  private tryCreatePulse(): boolean {
     const now = performance.now() / 1000;
-    if (now - this.lastPulseSecond < PULSE_COOLDOWN_SECONDS) return;
+    if (now - this.lastPulseSecond < PULSE_COOLDOWN_SECONDS) return false;
     this.lastPulseSecond = now;
     this.onPulse(this.createPulsePosition());
+    return true;
   }
 
   private releaseCameraDrag(): void {

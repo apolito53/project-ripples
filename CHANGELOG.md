@@ -2,6 +2,152 @@
 
 ## Unreleased
 
+### Added
+
+- Added a real forced-WebGPU diagnostic runtime for `?renderer=webgpu`: it owns
+  the visible canvas, configures a DPR-clamped WebGPU context, submits animated
+  clear frames, and reports backend stats/device state without using the
+  WebGL/Three scene systems.
+- Added a renderer-neutral pulse-source snapshot and per-frame `RenderInput`
+  shape so WebGL uniforms and future WebGPU buffers can consume the same source
+  contract.
+- Expanded the WebGPU boot probe to configure a DPR-clamped canvas context and
+  submit a first clear pass before reporting readiness.
+- Added Playwright browser render smoke scripts for WebGL scene boot, WebGPU
+  capability checks, forced-WebGPU diagnostic rendering, and forced-WebGPU
+  unavailable behavior.
+- Added sparse `renderer.frameSample` diagnostics so browser smoke can assert
+  frame submission, backend stats, viewport size, pixel ratio, and device-lost
+  state without relying only on screenshots.
+- Added the first wake-field backend boundary by keeping `WakeField` as the
+  public facade while moving the existing WebGL ping-pong heightfield into a
+  dedicated backend implementation.
+- Added a forced-WebGPU wake compute proof: the diagnostic runtime now creates
+  explicit WGSL reset/simulation pipelines, ping-pongs quality-sized
+  `rgba16float` wake textures, logs `wake.webgpu.*` diagnostics, and keeps the
+  proof hidden from the playable WebGL scene until visual sampling parity lands.
+- Added a visible forced-WebGPU wake texture preview pass that samples the
+  computed wake texture with WGSL and reports one diagnostic fullscreen-triangle
+  draw through renderer stats and `wake.webgpu.preview.*` diagnostics.
+- Added the first WebGPU RippleField data bridge: shared renderer-neutral field
+  layout generation, vec4-packed diagnostic pulse-source uploads, and a visible
+  forced-WebGPU field preview that samples the WebGPU wake compute texture while
+  logging `ripple.webgpu.*` diagnostics.
+- Added a forced-WebGPU 3D diagnostic RippleField pass with a synthetic orbit
+  camera, depth texture, instanced hex-cap geometry, perspective
+  view-projection uniforms, and closer wake/source/crest/terrain lighting
+  behavior while keeping the WebGPU path diagnostic-only.
+- Added a forced-WebGPU playable-state bridge: the diagnostic WebGPU field now
+  consumes real camera/player movement, ground contact, manual/jump/landing
+  pulse sources, quality switching, and `webgpu.sceneState.*` diagnostics by
+  default, while `?webgpuDemo=1` preserves the synthetic orbit/source harness.
+- Added shared Echo gameplay state for WebGL and forced WebGPU: Echo IDs,
+  positions, spawn timing, trigger checks, collection events, `echo.state.*`
+  diagnostics, WebGPU diagnostic marker/collection-ring highlights, HUD counts,
+  and browser smoke assertions for collecting the deterministic first Echo.
+- Added shared CPU particle state for WebGL and forced WebGPU: `ParticleVeil`
+  now mirrors packed renderer-neutral motes into Three `Points`, while forced
+  WebGPU renders the same aura, wake-tail, pulse, jump/landing, and Echo
+  collection particles as additive instanced soft quads with
+  `particle.state.*`/`particle.webgpu.*` diagnostics and browser smoke
+  assertions.
+- Added a forced-WebGPU core scene presentation layer: skybox texture
+  selection/loading, arena curtain, avatar presentation, pulse glow proxies,
+  and lightweight post-glow compositing now render around the diagnostic
+  RippleField path with `skybox.webgpu.*`, `arena.webgpu.*`,
+  `avatar.webgpu.*`, `pulseLight.webgpu.*`, and `post.webgpu.*` diagnostics.
+- Added shared-depth forced-WebGPU scene-space stabilization: avatar, particle,
+  pulse glow, and arena passes now read the RippleField depth target, wake
+  diagnostics now include sparse sampled energy fields, and
+  `verify:render:webgpu:soak` runs the longer movement/pulse/Echo/quality
+  stability check on demand.
+- Added forced-WebGPU lighting and bloom parity: renderer-neutral scene-light
+  snapshots, a shared WebGPU local-light buffer, bounded local-light
+  contribution in the RippleField WGSL material, and a real bright-pass +
+  separable-blur WebGPU bloom composite with `lighting.webgpu.*` and
+  `bloom.webgpu.*` diagnostics.
+- Added forced-WebGPU Echo visual parity: active Echoes now render as large
+  layered orb visuals with a dense sun-like core, halo/aura layers, orbit
+  motes/trails, collection flash/mist proxies, `echo.webgpu.*` diagnostics,
+  HUD/stats coverage, and browser smoke/soak assertions.
+- Added forced-WebGPU contact-shadow polish: renderer-neutral avatar/Echo/
+  Echo-burst/pulse shadow caster snapshots now upload through a WebGPU scene
+  shadow buffer and softly ground the RippleField material with
+  `shadow.webgpu.*` diagnostics and smoke/soak coverage.
+- Added forced-WebGPU true field-receiver shadow-map parity: a directional
+  `depth32float` WebGPU shadow map renders lightweight avatar/Echo/Echo-burst/
+  pulse proxy casters before the field pass, the RippleField WGSL samples it
+  with bounded PCF and blends it with contact occlusion, and smoke/soak checks
+  now require `shadow.webgpu.map.*` diagnostics.
+- Closed the forced-WebGPU object-shadow readiness gap for the field receiver:
+  shadow snapshots now carry separate contact footprints and kind-aware
+  `shadowMapProxy` geometry, the WebGPU shadow map renders avatar orb, Echo
+  column, and pulse/Echo-burst disc proxy casters, and diagnostics/verifiers
+  require `shadowGeometryMode="shape-proxy-casters"` with orb/column/disc
+  caster counts.
+- Added forced-WebGPU hover-pod avatar presentation inspired by the current
+  main branch while preserving the previous mote-core avatar as the reusable
+  `mote-core-orbit` asset.
+- Added forced-WebGPU diagnostic-core readiness and settings parity: the
+  WebGPU path now emits `webgpu.readiness.*`, annotates renderer mode/frame
+  diagnostics with `readinessTier="diagnostic-core"` and
+  `defaultEligible=false`, reports readiness/default-rollout state, and wires quality,
+  skybox, bloom toggle/strength, particle toggle, and particle density for both
+  playable WebGPU and `?webgpuDemo=1`.
+- Added forced-WebGPU deep settings parity for the existing tuning controls:
+  hex size, arena radius, hidden walk/sprint speed controls, surface grip,
+  ripple height/radius, and Depth / Speed now update the WebGPU render
+  snapshots, reuse the WebGL field-scale guardrails, rebuild/reset the WebGPU
+  field/wake path when scale changes, and report matching
+  `webgpu.settings.change`, readiness, scene-state, and frame-sample fields.
+- Added forced-WebGPU integration-readiness prep: readiness gaps now use precise
+  labels, the
+  WebGPU avatar pass consumes a neutral `avatarPresentation` render snapshot,
+  `webgpu.integrationReadiness.*` summarizes backend/readiness/bounds/settings
+  state, and `verify:render:webgpu:readiness` runs a longer explicit readiness
+  check with visual brightness/glare/cyan-wash bounds.
+- Added forced-WebGPU default-readiness soak proof: the app now emits
+  `webgpu.defaultReadiness.*` diagnostics, the browser verifier adds
+  `verify:render:webgpu:default-soak` with a two-minute-plus movement/settings/
+  resize/focus run, and `auto` stays WebGL while default rollout remains an
+  explicit decision.
+- Added forced-WebGPU Track snapshot integration: `mode=track` now creates the
+  CPU `RaceTrack` owner for containment, mask bytes, and Echo placement while
+  passing only neutral play-mode and track-mask snapshots through
+  `RenderInput`; the WebGPU RippleField pass uploads/samples the mask for body
+  dimming, edge glow, and center highlight, the WebGPU arena curtain disables in
+  Track mode, and browser smoke now covers WebGL Track plus forced-WebGPU Track
+  without enabling racing laps/timers or making WebGPU the default.
+
+### Fixed
+
+- Fixed debug log `/summary` and `/tail` filtering so missing numeric query
+  params no longer behave like zero-value filters.
+- Clamped the lightweight forced-WebGPU post glow so minor effect pixels no
+  longer amplify into broad scene glare.
+
+## 0.4.0-ALPHA - 2026-06-23
+
+### Added
+
+- Added the first WebGPU migration slice: renderer mode selection, WebGPU boot
+  probing, WebGPU device/error diagnostics, and a `ThreeRenderRuntime` wrapper
+  that preserves the current WebGL visuals while future backends come online.
+- Added a paired local dev launcher so `npm.cmd run dev` starts both Vite and
+  the Ripple debug log receiver.
+- Added `npm.cmd run smoke` and folded it into `npm.cmd run validate` to verify
+  the app shell, log receiver health, and retained diagnostic events.
+
+### Changed
+
+- Routed frame rendering, resize, quality shadow/bloom updates, renderer stats,
+  and pipeline prewarm through the runtime boundary instead of raw globals in
+  `src/main.ts`.
+- Added backend-aware renderer metrics to hitch diagnostics and the performance
+  overlay.
+- Bumped package metadata, README, codebase index, and visible menu version text
+  to `v0.4.0-ALPHA`.
+
 ## 0.3.19-ALPHA - 2026-06-23
 
 ### Added

@@ -1,19 +1,18 @@
 import * as THREE from "three";
 import type { LabSettings } from "./labSettings";
 import type { QualityPreset } from "./qualityPresets";
-import { MAX_SHADER_RIPPLE_SOURCES, type RippleSourceStore } from "./rippleSources";
-import { sampleFieldHeight } from "./terrain";
+import { MAX_SHADER_RIPPLE_SOURCES, RIPPLE_LIFETIME_SECONDS, type RippleRenderSourceSnapshot } from "./rippleSources";
+import {
+  BASE_TILE_HEIGHT,
+  HEX_TILE_DIAMETER,
+  RIPPLE_WIDTH,
+  createRippleFieldLayout,
+  getRenderedRippleSourceLimit,
+  type FieldPlacementClipper,
+  type RippleFieldBuildStats
+} from "./rippleFieldLayout";
 import type { WakeFieldMetrics } from "./wakeField";
 import { getBasePropagationSpeedMetersPerSecond } from "./waveMedium";
-
-const HEX_TILE_DIAMETER = 0.89;
-const BASE_TILE_HEIGHT = 0.08;
-const RIPPLE_WIDTH = 1.45;
-const HEX_FLAT_TOP_HORIZONTAL_SPACING_RATIO = 0.75;
-const HEX_FLAT_TOP_VERTICAL_SPACING_RATIO = Math.sqrt(3) * 0.5;
-const HEX_AREA_RATIO = HEX_FLAT_TOP_HORIZONTAL_SPACING_RATIO * HEX_FLAT_TOP_VERTICAL_SPACING_RATIO;
-const MIN_RENDERED_RIPPLE_SOURCES = 8;
-const SHADER_SOURCE_EVALUATION_BUDGET = 2_400_000;
 
 type Uniform<T> = {
   value: T;
@@ -36,6 +35,9 @@ type RippleShaderUniforms = {
   readonly uWakeFieldRadius: Uniform<number>;
   readonly uWakeStrength: Uniform<number>;
   readonly uWakeTextureEncoding: Uniform<number>;
+  readonly uTrackTexture: Uniform<THREE.Texture>;
+  readonly uTrackFieldRadius: Uniform<number>;
+  readonly uTrackStrength: Uniform<number>;
   readonly uRippleCount: Uniform<number>;
   readonly uRipples: Uniform<THREE.Vector4[]>;
   readonly uRippleMetadata: Uniform<THREE.Vector4[]>;
@@ -51,6 +53,7 @@ type RippleShader = {
 export class RippleField {
   readonly object = new THREE.Group();
   private readonly noOpWakeTexture = createNoOpWakeTexture();
+  private readonly noOpTrackTexture = createNoOpTrackTexture();
   private readonly rippleUniforms = Array.from(
     { length: MAX_SHADER_RIPPLE_SOURCES },
     () => new THREE.Vector4(0, 0, -999, 0)
@@ -67,6 +70,13 @@ export class RippleField {
   private instanceCount = 0;
   private renderedRippleSourceCount = 0;
   private renderedRippleSourceLimit = MAX_SHADER_RIPPLE_SOURCES;
+  private buildStats: RippleFieldBuildStats = {
+    mode: "full",
+    clipperLabel: "none",
+    fullHexCount: 0,
+    culledHexCount: 0,
+    instanceCount: 0
+  };
 
   constructor(
     scene: THREE.Scene,
@@ -78,46 +88,18 @@ export class RippleField {
     this.rebuild(preset);
   }
 
-  rebuild(preset: QualityPreset): void {
+  rebuild(preset: QualityPreset, placementClipper: FieldPlacementClipper | null = null): void {
     this.disposeMesh();
     this.capShader = null;
 
-    const positions: number[] = [];
-    const phases: number[] = [];
-    const tints: number[] = [];
-    const radius = preset.fieldRadius;
-    const spacing = getHexHorizontalSpacing(preset);
-    const rowSpacing = getHexVerticalSpacing(preset);
+    const layout = createRippleFieldLayout(preset, placementClipper);
 
     this.capGeometry = createHexPrismGeometry();
     this.capMaterial = this.createCapMaterial();
 
-    const halfColumnCount = Math.ceil(radius / spacing) + 1;
-    const halfRowCount = Math.ceil(radius / rowSpacing) + 1;
-    const placementRadius = radius + spacing * 0.5;
-    const placementRadiusSquared = placementRadius * placementRadius;
-
-    // The arena floor is circular, but the cells live on a flat-top hex lattice.
-    // The footprint calibration below makes Meltdown read as an interlocked
-    // honeycomb while preserving the old stress-test density budget.
-    for (let iz = -halfRowCount; iz <= halfRowCount; iz += 1) {
-      const rowOffset = Math.abs(iz % 2) === 1 ? spacing * 0.5 : 0;
-      const z = iz * rowSpacing;
-
-      for (let ix = -halfColumnCount; ix <= halfColumnCount; ix += 1) {
-        const x = ix * spacing + rowOffset;
-        if (x * x + z * z > placementRadiusSquared) continue;
-
-        const y = sampleFieldHeight(x, z);
-        const terrainTint = createTerrainTint(x, y, z);
-
-        positions.push(x, y, z);
-        phases.push(pseudoRandom(x, z) * Math.PI * 2);
-        tints.push(terrainTint.r, terrainTint.g, terrainTint.b);
-      }
-    }
-
-    this.instanceCount = positions.length / 3;
+    this.instanceCount = layout.instanceCount;
+    this.renderedRippleSourceLimit = layout.renderedRippleSourceLimit;
+    this.buildStats = layout.buildStats;
     this.capMesh = new THREE.InstancedMesh(this.capGeometry, this.capMaterial, this.instanceCount);
     this.capMesh.name = `${preset.label} ripple hex caps`;
     this.capMesh.frustumCulled = false;
@@ -129,7 +111,7 @@ export class RippleField {
     const matrix = new THREE.Matrix4();
     for (let index = 0; index < this.instanceCount; index += 1) {
       const offset = index * 3;
-      matrix.makeTranslation(positions[offset], positions[offset + 1], positions[offset + 2]);
+      matrix.makeTranslation(layout.positions[offset], layout.positions[offset + 1], layout.positions[offset + 2]);
       this.capMesh.setMatrixAt(index, matrix);
     }
 
@@ -137,7 +119,7 @@ export class RippleField {
     // lives without touching instance matrices every frame. Keeping only the
     // cap surface makes the upcoming curved/spherical arena path much less
     // tangled than the old cap-plus-shaft pair.
-    setInstanceAttributes(this.capGeometry, positions, phases, tints);
+    setInstanceAttributes(this.capGeometry, layout.positions, layout.phases, layout.tints);
 
     this.object.add(this.capMesh);
   }
@@ -146,25 +128,22 @@ export class RippleField {
     time: number,
     settings: LabSettings,
     preset: QualityPreset,
-    sources: RippleSourceStore,
+    sourceSnapshot: RippleRenderSourceSnapshot,
     playerPosition: THREE.Vector3,
     playerVelocity: THREE.Vector3,
     playerSpeed: number,
     playerGroundContact: number,
     wakeTexture: THREE.Texture,
-    wakeMetrics: WakeFieldMetrics
+    wakeMetrics: WakeFieldMetrics,
+    trackTexture: THREE.Texture,
+    trackFieldRadius: number,
+    trackStrength: number
   ): void {
     if (!this.capShader) return;
 
     const basePropagationSpeed = getBasePropagationSpeedMetersPerSecond(settings.waveMedium);
     const sourceLimit = getRenderedRippleSourceLimit(this.instanceCount);
-    const activeCount = sources.writeUniforms(
-      this.rippleUniforms,
-      this.rippleMetadataUniforms,
-      this.rippleLifetimeUniforms,
-      time,
-      sourceLimit
-    );
+    const activeCount = this.writeRenderSourceUniforms(sourceSnapshot, sourceLimit);
     this.renderedRippleSourceCount = activeCount;
     this.renderedRippleSourceLimit = sourceLimit;
     this.writeShaderUniforms(
@@ -178,6 +157,9 @@ export class RippleField {
       playerGroundContact,
       wakeTexture,
       wakeMetrics,
+      trackTexture,
+      trackFieldRadius,
+      trackStrength,
       basePropagationSpeed,
       activeCount
     );
@@ -195,9 +177,22 @@ export class RippleField {
     return this.renderedRippleSourceLimit;
   }
 
+  getRecommendedRenderSourceLimit(): number {
+    return getRenderedRippleSourceLimit(this.instanceCount);
+  }
+
+  getBuildStats(): RippleFieldBuildStats {
+    return this.buildStats;
+  }
+
+  getNoOpTrackTexture(): THREE.Texture {
+    return this.noOpTrackTexture;
+  }
+
   dispose(): void {
     this.disposeMesh();
     this.noOpWakeTexture.dispose();
+    this.noOpTrackTexture.dispose();
     this.object.removeFromParent();
   }
 
@@ -257,6 +252,9 @@ export class RippleField {
       shader.uniforms.uWakeFieldRadius = { value: 92 };
       shader.uniforms.uWakeStrength = { value: 0 };
       shader.uniforms.uWakeTextureEncoding = { value: 1 };
+      shader.uniforms.uTrackTexture = { value: this.noOpTrackTexture };
+      shader.uniforms.uTrackFieldRadius = { value: 92 };
+      shader.uniforms.uTrackStrength = { value: 0 };
       shader.uniforms.uRippleCount = { value: 0 };
       shader.uniforms.uRipples = { value: this.rippleUniforms };
       shader.uniforms.uRippleMetadata = { value: this.rippleMetadataUniforms };
@@ -282,6 +280,9 @@ export class RippleField {
           uniform float uWakeFieldRadius;
           uniform float uWakeStrength;
           uniform float uWakeTextureEncoding;
+          uniform sampler2D uTrackTexture;
+          uniform float uTrackFieldRadius;
+          uniform float uTrackStrength;
           uniform int uRippleCount;
           uniform vec4 uRipples[${MAX_SHADER_RIPPLE_SOURCES}];
           uniform vec4 uRippleMetadata[${MAX_SHADER_RIPPLE_SOURCES}];
@@ -292,6 +293,7 @@ export class RippleField {
           varying float vRippleGlow;
           varying float vCrestGlow;
           varying float vHeightWhiteness;
+          varying vec2 vCellPosition;
           varying vec3 vRippleTint;
 
           float rippleRing(vec4 ripple, vec4 metadata, float lifetime, vec2 cellPosition) {
@@ -403,6 +405,7 @@ export class RippleField {
           vRippleGlow = glow;
           vCrestGlow = crestGlow;
           vHeightWhiteness = heightWhiteness;
+          vCellPosition = cellPosition;
 
           // Height color is driven from the animated shader height, not only the
           // baked terrain height. Ripples and the player rim can therefore flash
@@ -422,29 +425,87 @@ export class RippleField {
           "#include <common>",
           `#include <common>
           uniform float uBloomMood;
+          uniform sampler2D uTrackTexture;
+          uniform float uTrackFieldRadius;
+          uniform float uTrackStrength;
           varying float vRippleGlow;
           varying float vCrestGlow;
           varying float vHeightWhiteness;
+          varying vec2 vCellPosition;
           varying vec3 vRippleTint;`
         )
         .replace(
           "#include <color_fragment>",
           `#include <color_fragment>
+          vec2 trackColorUv = vCellPosition / max(0.001, uTrackFieldRadius * 2.0) + vec2(0.5);
+          vec4 trackColorSample = texture2D(uTrackTexture, clamp(trackColorUv, vec2(0.0), vec2(1.0)));
+          float trackColorActive = clamp(uTrackStrength, 0.0, 1.0);
+          float trackColorBody = mix(1.0, trackColorSample.r, trackColorActive);
+          float trackColorEdge = trackColorSample.g * trackColorActive;
+          float trackColorCenter = trackColorSample.b * trackColorActive;
+          float offTrackDim = mix(0.035, 1.1, smoothstep(0.08, 0.78, trackColorBody));
           diffuseColor.rgb *= vRippleTint * (0.62 + vRippleGlow * 0.05 + vHeightWhiteness * 0.07 + vCrestGlow * 0.2);
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.78, 1.0, 0.94), vCrestGlow * 0.26);`
+          diffuseColor.rgb *= offTrackDim;
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.78, 1.0, 0.94), vCrestGlow * 0.26);
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.1, 0.82, 0.9), trackColorSample.r * trackColorActive * 0.36);
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.82, 1.0, 0.94), trackColorEdge * 0.74 + trackColorCenter * 0.16);`
         )
         .replace(
           "#include <emissivemap_fragment>",
           `#include <emissivemap_fragment>
+          vec2 trackGlowUv = vCellPosition / max(0.001, uTrackFieldRadius * 2.0) + vec2(0.5);
+          vec4 trackGlowSample = texture2D(uTrackTexture, clamp(trackGlowUv, vec2(0.0), vec2(1.0)));
+          float trackGlowActive = clamp(uTrackStrength, 0.0, 1.0);
+          float trackGlowBody = trackGlowSample.r * trackGlowActive;
+          float trackGlowEdge = trackGlowSample.g * trackGlowActive;
+          float trackGlowCenter = trackGlowSample.b * trackGlowActive;
           vec3 crestLight = mix(vRippleTint, vec3(0.7, 1.0, 0.9), 0.55);
           totalEmissiveRadiance += vRippleTint * vRippleGlow * (0.025 + uBloomMood * 0.055);
-          totalEmissiveRadiance += crestLight * vCrestGlow * (0.12 + uBloomMood * 0.32);`
+          totalEmissiveRadiance += crestLight * vCrestGlow * (0.12 + uBloomMood * 0.32);
+          totalEmissiveRadiance += vec3(0.06, 0.74, 0.72) * trackGlowBody * (0.04 + uBloomMood * 0.08);
+          totalEmissiveRadiance += vec3(0.62, 1.0, 0.92) * (trackGlowEdge * 0.68 + trackGlowCenter * 0.08) * (0.44 + uBloomMood);`
         );
     };
 
     material.customProgramCacheKey = () =>
-      `ripple-field-hex-cap-shader-v3-${this.supportsWakeTextureSampling ? "wake" : "no-wake"}`;
+      `ripple-field-hex-cap-shader-v4-${this.supportsWakeTextureSampling ? "wake" : "no-wake"}`;
     return material;
+  }
+
+  private writeRenderSourceUniforms(sourceSnapshot: RippleRenderSourceSnapshot, sourceLimit: number): number {
+    const maxWrittenSources = Math.max(
+      0,
+      Math.min(this.rippleUniforms.length, sourceSnapshot.sources.length, Math.floor(sourceLimit))
+    );
+
+    for (let index = 0; index < maxWrittenSources; index += 1) {
+      const source = sourceSnapshot.sources[index];
+
+      // WebGL adapts the neutral source snapshot into its fixed uniform layout:
+      // - target: x/z position, birth time, amplitude
+      // - metadata: speed, width, damping, and a reserved slot
+      // - lifetime: source-specific fade horizon so the upload budget never
+      //   decides when a pulse actually dies.
+      this.rippleUniforms[index].set(source.positionX, source.positionZ, source.startTime, source.strength);
+      this.rippleMetadataUniforms[index].set(
+        finiteOrDefault(source.speedMultiplier, 1),
+        finiteOrDefault(source.widthMultiplier, 1),
+        finiteOrDefault(source.dampingMultiplier, 1),
+        0
+      );
+      this.rippleLifetimeUniforms[index] = finiteOrDefault(source.lifetimeSeconds, RIPPLE_LIFETIME_SECONDS);
+    }
+
+    // Clear the rest of the fixed WebGL uniform array every frame. The shader
+    // loop stops at uRippleCount, but stale entries here are confusing during
+    // debugging and can leak visual state if the count ever changes mid-frame.
+    for (let index = maxWrittenSources; index < this.rippleUniforms.length; index += 1) {
+      this.rippleUniforms[index].set(0, 0, -999, 0);
+      this.rippleMetadataUniforms[index].set(1, 1, 1, 0);
+      this.rippleLifetimeUniforms[index] = RIPPLE_LIFETIME_SECONDS;
+    }
+
+    return maxWrittenSources;
   }
 
   private writeShaderUniforms(
@@ -458,6 +519,9 @@ export class RippleField {
     playerGroundContact: number,
     wakeTexture: THREE.Texture,
     wakeMetrics: WakeFieldMetrics,
+    trackTexture: THREE.Texture,
+    trackFieldRadius: number,
+    trackStrength: number,
     basePropagationSpeed: number,
     activeCount: number
   ): void {
@@ -479,6 +543,9 @@ export class RippleField {
     shader.uniforms.uWakeFieldRadius.value = preset.fieldRadius;
     shader.uniforms.uWakeStrength.value = wakeMetrics.mode === "noop" ? 0 : 1;
     shader.uniforms.uWakeTextureEncoding.value = wakeMetrics.mode === "gpu-half-float" ? 0 : 1;
+    shader.uniforms.uTrackTexture.value = trackTexture;
+    shader.uniforms.uTrackFieldRadius.value = trackFieldRadius;
+    shader.uniforms.uTrackStrength.value = THREE.MathUtils.clamp(trackStrength, 0, 1);
     shader.uniforms.uRippleCount.value = activeCount;
   }
 
@@ -496,25 +563,14 @@ export class RippleField {
     this.instanceCount = 0;
     this.renderedRippleSourceCount = 0;
     this.renderedRippleSourceLimit = MAX_SHADER_RIPPLE_SOURCES;
+    this.buildStats = {
+      mode: "full",
+      clipperLabel: "none",
+      fullHexCount: 0,
+      culledHexCount: 0,
+      instanceCount: 0
+    };
   }
-}
-
-function createTerrainTint(x: number, y: number, z: number): THREE.Color {
-  const color = new THREE.Color();
-  const cool = new THREE.Color(0x143a55);
-  const warm = new THREE.Color(0x2a5a6a);
-  const accent = new THREE.Color(0x3958a7);
-  const high = new THREE.Color(0xd8fbff);
-  const mix = pseudoRandom(x * 0.3 + y, z * 0.7);
-  const terrainWhiteness = smoothstep(-1.35, 1.95, y) * 0.24;
-
-  // The shader handles animated height whitening every frame. This baked tint
-  // gives the still terrain the same language before any waves pass through it.
-  color.copy(cool)
-    .lerp(warm, 0.35 + mix * 0.35)
-    .lerp(accent, Math.max(0, y) * 0.035)
-    .lerp(high, terrainWhiteness);
-  return color;
 }
 
 function createNoOpWakeTexture(): THREE.DataTexture {
@@ -527,9 +583,11 @@ function createNoOpWakeTexture(): THREE.DataTexture {
   return texture;
 }
 
-function smoothstep(edge0: number, edge1: number, value: number): number {
-  const x = Math.min(1, Math.max(0, (value - edge0) / (edge1 - edge0)));
-  return x * x * (3 - 2 * x);
+function createNoOpTrackTexture(): THREE.DataTexture {
+  const texture = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1, THREE.RGBAFormat);
+  texture.name = "No-op race track texture";
+  texture.needsUpdate = true;
+  return texture;
 }
 
 function createHexPrismGeometry(): THREE.CylinderGeometry {
@@ -543,39 +601,15 @@ function createHexPrismGeometry(): THREE.CylinderGeometry {
   return geometry;
 }
 
-function getHexHorizontalSpacing(preset: QualityPreset): number {
-  return getHexPlacementDiameter(preset) * HEX_FLAT_TOP_HORIZONTAL_SPACING_RATIO;
-}
-
-function getHexVerticalSpacing(preset: QualityPreset): number {
-  return getHexPlacementDiameter(preset) * HEX_FLAT_TOP_VERTICAL_SPACING_RATIO;
-}
-
-function getHexPlacementDiameter(preset: QualityPreset): number {
-  // Before the hex conversion, `tileSpacing` roughly meant one cell's area in
-  // the placement grid. Preserve that density by solving for the flat-top hex
-  // diameter that gives the same center-cell area. `HEX_TILE_DIAMETER` is then
-  // calibrated so Meltdown's visual footprint nearly equals this placement
-  // diameter, producing an interlocking honeycomb without inflating the old
-  // instance count.
-  return preset.tileSpacing / Math.sqrt(HEX_AREA_RATIO);
-}
-
-function getRenderedRippleSourceLimit(instanceCount: number): number {
-  // Ripple source evaluation runs once per rendered hex cap. At 25cm voxels a
-  // single arena can have hundreds of thousands of caps, so keeping all 32 wave
-  // sources visible turns each frame into millions of shader evaluations. This
-  // keeps the newest sources visible while density is extreme, without deleting
-  // older gameplay sources before their lifetimes finish.
-  const densityLimit = Math.floor(SHADER_SOURCE_EVALUATION_BUDGET / Math.max(1, instanceCount));
-  return THREE.MathUtils.clamp(densityLimit, MIN_RENDERED_RIPPLE_SOURCES, MAX_SHADER_RIPPLE_SOURCES);
+function finiteOrDefault(value: number | undefined, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
 function setInstanceAttributes(
   geometry: THREE.BufferGeometry,
-  positions: number[],
-  phases: number[],
-  tints: number[]
+  positions: readonly number[],
+  phases: readonly number[],
+  tints: readonly number[]
 ): void {
   geometry.setAttribute(
     "instanceFieldPosition",
@@ -589,9 +623,4 @@ function setInstanceAttributes(
     "instanceTint",
     new THREE.InstancedBufferAttribute(new Float32Array(tints), 3)
   );
-}
-
-function pseudoRandom(x: number, z: number): number {
-  const value = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453;
-  return value - Math.floor(value);
 }

@@ -1,19 +1,14 @@
 import * as THREE from "three";
 import { debugEvent, debugMeasure, roundMetric, vectorPayload } from "./debugLog";
+import {
+  ECHO_COLUMN_BASE_LIFT,
+  ECHO_COLUMN_HEIGHT,
+  EchoZoneStateStore,
+  type EchoZoneOptions,
+  type TriggeredEchoZone
+} from "./echoState";
 
-export type EchoZoneOptions = {
-  readonly radius: number;
-  readonly triggerRadius: number;
-  readonly burstStrength: number;
-  readonly discBurstRadius: number;
-};
-
-export type TriggeredEchoZone = {
-  readonly position: THREE.Vector3;
-  readonly effectPosition: THREE.Vector3;
-  readonly burstStrength: number;
-  readonly discBurstRadius: number;
-};
+export type { EchoZoneOptions, TriggeredEchoZone } from "./echoState";
 
 type EchoZoneVisual = EchoZoneOptions & {
   readonly id: number;
@@ -106,8 +101,8 @@ const CORE_COLOR = 0xffd36a;
 const ORB_LIGHT_COLOR = 0xffe08a;
 const ORB_SHELL_COLOR = 0xfff2c6;
 const MOTE_COLOR = 0x7dffd8;
-const COLUMN_HEIGHT = 7.4;
-const COLUMN_BASE_LIFT = 1.45;
+const COLUMN_HEIGHT = ECHO_COLUMN_HEIGHT;
+const COLUMN_BASE_LIFT = ECHO_COLUMN_BASE_LIFT;
 const ECHO_ORBIT_MOTE_COUNT = 44;
 const ECHO_ORBIT_TRAIL_SEGMENTS = 5;
 const ECHO_ORBIT_TRAIL_SECONDS = 0.42;
@@ -123,6 +118,7 @@ const GOLD = new THREE.Color(CORE_COLOR);
 
 export class EchoZoneField {
   private readonly scene: THREE.Scene;
+  private readonly stateStore: EchoZoneStateStore;
   private readonly coreGeometry = new THREE.IcosahedronGeometry(0.42, 2);
   private readonly diamondGeometry = new THREE.OctahedronGeometry(1, 1);
   private readonly mistGeometry = new THREE.SphereGeometry(1, 32, 20);
@@ -132,10 +128,10 @@ export class EchoZoneField {
   private readonly collectBurstPool: EchoCollectBurst[] = [];
   private readonly collectBurstLights = createCollectBurstLightPool();
   private lastBurstSlowFrameLogAt = -Infinity;
-  private nextId = 1;
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, stateStore = new EchoZoneStateStore()) {
     this.scene = scene;
+    this.stateStore = stateStore;
     for (const lightSet of this.columnLightSets) {
       for (const light of lightSet) {
         this.scene.add(light);
@@ -152,10 +148,11 @@ export class EchoZoneField {
   }
 
   add(position: THREE.Vector3, startTime: number, options: EchoZoneOptions): void {
+    const zoneState = this.stateStore.add(position, startTime, options);
     const object = new THREE.Group();
-    object.name = `Echo zone ${this.nextId}`;
-    object.position.copy(position);
-    const columnRadius = Math.max(0.85, options.radius * 0.34);
+    object.name = `Echo zone ${zoneState.id}`;
+    object.position.copy(zoneState.position);
+    const columnRadius = zoneState.columnRadius;
 
     const core = new THREE.Mesh(
       this.coreGeometry,
@@ -208,12 +205,10 @@ export class EchoZoneField {
     this.scene.add(object);
     this.zones.push({
       ...options,
-      id: this.nextId,
-      position: position.clone(),
-      spawnTime: startTime,
-      // Every zone breathes slightly out of phase so a cluster feels alive
-      // instead of looking like one copied object blinking in sync.
-      phase: Math.random() * Math.PI * 2,
+      id: zoneState.id,
+      position: zoneState.position.clone(),
+      spawnTime: zoneState.spawnTime,
+      phase: zoneState.phase,
       columnRadius,
       object,
       core,
@@ -222,10 +217,11 @@ export class EchoZoneField {
       columnLights,
       sparkles
     });
-    this.nextId += 1;
   }
 
   update(time: number): void {
+    this.stateStore.update(time);
+
     for (const zone of this.zones) {
       const age = time - zone.spawnTime;
       const pulse = Math.sin(age * 2.4 + zone.phase) * 0.5 + 0.5;
@@ -265,41 +261,23 @@ export class EchoZoneField {
   }
 
   collectAt(playerPosition: THREE.Vector3, time: number): TriggeredEchoZone[] {
-    const triggered: TriggeredEchoZone[] = [];
+    const triggered = this.stateStore.collectAt(playerPosition, time, {
+      activeBurstsBefore: this.collectBursts.length
+    });
 
-    for (let index = this.zones.length - 1; index >= 0; index -= 1) {
-      const zone = this.zones[index];
-      const distance = Math.hypot(playerPosition.x - zone.position.x, playerPosition.z - zone.position.z);
-      if (distance > zone.triggerRadius) continue;
+    for (const echo of triggered) {
+      const zoneIndex = this.zones.findIndex((zone) => zone.id === echo.id);
+      if (zoneIndex < 0) continue;
 
-      debugEvent("echo.collect", "Echo zone entered trigger radius", {
-        id: zone.id,
-        time: roundMetric(time),
-        distance: roundMetric(distance),
-        triggerRadius: zone.triggerRadius,
-        activeZonesBefore: this.zones.length,
-        activeBurstsBefore: this.collectBursts.length,
-        position: vectorPayload(zone.position)
-      });
-
-      triggered.push({
-        position: zone.position.clone(),
-        // The wave source still belongs to the field surface, but the visual
-        // pickup explosion belongs to the Echo's glowing core. Keeping both
-        // positions avoids the mismatched "ground poof plus sky burst" look.
-        effectPosition: zone.position.clone().setY(zone.position.y + COLUMN_BASE_LIFT + COLUMN_HEIGHT * 0.5),
-        burstStrength: zone.burstStrength,
-        discBurstRadius: zone.discBurstRadius
-      });
-      this.spawnCollectBurst(zone, time);
-      this.removeAt(index);
+      this.spawnCollectBurst(this.zones[zoneIndex], time);
+      this.removeAt(zoneIndex);
     }
 
     return triggered;
   }
 
   getActiveCount(): number {
-    return this.zones.length;
+    return this.stateStore.getActiveCount();
   }
 
   getCollectBurstCount(): number {
@@ -307,10 +285,7 @@ export class EchoZoneField {
   }
 
   isPositionClear(position: THREE.Vector3, clearance: number): boolean {
-    return !this.zones.some((zone) => {
-      const distance = Math.hypot(position.x - zone.position.x, position.z - zone.position.z);
-      return distance < clearance;
-    });
+    return this.stateStore.isPositionClear(position, clearance);
   }
 
   dispose(): void {
@@ -333,6 +308,7 @@ export class EchoZoneField {
       light.removeFromParent();
       light.dispose();
     }
+    this.stateStore.clear();
     this.coreGeometry.dispose();
     this.diamondGeometry.dispose();
     this.mistGeometry.dispose();

@@ -30,7 +30,13 @@ export type GlobalFrameHitchSnapshot = {
   readonly particleDensity: number;
   readonly particlesEnabled: boolean;
   readonly bloomEnabled: boolean;
+  readonly backendId: string;
   readonly rendererPixelRatio: number;
+  readonly rendererDrawCalls: number;
+  readonly rendererTriangles: number;
+  readonly rendererCpuSubmitMs: number;
+  readonly rendererFallbackReason: string;
+  readonly rendererDeviceLost: boolean;
   readonly visibilityState: DocumentVisibilityState;
 };
 
@@ -81,7 +87,13 @@ export function createGlobalFrameHitchEvent(snapshot: GlobalFrameHitchSnapshot):
       particleDensity: roundMetric(snapshot.particleDensity),
       particlesEnabled: snapshot.particlesEnabled,
       bloomEnabled: snapshot.bloomEnabled,
+      backendId: snapshot.backendId,
       rendererPixelRatio: roundMetric(snapshot.rendererPixelRatio),
+      rendererDrawCalls: snapshot.rendererDrawCalls,
+      rendererTriangles: snapshot.rendererTriangles,
+      rendererCpuSubmitMs: roundMetric(snapshot.rendererCpuSubmitMs),
+      rendererFallbackReason: snapshot.rendererFallbackReason,
+      rendererDeviceLost: snapshot.rendererDeviceLost,
       visibilityState: snapshot.visibilityState
     }
   };

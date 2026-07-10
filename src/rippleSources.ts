@@ -29,6 +29,27 @@ export type RippleSource = {
   readonly hue: number;
 };
 
+export type RippleRenderSource = {
+  readonly positionX: number;
+  readonly positionZ: number;
+  readonly startTime: number;
+  readonly strength: number;
+  readonly kind: RippleSourceKind;
+  readonly speedMultiplier: number;
+  readonly widthMultiplier: number;
+  readonly dampingMultiplier: number;
+  readonly lifetimeSeconds: number;
+  readonly hue: number;
+};
+
+export type RippleRenderSourceSnapshot = {
+  readonly time: number;
+  readonly sourceLimit: number;
+  readonly activeCount: number;
+  readonly renderedCount: number;
+  readonly sources: readonly RippleRenderSource[];
+};
+
 export class RippleSourceStore {
   private readonly sources: RippleSource[] = [];
 
@@ -66,46 +87,21 @@ export class RippleSourceStore {
     return this.getActiveSources(time).filter((source) => source.kind === "pulse");
   }
 
-  writeUniforms(
-    target: THREE.Vector4[],
-    metadataTarget: THREE.Vector4[],
-    lifetimeTarget: Float32Array,
-    time: number,
-    sourceLimit = target.length
-  ): number {
+  getRenderSourceSnapshot(time: number, sourceLimit = MAX_SHADER_RIPPLE_SOURCES): RippleRenderSourceSnapshot {
     this.pruneExpired(time);
 
-    const maxWrittenSources = Math.max(0, Math.min(target.length, Math.floor(sourceLimit)));
-    let writtenCount = 0;
-    for (const source of this.sources) {
-      if (writtenCount >= maxWrittenSources) break;
+    const maxRenderedSources = Math.max(0, Math.floor(sourceLimit));
+    const renderedSources = this.sources
+      .slice(0, maxRenderedSources)
+      .map(toRenderSource);
 
-      // Uniform layout is deliberately small but no longer arbitrary:
-      // - target: x/z position, birth time, amplitude
-      // - metadata: speed, width, damping, and a reserved slot
-      // - lifetime: source-specific fade horizon so the fixed WebGL upload
-      //   budget never decides when a pulse actually dies.
-      target[writtenCount].set(source.position.x, source.position.z, source.startTime, source.strength);
-      metadataTarget[writtenCount].set(
-        finiteOrDefault(source.speedMultiplier, 1),
-        finiteOrDefault(source.widthMultiplier, 1),
-        finiteOrDefault(source.dampingMultiplier, 1),
-        0
-      );
-      lifetimeTarget[writtenCount] = finiteOrDefault(source.lifetimeSeconds, RIPPLE_LIFETIME_SECONDS);
-      writtenCount += 1;
-    }
-
-    // Clear the rest of the fixed WebGL uniform array every frame. The shader
-    // loop stops at uRippleCount, but stale entries here are confusing during
-    // debugging and can leak visual state if the count ever changes mid-frame.
-    for (let index = writtenCount; index < target.length; index += 1) {
-      target[index].set(0, 0, -999, 0);
-      metadataTarget[index].set(1, 1, 1, 0);
-      lifetimeTarget[index] = RIPPLE_LIFETIME_SECONDS;
-    }
-
-    return writtenCount;
+    return {
+      time,
+      sourceLimit: maxRenderedSources,
+      activeCount: this.sources.length,
+      renderedCount: renderedSources.length,
+      sources: renderedSources
+    };
   }
 
   private pruneExpired(time: number): void {
@@ -119,4 +115,19 @@ export class RippleSourceStore {
 
 function finiteOrDefault(value: number | undefined, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function toRenderSource(source: RippleSource): RippleRenderSource {
+  return {
+    positionX: source.position.x,
+    positionZ: source.position.z,
+    startTime: source.startTime,
+    strength: source.strength,
+    kind: source.kind,
+    speedMultiplier: finiteOrDefault(source.speedMultiplier, 1),
+    widthMultiplier: finiteOrDefault(source.widthMultiplier, 1),
+    dampingMultiplier: finiteOrDefault(source.dampingMultiplier, 1),
+    lifetimeSeconds: finiteOrDefault(source.lifetimeSeconds, RIPPLE_LIFETIME_SECONDS),
+    hue: source.hue
+  };
 }
