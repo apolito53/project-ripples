@@ -226,6 +226,9 @@ export function classifyHitchPayload(payload, thresholdMs = DEFAULT_FRAME_HITCH_
 }
 
 export function readFiniteNumber(value) {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === "string" && value.trim().length === 0) return undefined;
+
   const numberValue = typeof value === "number" ? value : Number(value);
   return Number.isFinite(numberValue) ? numberValue : undefined;
 }
