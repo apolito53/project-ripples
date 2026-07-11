@@ -1,7 +1,11 @@
 import * as THREE from "three";
 import type { PlayerControlTelemetry } from "./controls";
 import { debugEvent, roundMetric, vectorPayload } from "./debugLog";
-import type { RaceTrack } from "./raceTrack";
+
+export type TrainingCourse = {
+  samplePointAt(fraction: number, lateralOffsetMeters?: number): THREE.Vector3;
+  getFacingYawAt(fraction: number): number;
+};
 
 type TrainingStepId =
   | "camera-orbit"
@@ -29,6 +33,30 @@ export type TrainingHudState = {
   readonly chips: readonly TrainingProgressChip[];
 };
 
+export type TrainingMarkerPresentationSnapshot = {
+  readonly visible: boolean;
+  readonly position: { readonly x: number; readonly y: number; readonly z: number };
+  readonly facingYawRadians: number;
+  readonly halfWidth: number;
+  readonly postHeight: number;
+  readonly postWidth: number;
+  readonly beamY: number;
+  readonly beamThickness: number;
+  readonly beamDepth: number;
+  readonly glowWidth: number;
+  readonly glowHeight: number;
+};
+
+export type TrainingPresentationSnapshot = {
+  readonly enabled: boolean;
+  readonly active: boolean;
+  readonly complete: boolean;
+  readonly stepId: string;
+  readonly stepIndex: number;
+  readonly stepCount: number;
+  readonly marker: TrainingMarkerPresentationSnapshot;
+};
+
 export type TrainingRunOptions = {
   readonly sampleHeight: (x: number, z: number) => number;
   readonly spawnEchoAtTrackFraction: (fraction: number, lateralOffsetMeters: number, time: number) => boolean;
@@ -39,7 +67,7 @@ type TrainingRunUpdate = {
   readonly time: number;
   readonly playerPosition: THREE.Vector3;
   readonly telemetry: PlayerControlTelemetry;
-  readonly raceTrack: RaceTrack;
+  readonly raceTrack: TrainingCourse;
 };
 
 type TrainingStep = {
@@ -136,11 +164,19 @@ const BOOST_SPEED_GOAL = 12;
 const MOUSE_FORWARD_SPEED_GOAL = 2;
 const MOMENTUM_SPEED_GOAL = 7.5;
 const MOMENTUM_SLIDE_SPEED_GOAL = 2;
+const MARKER_HALF_WIDTH = 2.7;
+const MARKER_POST_HEIGHT = 3.4;
+const MARKER_POST_WIDTH = 0.22;
+const MARKER_BEAM_Y = 3.38;
+const MARKER_BEAM_THICKNESS = 0.16;
+const MARKER_BEAM_DEPTH = 0.18;
+const MARKER_GLOW_WIDTH = 5.8;
+const MARKER_GLOW_HEIGHT = 3.8;
 
 export class TrainingRun {
-  readonly object = new THREE.Group();
+  private readonly object: THREE.Group | null;
   private readonly options: TrainingRunOptions;
-  private readonly marker = createTrainingMarker();
+  private readonly marker: THREE.Group | null;
   private readonly keyboardProgress: KeyboardStepProgress = {
     forward: false,
     backward: false,
@@ -163,22 +199,33 @@ export class TrainingRun {
     wallContactCount: 0
   };
   private lastPlayerPosition = new THREE.Vector3();
+  private readonly markerPosition = new THREE.Vector3();
+  private markerFacingYaw = 0;
 
-  constructor(scene: THREE.Scene, options: TrainingRunOptions) {
+  constructor(scene: THREE.Scene | null, options: TrainingRunOptions) {
     this.options = options;
-    this.object.name = "Training Run director";
-    this.object.visible = false;
-    this.object.add(this.marker);
-    scene.add(this.object);
+    if (scene) {
+      this.object = new THREE.Group();
+      this.object.name = "Training Run director";
+      this.object.visible = false;
+      this.marker = createTrainingMarker();
+      this.object.add(this.marker);
+      scene.add(this.object);
+    } else {
+      // The WebGPU lane consumes the neutral marker snapshot and must not
+      // allocate an unused Three marker hierarchy.
+      this.object = null;
+      this.marker = null;
+    }
   }
 
-  start(time: number, playerPosition: THREE.Vector3, telemetry: PlayerControlTelemetry, raceTrack: RaceTrack): void {
+  start(time: number, playerPosition: THREE.Vector3, telemetry: PlayerControlTelemetry, raceTrack: TrainingCourse): void {
     this.active = true;
     this.complete = false;
     this.stepIndex = 0;
     this.startedAt = time;
     this.lastPlayerPosition.copy(playerPosition);
-    this.object.visible = true;
+    if (this.object) this.object.visible = true;
     this.enterStep(time, telemetry, raceTrack);
 
     debugEvent("training.start", "Started Training Run tutorial", {
@@ -205,7 +252,7 @@ export class TrainingRun {
     this.boostMoved = false;
     this.boostHeld = false;
     this.resetKeyboardProgress();
-    this.object.visible = false;
+    if (this.object) this.object.visible = false;
   }
 
   update(input: TrainingRunUpdate): void {
@@ -216,7 +263,7 @@ export class TrainingRun {
     this.updateStepProgress(input);
   }
 
-  handleEchoCollected(time: number, telemetry: PlayerControlTelemetry, raceTrack: RaceTrack): void {
+  handleEchoCollected(time: number, telemetry: PlayerControlTelemetry, raceTrack: TrainingCourse): void {
     if (!this.active || this.complete) return;
     if (this.currentStep().id !== "echo-pickup") return;
     this.completeCurrentStep(time, "echo-collected", telemetry, raceTrack);
@@ -256,6 +303,37 @@ export class TrainingRun {
       title: step.title,
       instruction: step.instruction,
       chips: this.getProgressChips(step)
+    };
+  }
+
+  getPresentationSnapshot(): TrainingPresentationSnapshot {
+    const enabled = this.active || this.complete;
+    const step = this.currentStep();
+
+    return {
+      enabled,
+      active: this.active,
+      complete: this.complete,
+      stepId: enabled ? step.id : "",
+      stepIndex: enabled ? Math.min(this.stepIndex + 1, TRAINING_STEPS.length) : 0,
+      stepCount: TRAINING_STEPS.length,
+      marker: {
+        visible: this.active && !this.complete,
+        position: {
+          x: this.markerPosition.x,
+          y: this.markerPosition.y,
+          z: this.markerPosition.z
+        },
+        facingYawRadians: this.markerFacingYaw,
+        halfWidth: MARKER_HALF_WIDTH,
+        postHeight: MARKER_POST_HEIGHT,
+        postWidth: MARKER_POST_WIDTH,
+        beamY: MARKER_BEAM_Y,
+        beamThickness: MARKER_BEAM_THICKNESS,
+        beamDepth: MARKER_BEAM_DEPTH,
+        glowWidth: MARKER_GLOW_WIDTH,
+        glowHeight: MARKER_GLOW_HEIGHT
+      }
     };
   }
 
@@ -320,7 +398,7 @@ export class TrainingRun {
     time: number,
     completion: string,
     telemetry: PlayerControlTelemetry,
-    raceTrack: RaceTrack
+    raceTrack: TrainingCourse
   ): void {
     const completedStep = this.currentStep();
     debugEvent("training.step", "Completed Training Run step", {
@@ -344,7 +422,7 @@ export class TrainingRun {
   private finish(time: number): void {
     this.complete = true;
     this.active = false;
-    this.object.visible = false;
+    if (this.object) this.object.visible = false;
     const burstPosition = this.lastPlayerPosition.clone();
     burstPosition.y = this.options.sampleHeight(burstPosition.x, burstPosition.z) + 0.45;
     this.options.spawnCelebrationPulse(burstPosition, time);
@@ -355,7 +433,7 @@ export class TrainingRun {
     }, "info");
   }
 
-  private enterStep(time: number, telemetry: PlayerControlTelemetry, raceTrack: RaceTrack): void {
+  private enterStep(time: number, telemetry: PlayerControlTelemetry, raceTrack: TrainingCourse): void {
     this.stepStartedAt = time;
     this.baseline = {
       cameraYawTravel: telemetry.cameraYawTravel,
@@ -383,11 +461,15 @@ export class TrainingRun {
     }
   }
 
-  private positionMarker(raceTrack: RaceTrack, step: TrainingStep): void {
+  private positionMarker(raceTrack: TrainingCourse, step: TrainingStep): void {
     const position = raceTrack.samplePointAt(step.fraction, step.lateralOffsetMeters);
     position.y = this.options.sampleHeight(position.x, position.z) + 0.24;
-    this.object.position.copy(position);
-    this.object.rotation.y = raceTrack.getFacingYawAt(step.fraction);
+    this.markerPosition.copy(position);
+    this.markerFacingYaw = raceTrack.getFacingYawAt(step.fraction);
+    if (this.object) {
+      this.object.position.copy(this.markerPosition);
+      this.object.rotation.y = this.markerFacingYaw;
+    }
   }
 
   private currentStep(): TrainingStep {
@@ -463,18 +545,18 @@ function createTrainingMarker(): THREE.Group {
     blending: THREE.AdditiveBlending
   });
 
-  const postGeometry = new THREE.BoxGeometry(0.22, 3.4, 0.22);
-  const beamGeometry = new THREE.BoxGeometry(5.2, 0.16, 0.18);
-  const glowGeometry = new THREE.PlaneGeometry(5.8, 3.8);
+  const postGeometry = new THREE.BoxGeometry(MARKER_POST_WIDTH, MARKER_POST_HEIGHT, MARKER_POST_WIDTH);
+  const beamGeometry = new THREE.BoxGeometry(MARKER_HALF_WIDTH * 2 - MARKER_POST_WIDTH, MARKER_BEAM_THICKNESS, MARKER_BEAM_DEPTH);
+  const glowGeometry = new THREE.PlaneGeometry(MARKER_GLOW_WIDTH, MARKER_GLOW_HEIGHT);
 
   const leftPost = new THREE.Mesh(postGeometry, postMaterial);
-  leftPost.position.set(-2.7, 1.7, 0);
+  leftPost.position.set(-MARKER_HALF_WIDTH, MARKER_POST_HEIGHT * 0.5, 0);
   const rightPost = new THREE.Mesh(postGeometry, postMaterial);
-  rightPost.position.set(2.7, 1.7, 0);
+  rightPost.position.set(MARKER_HALF_WIDTH, MARKER_POST_HEIGHT * 0.5, 0);
   const topBeam = new THREE.Mesh(beamGeometry, beamMaterial);
-  topBeam.position.set(0, 3.38, 0);
+  topBeam.position.set(0, MARKER_BEAM_Y, 0);
   const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-  glow.position.set(0, 1.9, -0.04);
+  glow.position.set(0, MARKER_GLOW_HEIGHT * 0.5, -0.04);
 
   marker.add(glow, leftPost, rightPost, topBeam);
   return marker;

@@ -4,21 +4,33 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1 --port 5183 --strictPort",
+    "dev": "node scripts/start-dev.mjs",
+    "dev:vite": "vite --host 127.0.0.1 --port 5183 --strictPort",
     "debug:logs": "node scripts/debug-log-server.mjs",
     "diagnostics": "node scripts/analyze-debug-log.mjs",
     "logs:summary": "node scripts/analyze-debug-log.mjs",
     "verify:perf": "node scripts/analyze-debug-log.mjs --max-frame-ms=1500 --max-rebuild-ms=1500 --max-update-ms=120 --max-render-ms=1500",
+    "verify:render:webgl": "node scripts/verify-render.mjs webgl",
+    "verify:webgpu:capabilities": "node scripts/verify-render.mjs webgpu-capabilities",
+    "verify:render:webgpu": "node scripts/verify-render.mjs webgpu",
+    "verify:render:webgpu:soak": "node scripts/verify-render.mjs webgpu-soak",
+    "verify:render:webgpu:readiness": "node scripts/verify-render.mjs webgpu-readiness",
+    "verify:render:webgpu:default-soak": "node scripts/verify-render.mjs webgpu-default-soak",
+    "verify:render:webgpu:unavailable": "node scripts/verify-render.mjs webgpu-unavailable",
+    "smoke": "node scripts/smoke.mjs",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4183 --strictPort",
     "typecheck": "tsc --noEmit",
-    "validate": "npm run typecheck && npm run build"
+    "validate": "npm run typecheck && npm run build && npm run smoke"
   },
   "dependencies": {
     "three": "^0.175.0"
   },
   "devDependencies": {
     "@types/three": "^0.184.0",
+    "@webgpu/types": "^0.1.70",
+    "playwright": "^1.61.1",
+    "pngjs": "^7.0.0",
     "typescript": "^5.8.3",
     "vite": "^8.0.16"
   }

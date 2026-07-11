@@ -2,6 +2,22 @@ import * as THREE from "three";
 import type { PlayAreaConstraint } from "./controls";
 import { debugEvent, roundMetric, vectorPayload } from "./debugLog";
 
+export type RaceTrackMaskSnapshot = {
+  readonly width: number;
+  readonly height: number;
+  readonly version: number;
+  readonly rgba: Uint8Array;
+};
+
+export type RaceTrackWallSnapshot = {
+  readonly version: number;
+  readonly segmentCount: number;
+  readonly baseY: number;
+  readonly height: number;
+  /** Packed leftX, leftZ, rightX, rightZ for every closed-loop segment. */
+  readonly packedSegments: Float32Array;
+};
+
 const TRACK_MASK_SIZE = 512;
 const TRACK_CENTERLINE_SAMPLES = 384;
 const TRACK_WALL_SEGMENTS = 256;
@@ -35,12 +51,18 @@ type TrackWallUniforms = {
  * together so future track-design work has one obvious place to start.
  */
 export class RaceTrack implements PlayAreaConstraint {
-  readonly object = new THREE.Group();
+  private readonly object: THREE.Group | null;
   private readonly centerlineSamples: TrackSample[] = [];
   private readonly wallUniforms: TrackWallUniforms = { uTime: { value: 0 } };
-  private readonly leftWall: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
-  private readonly rightWall: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
-  private maskTexture = createEmptyTrackMaskTexture();
+  private readonly leftWall: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial> | null;
+  private readonly rightWall: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial> | null;
+  private maskTexture: THREE.DataTexture | null;
+  private maskRgba = new Uint8Array([0, 0, 0, 255]);
+  private maskWidth = 1;
+  private maskHeight = 1;
+  private maskVersion = 0;
+  private wallPackedSegments: Float32Array = new Float32Array(0);
+  private wallVersion = 0;
   private fieldRadius = 1;
   private arenaRadiusMeters = 1;
   private sceneUnitsPerMeter = 1;
@@ -48,25 +70,23 @@ export class RaceTrack implements PlayAreaConstraint {
   private trackHalfWidthSceneUnits = 1;
   private lastWallContactLogSecond = -Infinity;
 
-  constructor(scene: THREE.Scene, fieldRadius: number, arenaRadiusMeters: number) {
-    this.object.name = "Race track prototype";
-
-    this.leftWall = new THREE.Mesh(
-      new THREE.BufferGeometry(),
-      createTrackWallMaterial(this.wallUniforms)
-    );
-    this.leftWall.name = "Race track left energy wall";
-    this.leftWall.renderOrder = TRACK_RENDER_ORDER;
-
-    this.rightWall = new THREE.Mesh(
-      new THREE.BufferGeometry(),
-      createTrackWallMaterial(this.wallUniforms)
-    );
-    this.rightWall.name = "Race track right energy wall";
-    this.rightWall.renderOrder = TRACK_RENDER_ORDER;
-
-    this.object.add(this.leftWall, this.rightWall);
-    scene.add(this.object);
+  constructor(scene: THREE.Scene | null, fieldRadius: number, arenaRadiusMeters: number) {
+    if (scene) {
+      this.object = new THREE.Group();
+      this.object.name = "Race track prototype";
+      this.leftWall = createTrackWallMesh("Race track left energy wall", this.wallUniforms);
+      this.rightWall = createTrackWallMesh("Race track right energy wall", this.wallUniforms);
+      this.maskTexture = createEmptyTrackMaskTexture();
+      this.object.add(this.leftWall, this.rightWall);
+      scene.add(this.object);
+    } else {
+      // Forced WebGPU needs collision and neutral snapshots only. Avoid creating
+      // orphaned Three meshes, materials, geometries, or textures in this path.
+      this.object = null;
+      this.leftWall = null;
+      this.rightWall = null;
+      this.maskTexture = null;
+    }
     this.setArena(fieldRadius, arenaRadiusMeters, "initial");
   }
 
@@ -98,11 +118,35 @@ export class RaceTrack implements PlayAreaConstraint {
   setVisible(visible: boolean): void {
     // Arena mode keeps the track model loaded so switching modes stays cheap,
     // but the walls and helpers should not render or receive accidental clicks.
-    this.object.visible = visible;
+    if (this.object) this.object.visible = visible;
   }
 
   getMaskTexture(): THREE.Texture {
+    this.maskTexture ??= createTrackMaskTexture(this.maskRgba, this.maskWidth, this.maskHeight);
     return this.maskTexture;
+  }
+
+  getMaskSnapshot(): RaceTrackMaskSnapshot {
+    return {
+      width: this.maskWidth,
+      height: this.maskHeight,
+      version: this.maskVersion,
+      rgba: this.maskRgba
+    };
+  }
+
+  getWallSnapshot(): RaceTrackWallSnapshot {
+    return {
+      version: this.wallVersion,
+      segmentCount: TRACK_WALL_SEGMENTS,
+      baseY: TRACK_WALL_BASE_Y,
+      height: TRACK_WALL_HEIGHT,
+      packedSegments: this.wallPackedSegments
+    };
+  }
+
+  getFieldRadius(): number {
+    return this.fieldRadius;
   }
 
   getTrackWidthMeters(): number {
@@ -193,12 +237,12 @@ export class RaceTrack implements PlayAreaConstraint {
   }
 
   dispose(): void {
-    this.leftWall.geometry.dispose();
-    this.leftWall.material.dispose();
-    this.rightWall.geometry.dispose();
-    this.rightWall.material.dispose();
-    this.maskTexture.dispose();
-    this.object.removeFromParent();
+    this.leftWall?.geometry.dispose();
+    this.leftWall?.material.dispose();
+    this.rightWall?.geometry.dispose();
+    this.rightWall?.material.dispose();
+    this.maskTexture?.dispose();
+    this.object?.removeFromParent();
   }
 
   private rebuildCenterline(): void {
@@ -219,8 +263,15 @@ export class RaceTrack implements PlayAreaConstraint {
   }
 
   private rebuildWalls(): void {
-    this.replaceWallGeometry(this.leftWall, 1);
-    this.replaceWallGeometry(this.rightWall, -1);
+    if (this.leftWall && this.rightWall) {
+      this.replaceWallGeometry(this.leftWall, 1);
+      this.replaceWallGeometry(this.rightWall, -1);
+    }
+    this.wallPackedSegments = createPackedTrackWallSegments(
+      this.centerlineSamples,
+      this.trackHalfWidthSceneUnits
+    );
+    this.wallVersion += 1;
   }
 
   private replaceWallGeometry(
@@ -257,16 +308,15 @@ export class RaceTrack implements PlayAreaConstraint {
       }
     }
 
-    const oldTexture = this.maskTexture;
-    this.maskTexture = new THREE.DataTexture(data, TRACK_MASK_SIZE, TRACK_MASK_SIZE, THREE.RGBAFormat);
-    this.maskTexture.name = "Race track surface mask";
-    this.maskTexture.minFilter = THREE.LinearFilter;
-    this.maskTexture.magFilter = THREE.LinearFilter;
-    this.maskTexture.wrapS = THREE.ClampToEdgeWrapping;
-    this.maskTexture.wrapT = THREE.ClampToEdgeWrapping;
-    this.maskTexture.generateMipmaps = false;
-    this.maskTexture.needsUpdate = true;
-    oldTexture.dispose();
+    this.maskRgba = data;
+    this.maskWidth = TRACK_MASK_SIZE;
+    this.maskHeight = TRACK_MASK_SIZE;
+    this.maskVersion += 1;
+    if (this.maskTexture) {
+      const oldTexture = this.maskTexture;
+      this.maskTexture = createTrackMaskTexture(data, TRACK_MASK_SIZE, TRACK_MASK_SIZE);
+      oldTexture.dispose();
+    }
   }
 
   private findNearestSample(x: number, z: number): NearestTrackSample {
@@ -376,6 +426,34 @@ function createTrackWallGeometry(
   return geometry;
 }
 
+function createTrackWallMesh(
+  name: string,
+  uniforms: TrackWallUniforms
+): THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial> {
+  const wall = new THREE.Mesh(new THREE.BufferGeometry(), createTrackWallMaterial(uniforms));
+  wall.name = name;
+  wall.renderOrder = TRACK_RENDER_ORDER;
+  return wall;
+}
+
+function createPackedTrackWallSegments(
+  samples: readonly TrackSample[],
+  halfWidth: number
+): Float32Array {
+  const packedSegments = new Float32Array(TRACK_WALL_SEGMENTS * 4);
+
+  for (let index = 0; index < TRACK_WALL_SEGMENTS; index += 1) {
+    const sample = samples[Math.round((index / TRACK_WALL_SEGMENTS) * samples.length) % samples.length];
+    const offset = index * 4;
+    packedSegments[offset] = sample.point.x + sample.normal.x * halfWidth;
+    packedSegments[offset + 1] = sample.point.z + sample.normal.z * halfWidth;
+    packedSegments[offset + 2] = sample.point.x - sample.normal.x * halfWidth;
+    packedSegments[offset + 3] = sample.point.z - sample.normal.z * halfWidth;
+  }
+
+  return packedSegments;
+}
+
 function createTrackWallMaterial(uniforms: TrackWallUniforms): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     uniforms,
@@ -418,8 +496,19 @@ function createTrackWallMaterial(uniforms: TrackWallUniforms): THREE.ShaderMater
 }
 
 function createEmptyTrackMaskTexture(): THREE.DataTexture {
-  const texture = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1, THREE.RGBAFormat);
+  const texture = createTrackMaskTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
   texture.name = "No-op race track mask";
+  return texture;
+}
+
+function createTrackMaskTexture(data: Uint8Array, width: number, height: number): THREE.DataTexture {
+  const texture = new THREE.DataTexture(data, width, height, THREE.RGBAFormat);
+  texture.name = "Race track surface mask";
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.wrapS = THREE.ClampToEdgeWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.generateMipmaps = false;
   texture.needsUpdate = true;
   return texture;
 }

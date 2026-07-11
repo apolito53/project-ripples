@@ -29,6 +29,27 @@ export type RippleSource = {
   readonly hue: number;
 };
 
+export type RippleRenderSource = {
+  readonly positionX: number;
+  readonly positionZ: number;
+  readonly startTime: number;
+  readonly strength: number;
+  readonly kind: RippleSourceKind;
+  readonly speedMultiplier: number;
+  readonly widthMultiplier: number;
+  readonly dampingMultiplier: number;
+  readonly lifetimeSeconds: number;
+  readonly hue: number;
+};
+
+export type RippleRenderSourceSnapshot = {
+  readonly time: number;
+  readonly sourceLimit: number;
+  readonly activeCount: number;
+  readonly renderedCount: number;
+  readonly sources: readonly RippleRenderSource[];
+};
+
 export class RippleSourceStore {
   private readonly sources: RippleSource[] = [];
 
@@ -70,6 +91,23 @@ export class RippleSourceStore {
 
   getActiveLightSources(time: number): readonly RippleSource[] {
     return this.getActiveSources(time).filter((source) => source.kind === "pulse");
+  }
+
+  getRenderSourceSnapshot(time: number, sourceLimit = MAX_SHADER_RIPPLE_SOURCES): RippleRenderSourceSnapshot {
+    this.pruneExpired(time);
+
+    const maxRenderedSources = Math.max(0, Math.floor(sourceLimit));
+    const renderedSources = this.sources
+      .slice(0, maxRenderedSources)
+      .map(toRenderSource);
+
+    return {
+      time,
+      sourceLimit: maxRenderedSources,
+      activeCount: this.sources.length,
+      renderedCount: renderedSources.length,
+      sources: renderedSources
+    };
   }
 
   writeUniforms(
@@ -125,4 +163,19 @@ export class RippleSourceStore {
 
 function finiteOrDefault(value: number | undefined, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function toRenderSource(source: RippleSource): RippleRenderSource {
+  return {
+    positionX: source.position.x,
+    positionZ: source.position.z,
+    startTime: source.startTime,
+    strength: source.strength,
+    kind: source.kind,
+    speedMultiplier: finiteOrDefault(source.speedMultiplier, 1),
+    widthMultiplier: finiteOrDefault(source.widthMultiplier, 1),
+    dampingMultiplier: finiteOrDefault(source.dampingMultiplier, 1),
+    lifetimeSeconds: finiteOrDefault(source.lifetimeSeconds, RIPPLE_LIFETIME_SECONDS),
+    hue: source.hue
+  };
 }

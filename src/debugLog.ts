@@ -30,6 +30,7 @@ let nextEntryIndex = 1;
 let localLogQueue: RippleDebugEntry[] = [];
 let localLogFlushHandle: number | undefined;
 let localLogServerEnabled: boolean | undefined;
+let localLogEndpoint: string | undefined;
 
 export function debugEvent(
   channel: string,
@@ -154,7 +155,7 @@ function flushLocalLogEntries(): void {
   // The receiver is a local development aid. Missing server, CORS mistakes, or
   // shutdown races should never add new console noise while we are diagnosing a
   // render hitch, so writes are fire-and-forget and intentionally quiet.
-  void fetch(LOCAL_LOG_ENDPOINT, {
+  void fetch(getLocalLogEndpoint(), {
     method: "POST",
     headers: {
       "content-type": "application/json"
@@ -171,8 +172,36 @@ function shouldWriteLocalLogServer(): boolean {
   const storedValue = readLocalStorage("rippleLogServer");
   localLogServerEnabled = queryValue === "0"
     ? false
-    : queryValue === "1" || storedValue === "1" || (isLocalHost() && storedValue !== "0");
+    : queryValue !== null || storedValue === "1" || (isLocalHost() && storedValue !== "0");
   return localLogServerEnabled;
+}
+
+function getLocalLogEndpoint(): string {
+  if (localLogEndpoint) return localLogEndpoint;
+
+  const queryValue = new URLSearchParams(window.location.search).get("logServer");
+  const storedValue = readLocalStorage("rippleLogServer");
+  localLogEndpoint = resolveLocalLogEndpoint(queryValue) ?? resolveLocalLogEndpoint(storedValue) ?? LOCAL_LOG_ENDPOINT;
+  return localLogEndpoint;
+}
+
+function resolveLocalLogEndpoint(value: string | null): string | null {
+  if (!value || value === "0" || value === "1") return null;
+
+  if (/^\d{2,5}$/.test(value)) {
+    return `http://127.0.0.1:${value}/__ripple_debug_log`;
+  }
+
+  try {
+    const url = new URL(value);
+    const localHost = url.hostname === "127.0.0.1" || url.hostname === "localhost" || url.hostname === "[::1]";
+    if (!localHost) return null;
+    return url.pathname.endsWith("/__ripple_debug_log")
+      ? url.toString()
+      : new URL("/__ripple_debug_log", url).toString();
+  } catch {
+    return null;
+  }
 }
 
 function formatConsoleLine(entry: RippleDebugEntry): string {
@@ -211,13 +240,16 @@ function toJsonSafeValue(value: unknown, seen = new WeakSet<object>(), depth = 0
     seen.add(value);
 
     if (Array.isArray(value)) {
-      return value.map((item) => toJsonSafeValue(item, seen, depth + 1));
+      const safeArray = value.map((item) => toJsonSafeValue(item, seen, depth + 1));
+      seen.delete(value);
+      return safeArray;
     }
 
     const safeObject: Record<string, unknown> = {};
     for (const [key, childValue] of Object.entries(value as Record<string, unknown>)) {
       safeObject[key] = toJsonSafeValue(childValue, seen, depth + 1);
     }
+    seen.delete(value);
     return safeObject;
   }
 
