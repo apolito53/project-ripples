@@ -5,12 +5,11 @@ concrete follow-ups that we actually intend to revisit.
 
 ## High Priority
 
-- Keep the integrated WebGPU runtime opt-in while broader hardware acceptance
-  is gathered. Automated Arena/Track/Training lifecycle, readiness, and default
-  soak gaps are closed, but `defaultEligible` remains false until an explicit
-  rollout decision is made. Continue cross-adapter visual checks, device-loss
-  recovery exercises, and WebGL/WebGPU presentation comparisons without
-  changing omitted/auto policy.
+- The RTX 4070 Ti production baseline is complete. Repeat it on at least one
+  integrated/lower-power GPU and one older or different-vendor discrete GPU.
+  Stage 0 keeps `auto` on WebGL and `defaultEligible=false` while those artifacts
+  establish cross-adapter confidence. Only then implement same-navigation
+  startup fallback/runtime-loss recovery and consider a 5% allowlisted cohort.
 
 - Shape the lab into a racing-game prototype.
   First pass now has a wide non-crossing track ribbon inside the arena with

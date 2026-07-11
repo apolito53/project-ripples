@@ -205,8 +205,38 @@ marker and keeps random Echo spawning disabled.
 
 The WebGPU readiness surface remains `diagnostic-core` and deliberately reports
 `defaultEligible=false`. Its automated integration/readiness gaps are empty,
-but changing the default renderer still requires an explicit product decision
-and broader hardware acceptance.
+but automatic selection is held at rollout Stage 0 with a hard-zero cohort.
+`renderer.rollout.decision` records the dormant policy decision while broader
+hardware acceptance is gathered; explicit `webgl` and `webgpu` requests remain
+immune to the cohort policy.
+
+### Renderer Benchmark
+
+`npm.cmd run benchmark:renderers` builds production assets, starts the preview
+server on `4183` when needed, and compares WebGL with WebGPU at a fixed
+1280x720/DPR 1. It runs Pretty Arena, moving Showoff Track, and a five-tier
+Meltdown field ramp with balanced backend order and four thermally rotated
+repetitions.
+Results are written under `benchmark-results/<timestamp>/` as `summary.json`,
+`samples.ndjson`, and `summary.md`.
+
+The page-side benchmark API records RAF interval, update CPU, snapshot CPU,
+render/submit CPU, and nonblocking GPU timer-query duration. The report also
+captures browser, CPU, GPU/driver, adapter limits/features, power plan, measured
+refresh interval, semantic workload parity, and the highest stable stress tier.
+
+Useful overrides:
+
+```powershell
+$env:RIPPLE_BENCHMARK_CASES='pretty-arena,showoff-track-motion'
+$env:RIPPLE_BENCHMARK_REPETITIONS='1'
+$env:RIPPLE_BENCHMARK_BASELINE='benchmark-results\previous\summary.json'
+npm.cmd run benchmark:renderers
+```
+
+Same-hardware baseline comparisons warn at a 10% p95 regression and fail at
+20% or when a stable Meltdown tier is lost. Comparisons from different hardware
+are retained as informational evidence rather than treated as code regressions.
 
 ## Development
 
@@ -220,10 +250,14 @@ npm.cmd run validate
 npm.cmd run verify:render:webgl
 npm.cmd run verify:webgpu:capabilities
 npm.cmd run verify:render:webgpu
+npm.cmd run verify:render:webgpu:stock
 npm.cmd run verify:render:webgpu:unavailable
 npm.cmd run verify:render:webgpu:soak
 npm.cmd run verify:render:webgpu:readiness
 npm.cmd run verify:render:webgpu:default-soak
+npm.cmd run verify:renderer:auto-rollout
+npm.cmd run verify:benchmark:reporting
+npm.cmd run benchmark:renderers
 ```
 
 Local runs emit debug logs for Echo detonations, including particle burst counts

@@ -29,6 +29,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Browser WebGL lifecycle smoke: `npm.cmd run verify:render:webgl`
 - Browser WebGPU capability smoke: `npm.cmd run verify:webgpu:capabilities`
 - Browser forced-WebGPU lifecycle smoke: `npm.cmd run verify:render:webgpu`
+- Browser stock-Chrome WebGPU smoke without unsafe/blocklist flags:
+  `npm.cmd run verify:render:webgpu:stock`
 - Browser forced-WebGPU unavailable smoke:
   `npm.cmd run verify:render:webgpu:unavailable`
 - Browser forced-WebGPU movement soak:
@@ -37,6 +39,12 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `npm.cmd run verify:render:webgpu:readiness`
 - Browser forced-WebGPU two-minute default soak:
   `npm.cmd run verify:render:webgpu:default-soak`
+- Dormant auto-rollout policy verifier:
+  `npm.cmd run verify:renderer:auto-rollout`
+- Benchmark statistics/parity regression verifier:
+  `npm.cmd run verify:benchmark:reporting`
+- Production WebGL/WebGPU comparative benchmark:
+  `npm.cmd run benchmark:renderers`
 
 ## Fast Lookup
 
@@ -50,6 +58,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
   neutral contracts, and raw-WebGPU pass orchestration: `src/render/rendererMode.ts`,
   `src/render/threeRenderRuntime.ts`, `src/render/webGpuApp.ts`,
   `src/render/types.ts`, and `src/render/webGpuRenderRuntime.ts`
+- Stage-0 cohort/cooldown policy, benchmark recorder, and nonblocking GPU timers:
+  `src/render/rendererRollout.ts`, `src/render/renderBenchmark.ts`, and
+  `src/render/gpuFrameTimer.ts`
 - WebGPU course-wall and Training marker passes with explicit layouts and shared
   field depth: `src/render/webGpuTrackWallPass.ts` and
   `src/render/webGpuTrainingMarkerPass.ts` plus their WGSL shaders
@@ -113,6 +124,10 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - JSONL diagnostics parser shared by the receiver and CLI:
   `scripts/debug-log-analysis.mjs`
 - Newest-log diagnostics CLI: `scripts/analyze-debug-log.mjs`
+- Comparative benchmark runner/reporting and rollout policy checks:
+  `scripts/benchmark-renderers.mjs`, `scripts/benchmark-reporting.mjs`,
+  `scripts/verify-benchmark-reporting.mjs`, and `scripts/verify-renderer-rollout.mjs`
+- Current tracked hardware baseline: `devlog/WEBGPU_BENCHMARK_BASELINE_2026-07-11.md`
 - Procedural field height sampler: `src/terrain.ts`
 - Prioritized concrete follow-up work: `TODO.md`
 - Loose visual, interaction, and engine ideas: `SPITBALL_IDEAS.md`
@@ -272,10 +287,11 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - `RaceTrack` remains a CPU gameplay owner. Raw-WebGPU modules must consume its
   neutral mask and packed wall snapshots through `RenderFrameInput`; do not
   import `RaceTrack` into renderer modules.
-- Omitted and `auto` renderer policy must stay WebGL until an explicit rollout
-  decision changes `defaultEligible`. Forced WebGPU must fail visibly instead
-  of falling back, and its WGSL passes should keep explicit pipeline layouts and
-  shared field-depth ordering.
+- Omitted and `auto` renderer policy stays WebGL while the Stage-0 rollout
+  percentage is zero. Do not raise that build constant before cross-hardware
+  acceptance and fallback lifecycle work pass. Forced WebGPU must fail visibly
+  instead of falling back, and its WGSL passes should keep explicit pipeline
+  layouts and shared field-depth ordering.
 - Keep the CPU/GPU contract small: pulse uniforms, player position, player
   ground-contact strength, wake texture, and settings go in; shader animation
   comes out. Movement wake must not add entries to `RippleSourceStore`; that

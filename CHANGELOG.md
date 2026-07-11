@@ -17,6 +17,18 @@
 - Added Playwright coverage for WebGL and forced-WebGPU Arena, Track, Training,
   menu transitions, Training step-one drag completion, conservative default/
   auto policy, forced-unavailable failure, soak, readiness, and default soak.
+- Added a production comparative renderer benchmark with deterministic Arena,
+  Track, and Meltdown-ramp workloads, balanced/thermally rotated order, nonblocking
+  WebGL/WebGPU GPU timers, semantic parity gates, stable stress tiers, hardware/
+  driver metadata, raw artifacts, and optional same-machine baseline checks.
+- Added a stock-Chrome WebGPU smoke without unsafe/blocklist flags plus a pure
+  Stage-0 auto-rollout verifier covering cohort boundaries, denied storage,
+  browser/adapter gates, cooldown escalation, recovery, and reload-loop guards.
+- Added benchmark-reporting regression checks for asynchronous GPU sample
+  freshness, timer failures, workload parity, stable-tier continuity, baseline
+  loss, and metric-direction verdicts.
+- Added the first tracked RTX 4070 Ti benchmark baseline, with WebGPU holding
+  the strict stability gate through the 1.68 million-cell Meltdown tier.
 
 ### Changed
 
@@ -38,6 +50,11 @@
   the integration, readiness, and two-minute default-soak checks passed.
 - Fixed local debug-log serialization so payload objects reused across multiple
   readiness channels are not mistaken for circular references.
+- Kept automatic renderer rollout at a hard-zero Stage-0 cohort while emitting
+  `renderer.rollout.decision` diagnostics. Explicit modes remain immune, and
+  omitted/auto requests still resolve to WebGL.
+- Aligned continuous and pulse/Echo particle-density formulas across WebGL and
+  WebGPU so comparative workloads carry the same configured particle budgets.
 
 ## 0.5.3-2-ALPHA - 2026-07-08
 
