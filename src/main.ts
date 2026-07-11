@@ -1,8 +1,4 @@
 import * as THREE from "three";
-import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
-import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
-import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
-import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { ArenaBarrier } from "./arenaBarrier";
 import {
   PlayerRig,
@@ -33,7 +29,11 @@ import {
   type QualityPreset
 } from "./qualityPresets";
 import { RaceTrack } from "./raceTrack";
-import { RippleField, type FieldPlacementClipper } from "./rippleField";
+import { resolveRendererMode } from "./render/rendererMode";
+import { ThreeRenderRuntime } from "./render/threeRenderRuntime";
+import { startWebGpuApp } from "./render/webGpuApp";
+import { RippleField } from "./rippleField";
+import type { FieldPlacementClipper } from "./rippleFieldLayout";
 import { RippleSourceStore, type RippleSourceOptions } from "./rippleSources";
 import { SKYBOX_OPTIONS, SkyboxManager, isSkyboxId } from "./skybox";
 import "./styles.css";
@@ -43,6 +43,12 @@ import { WakeField } from "./wakeField";
 import { getBasePropagationSpeedMetersPerSecond } from "./waveMedium";
 import changelogMarkdown from "../CHANGELOG.md?raw";
 import packageMetadata from "../package.json";
+
+function requireElement<T extends HTMLElement>(selector: string): T {
+  const element = document.querySelector<T>(selector);
+  if (!element) throw new Error(`Missing required element: ${selector}`);
+  return element;
+}
 
 const app = requireElement<HTMLElement>("#app");
 const mainMenu = requireElement<HTMLElement>("#main-menu");
@@ -213,25 +219,31 @@ type SceneLightSource = {
   readonly phaseOffset: number;
 };
 
-const renderer = new THREE.WebGLRenderer({
-  antialias: true,
-  powerPreference: "high-performance"
-});
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.72;
-renderer.setClearColor(0x020409, 1);
-// Postprocessing uses multiple internal renders. Manual info resets let the
-// perf overlay report the whole frame instead of only the final composer pass.
-renderer.info.autoReset = false;
-app.append(renderer.domElement);
+const rendererModeSelection = resolveRendererMode();
+
+if (rendererModeSelection.requestedMode === "webgpu") {
+  void startWebGpuApp(
+    rendererModeSelection,
+    (fieldRadius, arenaRadiusMeters) => new RaceTrack(null, fieldRadius, arenaRadiusMeters)
+  );
+} else {
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x020409);
-const skybox = new SkyboxManager(scene, renderer);
 const camera = new THREE.PerspectiveCamera(54, 1, 0.1, 450);
 const clock = new THREE.Clock();
 const settings = cloneDefaultSettings();
+const renderRuntime = new ThreeRenderRuntime({
+  app,
+  scene,
+  camera,
+  initialBloomStrength: settings.bloomStrength,
+  fallbackReason: rendererModeSelection.fallbackReason
+});
+const renderer = renderRuntime.renderer;
+const composer = renderRuntime.composer;
+const bloomPass = renderRuntime.bloomPass;
+const skybox = new SkyboxManager(scene, renderer);
 const fieldStressModeEnabled = isFieldStressModeEnabled();
 let preset = getQualityPreset(settings);
 let frameCount = 0;
@@ -244,6 +256,7 @@ let lastGlobalFrameHitchLogAt = -Infinity;
 let lastFrameUpdateMs = 0;
 let lastFrameRenderMs = 0;
 let lastRawDeltaMs = 0;
+let lastRendererFrameSampleAt = -Infinity;
 let simulationTimeSeconds = 0;
 let lastSimulatedDeltaSeconds = 0;
 let lastSimStepCount = 0;
@@ -274,14 +287,6 @@ type TouchStickState = {
   lastY: number;
 };
 
-const composer = new EffectComposer(renderer);
-const renderPass = new RenderPass(scene, camera);
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), settings.bloomStrength, 0.3, 0.95);
-const outputPass = new OutputPass();
-composer.addPass(renderPass);
-composer.addPass(bloomPass);
-composer.addPass(outputPass);
-
 const rippleSources = new RippleSourceStore();
 const echoZones = new EchoZoneField(scene);
 const wakeField = new WakeField(renderer, preset);
@@ -301,7 +306,7 @@ const avatar = createAvatar();
 scene.add(avatar.object);
 
 const player = new PlayerRig({
-  canvas: renderer.domElement,
+  canvas: renderRuntime.canvas,
   camera,
   sampleHeight: sampleFieldHeight,
   getBoundaryRadius: () => Math.max(0, preset.fieldRadius - PLAYER_BOUNDARY_PADDING),
@@ -340,7 +345,7 @@ if (requestedMode) {
   showMainMenu(false, "startup");
 }
 
-renderer.setAnimationLoop(animate);
+renderRuntime.setAnimationLoop(animate);
 
 function startGame(mode: PlayModeId, reason = "menu"): void {
   activePlayMode = mode;
@@ -352,6 +357,7 @@ function startGame(mode: PlayModeId, reason = "menu"): void {
   cancelScheduledFieldRebuild();
   applyPlayMode(mode, reason);
   updateAppChrome();
+  reportWebGlRendererMode();
 
   debugEvent("mode.select", "Started Ripple Field Lab play mode", {
     mode,
@@ -381,6 +387,7 @@ function showMainMenu(shouldFocus = true, reason = "exit"): void {
   player.resetForSession(spawn.position, spawn.facingYaw);
   previousWakePlayerPosition.copy(player.position);
   updateAppChrome();
+  reportWebGlRendererMode();
 
   debugEvent("mode.menu", "Returned to main menu", {
     reason,
@@ -426,6 +433,7 @@ function resetSimulationClock(): void {
   simulationTimeSeconds = 0;
   lastSimulatedDeltaSeconds = 0;
   lastSimStepCount = 0;
+  lastRendererFrameSampleAt = -Infinity;
 }
 
 function resetRuntimeState(reason: string): void {
@@ -657,7 +665,7 @@ function renderPresentation(rawDelta: number, simulatedDeltaThisFrame: number, f
     time,
     getEffectiveRenderSettings(),
     preset,
-    rippleSources,
+    rippleSources.getRenderSourceSnapshot(time, rippleField.getRecommendedRenderSourceLimit()),
     player.position,
     player.velocity,
     playerSpeed,
@@ -672,6 +680,7 @@ function renderPresentation(rawDelta: number, simulatedDeltaThisFrame: number, f
   lastFrameRenderMs = performance.now() - renderStartedAt;
   previousWakePlayerPosition.copy(player.position);
   updateStats(rawDelta, time);
+  emitWebGlRendererFrameSample(time);
   logGlobalFrameHitch(time, simulatedDeltaThisFrame, rawDelta, frameStartedAt);
   logEchoDetonationFrame(time, simulatedDeltaThisFrame, frameStartedAt);
 }
@@ -2680,8 +2689,60 @@ function getPixelRatio(): number {
   return Math.min(window.devicePixelRatio || 1, settings.qualityId === "meltdown" ? 2.5 : 2);
 }
 
-function requireElement<T extends HTMLElement>(selector: string): T {
-  const element = document.querySelector<T>(selector);
-  if (!element) throw new Error(`Missing required element: ${selector}`);
-  return element;
+function reportWebGlRendererMode(): void {
+  const courseMode = isCourseMode(activePlayMode);
+  const buildStats = rippleField.getBuildStats();
+  debugEvent("renderer.mode", "Renderer mode selected", {
+    requestedMode: rendererModeSelection.requestedMode,
+    selectionSource: rendererModeSelection.source,
+    activeBackend: "webgl",
+    playMode: activePlayMode ?? "none",
+    raceTrackEnabled: courseMode,
+    trackMaskUploaded: false,
+    arenaBarrierEnabled: !courseMode,
+    fieldLayoutMode: buildStats.mode === "clipped" ? "track-clipped" : "arena-full",
+    culledHexCount: buildStats.culledHexCount,
+    trackWallEnabled: courseMode,
+    trackWallSegments: courseMode ? raceTrack.getWallSnapshot().segmentCount : 0,
+    trainingEnabled: activePlayMode === "training",
+    trainingStepIndex: activePlayMode === "training" ? trainingRun.getPresentationSnapshot().stepIndex : 0,
+    trainingMarkerVisible: activePlayMode === "training" && trainingRun.getPresentationSnapshot().marker.visible,
+    fallbackReason: rendererModeSelection.fallbackReason
+  }, "info");
+}
+
+function emitWebGlRendererFrameSample(time: number): void {
+  if (time - lastRendererFrameSampleAt < 0.5) return;
+  lastRendererFrameSampleAt = time;
+  const stats = renderRuntime.getStats();
+  const buildStats = rippleField.getBuildStats();
+  const courseMode = isCourseMode(activePlayMode);
+  const training = activePlayMode === "training"
+    ? trainingRun.getPresentationSnapshot()
+    : null;
+  debugEvent("renderer.frameSample", "Renderer frame sample", {
+    backendId: stats.backendId,
+    playMode: activePlayMode ?? "none",
+    raceTrackEnabled: courseMode,
+    trackMaskUploaded: false,
+    arenaBarrierEnabled: !courseMode,
+    fieldLayoutMode: buildStats.mode === "clipped" ? "track-clipped" : "arena-full",
+    culledHexCount: buildStats.culledHexCount,
+    trackWallEnabled: courseMode,
+    trackWallSegments: courseMode ? raceTrack.getWallSnapshot().segmentCount : 0,
+    trainingEnabled: training?.enabled ?? false,
+    trainingActive: training?.active ?? false,
+    trainingComplete: training?.complete ?? false,
+    trainingStepId: training?.stepId ?? "",
+    trainingStepIndex: training?.stepIndex ?? 0,
+    trainingStepCount: training?.stepCount ?? 0,
+    trainingMarkerVisible: training?.marker.visible ?? false,
+    drawCalls: stats.drawCalls,
+    triangles: stats.triangles,
+    pixelRatio: stats.pixelRatio,
+    renderMs: roundMetric(lastFrameRenderMs),
+    deviceLost: stats.deviceLost
+  }, "debug");
+}
+
 }
