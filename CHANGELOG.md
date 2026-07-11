@@ -55,6 +55,10 @@
   omitted/auto requests still resolve to WebGL.
 - Aligned continuous and pulse/Echo particle-density formulas across WebGL and
   WebGPU so comparative workloads carry the same configured particle budgets.
+- Corrected the shared flat-top hex lattice to stagger columns instead of rows,
+  aligned Three/WebGL and raw-WebGPU cap orientation and footprint scaling, and
+  removed the repeating triangular holes visible in dense Meltdown fields. A
+  fast geometry invariant now guards the three equal nearest-neighbor distances.
 
 ## 0.5.3-2-ALPHA - 2026-07-08
 

@@ -330,7 +330,11 @@ fn vertexMain(
   let crestEnergy = clamp(max(wake.z, 0.0) * 2.2 + max(sourceWave, 0.0) * 0.64, 0.0, 1.0);
   let velocityEnergy = clamp(abs(wake.y) * 10.0, 0.0, 1.0);
   let shimmer = 0.5 + 0.5 * sin(field.timing.x * 3.7 + cell.positionPhase.w);
-  let footprint = field.shape.z * field.render.z * (0.56 + crestEnergy * 0.11 + echoSignal.x * 0.025);
+  // `hexLocal` uses a unit circumradius while Three's cap uses 0.5. Convert the
+  // shared point-to-point diameter to a radius here so both backends occupy the
+  // same flat-top honeycomb instead of WebGPU masking a sheared grid by overlap.
+  let footprintDiameter = field.shape.z + crestEnergy * 0.05 + echoSignal.x * 0.012;
+  let footprint = footprintDiameter * field.render.z * 0.5;
   let worldOffset = local * footprint;
   let lift = clamp(heightEnergy * field.render.x + sourceWave * 0.36 + echoSignal.z * 0.72, -1.6, 2.5);
   let worldPosition = vec3f(

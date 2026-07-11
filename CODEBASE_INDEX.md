@@ -1,6 +1,6 @@
 # Codebase Index
 
-Last reviewed: 2026-07-09
+Last reviewed: 2026-07-11
 
 Purpose: compact map for the standalone ripple-field visual lab.
 
@@ -41,6 +41,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `npm.cmd run verify:render:webgpu:default-soak`
 - Dormant auto-rollout policy verifier:
   `npm.cmd run verify:renderer:auto-rollout`
+- Flat-top honeycomb geometry invariant: `npm.cmd run verify:hex-lattice`
 - Benchmark statistics/parity regression verifier:
   `npm.cmd run verify:benchmark:reporting`
 - Production WebGL/WebGPU comparative benchmark:
@@ -68,6 +69,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
   mask/wall, and Training presentation state: `src/echoState.ts`,
   `src/particleState.ts`, `src/rippleFieldLayout.ts`, `src/rippleSources.ts`,
   `src/raceTrack.ts`, and `src/trainingRun.ts`
+- Renderer-neutral flat-top honeycomb spacing and stagger math:
+  `src/hexLattice.ts`
 - Selectable camera-following sky dome, 8K/4K generated skybox texture loading,
   horizon framing, and per-theme fog tuning: `src/skybox.ts` plus
   `public/skyboxes/`
@@ -184,9 +187,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
    plus a safety skirt; Training mode uses that same clipped course path and
    skips the full-disc radius/hex coupling guardrail. In Arena mode it keeps the
    full circular sandbox field and still applies the instance-budget guardrail.
-   Hex geometry is rotated
-   to match the staggered lattice, and Meltdown's visible footprint is calibrated
-   to read as an interlocked honeycomb while preserving its previous density.
+   Hex geometry uses the same flat-top orientation in both renderers and the
+   shared layout vertically staggers columns, so Meltdown reads as an exact
+   interlocked honeycomb while preserving its previous density.
    The field then sends active pulse source/metadata/lifetime uniforms plus the
    wake texture, track mask texture, player ground-contact strength,
    wave-medium, and cell-scale values to the shaders; cell matrices stay static

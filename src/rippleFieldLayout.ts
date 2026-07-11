@@ -1,14 +1,20 @@
-import type { QualityPreset } from "./qualityPresets";
+import {
+  getFlatTopHexColumnOffset,
+  getFlatTopHexHorizontalSpacing,
+  getFlatTopHexPlacementDiameter,
+  getFlatTopHexVerticalSpacing
+} from "./hexLattice";
+import { QUALITY_PRESETS, type QualityPreset } from "./qualityPresets";
 import { MAX_SHADER_RIPPLE_SOURCES } from "./rippleSources";
 import { sampleFieldHeight } from "./terrain";
 
-export const HEX_TILE_DIAMETER = 0.89;
+// Meltdown is the intentionally interlocked quality. Deriving its visible cap
+// diameter from the same placement formula keeps the edges exact if that
+// preset's density is tuned later.
+export const HEX_TILE_DIAMETER = getFlatTopHexPlacementDiameter(QUALITY_PRESETS.meltdown.tileSpacing);
 export const BASE_TILE_HEIGHT = 0.08;
 export const RIPPLE_WIDTH = 1.45;
 
-const HEX_FLAT_TOP_HORIZONTAL_SPACING_RATIO = 0.75;
-const HEX_FLAT_TOP_VERTICAL_SPACING_RATIO = Math.sqrt(3) * 0.5;
-const HEX_AREA_RATIO = HEX_FLAT_TOP_HORIZONTAL_SPACING_RATIO * HEX_FLAT_TOP_VERTICAL_SPACING_RATIO;
 const MIN_RENDERED_RIPPLE_SOURCES = 8;
 const SHADER_SOURCE_EVALUATION_BUDGET = 2_400_000;
 
@@ -57,17 +63,17 @@ export function createRippleFieldLayout(
   const placementRadiusSquared = placementRadius * placementRadius;
   let fullHexCount = 0;
 
-  // The arena floor is circular, but the cells live on a flat-top hex lattice.
-  // Keeping this builder renderer-neutral lets WebGL and WebGPU share exactly
-  // the same placement budget before their material implementations diverge.
-  // Track mode can add a CPU clipper for WebGL field layout without passing the
-  // RaceTrack object through the render contract.
-  for (let iz = -halfRowCount; iz <= halfRowCount; iz += 1) {
-    const rowOffset = Math.abs(iz % 2) === 1 ? spacing * 0.5 : 0;
-    const z = iz * rowSpacing;
+  // Flat-top hexes pack by staggering columns vertically. Staggering rows in
+  // the horizontal direction preserves the same area budget, but shears the
+  // lattice and leaves a repeating triangular hole between otherwise regular
+  // caps. Keeping this exact placement renderer-neutral prevents WebGL and
+  // WebGPU from quietly disagreeing about what "interlocking" means.
+  for (let ix = -halfColumnCount; ix <= halfColumnCount; ix += 1) {
+    const x = ix * spacing;
+    const columnOffset = getFlatTopHexColumnOffset(ix, rowSpacing);
 
-    for (let ix = -halfColumnCount; ix <= halfColumnCount; ix += 1) {
-      const x = ix * spacing + rowOffset;
+    for (let iz = -halfRowCount; iz <= halfRowCount; iz += 1) {
+      const z = iz * rowSpacing + columnOffset;
       if (x * x + z * z > placementRadiusSquared) continue;
       fullHexCount += 1;
       if (placementClipper && !placementClipper.containsPoint(x, z)) continue;
@@ -137,21 +143,20 @@ function createTerrainTint(x: number, y: number, z: number): { readonly r: numbe
 }
 
 function getHexHorizontalSpacing(preset: QualityPreset): number {
-  return getHexPlacementDiameter(preset) * HEX_FLAT_TOP_HORIZONTAL_SPACING_RATIO;
+  return getFlatTopHexHorizontalSpacing(getHexPlacementDiameter(preset));
 }
 
 function getHexVerticalSpacing(preset: QualityPreset): number {
-  return getHexPlacementDiameter(preset) * HEX_FLAT_TOP_VERTICAL_SPACING_RATIO;
+  return getFlatTopHexVerticalSpacing(getHexPlacementDiameter(preset));
 }
 
 function getHexPlacementDiameter(preset: QualityPreset): number {
   // Before the hex conversion, `tileSpacing` roughly meant one cell's area in
   // the placement grid. Preserve that density by solving for the flat-top hex
-  // diameter that gives the same center-cell area. `HEX_TILE_DIAMETER` is then
-  // calibrated so Meltdown's visual footprint nearly equals this placement
-  // diameter, producing an interlocking honeycomb without inflating the old
-  // instance count.
-  return preset.tileSpacing / Math.sqrt(HEX_AREA_RATIO);
+  // diameter that gives the same center-cell area. `HEX_TILE_DIAMETER` is
+  // derived from Meltdown's result so its visual footprint exactly matches the
+  // placement diameter without inflating the old instance count.
+  return getFlatTopHexPlacementDiameter(preset.tileSpacing);
 }
 
 function hexToRgb(hex: number): { readonly r: number; readonly g: number; readonly b: number } {

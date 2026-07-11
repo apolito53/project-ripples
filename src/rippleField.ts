@@ -594,10 +594,10 @@ function createHexPrismGeometry(): THREE.CylinderGeometry {
   // CylinderGeometry with six radial segments gives us a real hexagonal prism.
   // The radius is 0.5 so shader-side footprint scaling treats `1.0` as the
   // full point-to-point diameter, matching the user's "widest point" size rule.
-  // `thetaStart = 0` rotates each hex so its shared edges face the staggered
-  // neighbor directions. With the flat-top lattice below, Meltdown now reads as
-  // one interlocking honeycomb instead of offset individual badges.
-  const geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 6, 1, false, 0);
+  // Three's cylinder generator starts with a point on +Z. Rotating by 30 degrees
+  // gives the cap flat top/bottom edges, matching the column-staggered layout
+  // and the raw-WebGPU cap vertices exactly.
+  const geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 6, 1, false, Math.PI / 6);
   return geometry;
 }
 

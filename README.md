@@ -256,6 +256,7 @@ npm.cmd run verify:render:webgpu:soak
 npm.cmd run verify:render:webgpu:readiness
 npm.cmd run verify:render:webgpu:default-soak
 npm.cmd run verify:renderer:auto-rollout
+npm.cmd run verify:hex-lattice
 npm.cmd run verify:benchmark:reporting
 npm.cmd run benchmark:renderers
 ```

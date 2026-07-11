@@ -19,13 +19,14 @@
     "verify:render:webgpu:default-soak": "node scripts/verify-render.mjs webgpu-default-soak",
     "verify:render:webgpu:unavailable": "node scripts/verify-render.mjs webgpu-unavailable",
     "verify:renderer:auto-rollout": "node scripts/verify-renderer-rollout.mjs",
+    "verify:hex-lattice": "node scripts/verify-hex-lattice.mjs",
     "verify:benchmark:reporting": "node scripts/verify-benchmark-reporting.mjs",
     "benchmark:renderers": "npm run build && node scripts/benchmark-renderers.mjs",
     "smoke": "node scripts/smoke.mjs",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4183 --strictPort",
     "typecheck": "tsc --noEmit",
-    "validate": "npm run typecheck && npm run build && npm run smoke"
+    "validate": "npm run typecheck && npm run build && npm run verify:hex-lattice && npm run smoke"
   },
   "dependencies": {
     "three": "^0.175.0"
