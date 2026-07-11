@@ -1,14 +1,15 @@
 # Codebase Index
 
-Last reviewed: 2026-06-22
+Last reviewed: 2026-07-09
 
 Purpose: compact map for the standalone ripple-field visual lab.
 
 ## Stack
 
 - Vite + strict TypeScript browser app.
-- Three.js renderer, postprocessing composer, Unreal bloom pass, shader-customized
-  `InstancedMesh`, additive `Points`, and dynamic lights.
+- Three.js/WebGL default renderer plus a forced raw-WebGPU runtime, neutral
+  render snapshots, WebGPU compute/render passes, postprocessing bloom,
+  shader-customized `InstancedMesh`, additive `Points`, and dynamic lights.
 - Current alpha baseline: `v0.5.3-2-ALPHA`; keep release tags in alpha prerelease
   territory until the lab graduates from prototype status.
 - Dedicated dev port `5183`; preview port `4183`.
@@ -25,6 +26,17 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Type check: `npm.cmd run typecheck`
 - Production build: `npm.cmd run build`
 - Standard validation: `npm.cmd run validate`
+- Browser WebGL lifecycle smoke: `npm.cmd run verify:render:webgl`
+- Browser WebGPU capability smoke: `npm.cmd run verify:webgpu:capabilities`
+- Browser forced-WebGPU lifecycle smoke: `npm.cmd run verify:render:webgpu`
+- Browser forced-WebGPU unavailable smoke:
+  `npm.cmd run verify:render:webgpu:unavailable`
+- Browser forced-WebGPU movement soak:
+  `npm.cmd run verify:render:webgpu:soak`
+- Browser forced-WebGPU readiness run:
+  `npm.cmd run verify:render:webgpu:readiness`
+- Browser forced-WebGPU two-minute default soak:
+  `npm.cmd run verify:render:webgpu:default-soak`
 
 ## Fast Lookup
 
@@ -34,6 +46,17 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - App bootstrap, startup `Training`/`Arena`/`Track` mode selection, session
   reset flow, Three.js scene, render loop, quality wiring, and postprocessing:
   `src/main.ts`
+- Conservative renderer policy, WebGL runtime wrapper, forced-WebGPU lifecycle,
+  neutral contracts, and raw-WebGPU pass orchestration: `src/render/rendererMode.ts`,
+  `src/render/threeRenderRuntime.ts`, `src/render/webGpuApp.ts`,
+  `src/render/types.ts`, and `src/render/webGpuRenderRuntime.ts`
+- WebGPU course-wall and Training marker passes with explicit layouts and shared
+  field depth: `src/render/webGpuTrackWallPass.ts` and
+  `src/render/webGpuTrainingMarkerPass.ts` plus their WGSL shaders
+- Renderer-neutral Echo, particle, ripple-source, field-layout, wake, Track
+  mask/wall, and Training presentation state: `src/echoState.ts`,
+  `src/particleState.ts`, `src/rippleFieldLayout.ts`, `src/rippleSources.ts`,
+  `src/raceTrack.ts`, and `src/trainingRun.ts`
 - Selectable camera-following sky dome, 8K/4K generated skybox texture loading,
   horizon framing, and per-theme fog tuning: `src/skybox.ts` plus
   `public/skyboxes/`
@@ -101,10 +124,10 @@ Purpose: compact map for the standalone ripple-field visual lab.
 ## Runtime Flow
 
 1. `index.html` loads `src/main.ts`.
-2. `main.ts` creates the renderer, scene, camera, bloom composer, race track,
-   Training Run director, field, particles, pulse lights, and hover-pod avatar,
-   then holds gameplay on a startup menu until the user chooses `Training Run`,
-   `Arena`, or `Track`.
+2. `main.ts` resolves renderer policy first. Omitted/auto/explicit WebGL creates
+   the current Three scene; explicit WebGPU starts `webGpuApp`. Both paths hold
+   gameplay on the same startup menu and preserve the current Training, Arena,
+   Track, fixed-step, pause, controls, and reset semantics.
 3. `SkyboxManager` applies the selected generated panorama to a camera-following
    UV sky dome, chooses 8K textures or 4K fallbacks from GPU texture caps, and
    applies matching fog/clear color so the arena sits inside a distant sci-fi
@@ -180,6 +203,12 @@ Purpose: compact map for the standalone ripple-field visual lab.
     Hidden base/boost speed rows remain wired for future tuning, but are not
     currently exposed in the visible menu.
 15. The scene renders through bloom when bloom strength is above zero.
+16. Forced WebGPU builds `RenderFrameInput` from neutral gameplay snapshots.
+    Arena enables the circular curtain; Track and Training upload the course
+    mask and packed wall segments, use clipped layout state, and disable it.
+    Training adds its one-draw objective marker and deterministic Echo policy.
+    Readiness stays `diagnostic-core` and `defaultEligible=false` even after the
+    automated remaining-gap list reaches empty.
 
 ## Common Change Targets
 
@@ -222,6 +251,13 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Change the live performance overlay, HUD formatting, frame-hitch payloads, or
   the `F2` toggle:
   `index.html`, `src/styles.css`, `src/frameTelemetry.ts`, and `src/main.ts`
+- Change renderer policy, neutral frame/stats contracts, or forced-WebGPU
+  lifecycle/readiness: `src/render/rendererMode.ts`, `src/render/types.ts`,
+  `src/render/webGpuApp.ts`, and `src/render/webGpuRenderRuntime.ts`
+- Change WebGPU course walls or the Training objective marker:
+  `src/render/webGpuTrackWallPass.ts`, `src/render/webGpuTrackWallPass.wgsl`,
+  `src/render/webGpuTrainingMarkerPass.ts`, and
+  `src/render/webGpuTrainingMarkerPass.wgsl`
 
 ## Sharp Edges
 
@@ -233,6 +269,13 @@ Purpose: compact map for the standalone ripple-field visual lab.
   course highlight; do not rebuild the hex field merely to change track visuals.
   Wall contact should preserve tangential velocity and bleed only outward
   pressure so the slide-heavy handling survives track edges.
+- `RaceTrack` remains a CPU gameplay owner. Raw-WebGPU modules must consume its
+  neutral mask and packed wall snapshots through `RenderFrameInput`; do not
+  import `RaceTrack` into renderer modules.
+- Omitted and `auto` renderer policy must stay WebGL until an explicit rollout
+  decision changes `defaultEligible`. Forced WebGPU must fail visibly instead
+  of falling back, and its WGSL passes should keep explicit pipeline layouts and
+  shared field-depth ordering.
 - Keep the CPU/GPU contract small: pulse uniforms, player position, player
   ground-contact strength, wake texture, and settings go in; shader animation
   comes out. Movement wake must not add entries to `RippleSourceStore`; that

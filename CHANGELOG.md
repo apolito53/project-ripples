@@ -2,6 +2,43 @@
 
 ## Unreleased
 
+### Added
+
+- Added the selectively integrated raw-WebGPU renderer runtime behind
+  `?renderer=webgpu`, including the compute wake, hex field, skybox, hover-pod,
+  particle, Echo, pulse-light, local-light, shadow-map, bloom, and Arena curtain
+  passes from the archived renderer rehearsal.
+- Added renderer-neutral pulse, Echo, particle, wake, field-layout, scene,
+  race-track mask/wall, and Training presentation snapshots shared by the
+  Three/WebGL adapters and forced-WebGPU runtime.
+- Added a packed one-draw WebGPU course-wall pass for Track and Training plus a
+  one-draw Training objective marker with two cyan posts, a magenta beam, and a
+  center glow. Both passes use explicit layouts and read the shared field depth.
+- Added Playwright coverage for WebGL and forced-WebGPU Arena, Track, Training,
+  menu transitions, Training step-one drag completion, conservative default/
+  auto policy, forced-unavailable failure, soak, readiness, and default soak.
+
+### Changed
+
+- Kept omitted and `auto` renderer requests on WebGL; explicit WebGPU requests
+  now fail visibly without silently falling back when WebGPU is unavailable.
+- Adapted the forced-WebGPU runtime to the current `mainMenu`/`playing`/`paused`
+  lifecycle, fixed-step timing, base/boost controls, hover-pod presentation,
+  mode resets, Track clipping, Echo reseeding, hidden diagnostics, and Training
+  telemetry/HUD behavior.
+- Made `RaceTrack` remain the CPU gameplay owner while exposing versioned mask
+  bytes and packed wall segments to renderer modules. Training now supports an
+  optional Three scene and exposes an independent neutral marker snapshot.
+  Headless WebGPU gameplay instances no longer allocate unused Three wall,
+  mask-texture, or Training-marker visual resources.
+- Extended renderer stats/readiness diagnostics with course-wall and Training
+  fields through `trackWall.webgpu.*` and `training.webgpu.*`. The verified
+  runtime remains `diagnostic-core`, reports
+  `defaultEligible=false`, and now reports an empty remaining-gap list after
+  the integration, readiness, and two-minute default-soak checks passed.
+- Fixed local debug-log serialization so payload objects reused across multiple
+  readiness channels are not mistaken for circular references.
+
 ## 0.5.3-2-ALPHA - 2026-07-08
 
 ### Changed

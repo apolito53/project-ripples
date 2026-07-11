@@ -5,6 +5,13 @@ concrete follow-ups that we actually intend to revisit.
 
 ## High Priority
 
+- Keep the integrated WebGPU runtime opt-in while broader hardware acceptance
+  is gathered. Automated Arena/Track/Training lifecycle, readiness, and default
+  soak gaps are closed, but `defaultEligible` remains false until an explicit
+  rollout decision is made. Continue cross-adapter visual checks, device-loss
+  recovery exercises, and WebGL/WebGPU presentation comparisons without
+  changing omitted/auto policy.
+
 - Shape the lab into a racing-game prototype.
   First pass now has a wide non-crossing track ribbon inside the arena with
   bright glowing walls, heavy off-track dimming, track-scoped Echo placement,

@@ -1,7 +1,9 @@
 # Ripple Field Lab
 
-A standalone GPU-heavy Three.js/Vite prototype for a field of luminous hex cells
-that ripple, glow, and throw particles when the player moves through them.
+A standalone GPU-heavy Vite prototype for a field of luminous hex cells that
+ripple, glow, and throw particles when the player moves through them. Three.js/
+WebGL remains the default renderer, with a raw-WebGPU runtime available for
+explicit integration testing.
 
 This is intentionally separate from `voxel-sandbox-engine`. The goal is to make
 a polished visual lab first, then borrow patterns or ideas later if they deserve
@@ -186,6 +188,26 @@ closer to the arena instead of sinking below the play surface.
 - `Meltdown`: visually interlocked honeycomb hex density and intentionally
   excessive effects for GPU stress.
 
+## Renderer Backends
+
+Omitted renderer selection and `?renderer=auto` remain on Three/WebGL. Use
+`?renderer=webgl` to request it explicitly. `?renderer=webgpu` forces the raw
+WebGPU runtime; if the browser cannot initialize WebGPU, the app shows a visible
+failure state and does not silently fall back.
+
+Both backends use the current menu, playing, and paused lifecycle; bounded
+fixed-step simulation; current base/boost controls; hover-pod behavior; mode
+resets; hidden diagnostics; Track clipping; Echo reseeding; and Training HUD/
+telemetry. Track and Training are course modes on both backends. In WebGPU they
+upload the neutral course mask, render the packed additive course walls, and
+disable the circular Arena curtain. Training also renders its neutral objective
+marker and keeps random Echo spawning disabled.
+
+The WebGPU readiness surface remains `diagnostic-core` and deliberately reports
+`defaultEligible=false`. Its automated integration/readiness gaps are empty,
+but changing the default renderer still requires an explicit product decision
+and broader hardware acceptance.
+
 ## Development
 
 ```powershell
@@ -195,6 +217,13 @@ npm.cmd run diagnostics
 npm.cmd run typecheck
 npm.cmd run build
 npm.cmd run validate
+npm.cmd run verify:render:webgl
+npm.cmd run verify:webgpu:capabilities
+npm.cmd run verify:render:webgpu
+npm.cmd run verify:render:webgpu:unavailable
+npm.cmd run verify:render:webgpu:soak
+npm.cmd run verify:render:webgpu:readiness
+npm.cmd run verify:render:webgpu:default-soak
 ```
 
 Local runs emit debug logs for Echo detonations, including particle burst counts
@@ -242,6 +271,16 @@ Versioning:
   gameplay, and pause, including clean mode starts, `?mode=` shortcuts,
   mode-specific player/Echo/runtime resets, course-mode scale guardrail bypass,
   Training Run lifecycle, and Echo reseeding after play-area rebuilds.
+- `src/render/rendererMode.ts` owns conservative backend selection;
+  `src/render/threeRenderRuntime.ts` wraps the current WebGL renderer, while
+  `src/render/webGpuApp.ts` adapts the same gameplay lifecycle and neutral state
+  into `src/render/webGpuRenderRuntime.ts`.
+- `src/render/types.ts` defines renderer-neutral frame, Track wall/mask,
+  Training marker, scene, and stats contracts. Raw-WebGPU modules consume those
+  contracts and do not import `RaceTrack`.
+- `src/render/webGpuTrackWallPass.ts` and
+  `src/render/webGpuTrainingMarkerPass.ts` own the additive course-wall and
+  objective-marker passes that read the shared field depth.
 - `src/trainingRun.ts` owns the guided Training Run director: step definitions,
   current objective checks, marker placement, scripted Echo requests, completion
   pulse trigger, tutorial HUD state, and `training.*` diagnostics.
