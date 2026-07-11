@@ -11,6 +11,8 @@ import type {
   RenderRuntimeStats,
   ThreeRenderRuntimeOptions
 } from "./types";
+import { WebGlGpuFrameTimer } from "./gpuFrameTimer";
+import { isRenderBenchmarkEnabled } from "./renderBenchmark";
 
 export class ThreeRenderRuntime implements RenderRuntime {
   readonly backendId = "webgl" as const;
@@ -20,6 +22,7 @@ export class ThreeRenderRuntime implements RenderRuntime {
   readonly composer: EffectComposer;
   readonly bloomPass: UnrealBloomPass;
   private gpuCpuSubmitMs = 0;
+  private readonly gpuFrameTimer: WebGlGpuFrameTimer;
 
   constructor(private readonly options: ThreeRenderRuntimeOptions) {
     this.renderer = new THREE.WebGLRenderer({
@@ -31,6 +34,10 @@ export class ThreeRenderRuntime implements RenderRuntime {
     this.renderer.toneMappingExposure = 0.72;
     this.renderer.setClearColor(0x020409, 1);
     this.renderer.info.autoReset = false;
+    this.gpuFrameTimer = new WebGlGpuFrameTimer(
+      this.renderer.getContext() as WebGL2RenderingContext,
+      isRenderBenchmarkEnabled()
+    );
 
     this.canvas = this.renderer.domElement;
     this.canvas.dataset.rendererBackend = this.backendId;
@@ -54,18 +61,25 @@ export class ThreeRenderRuntime implements RenderRuntime {
 
   beginFrame(): void {
     this.renderer.info.reset();
+    this.gpuFrameTimer.begin();
   }
 
   renderFrame(input: RenderFrameInput): void {
-    const startedAt = performance.now();
-    this.bloomPass.strength = input.bloomStrength;
+    this.renderCurrentScene(input.bloomStrength);
+  }
 
-    if (input.bloomStrength > 0.02) {
+  /** Render the Three-owned scene without manufacturing a neutral snapshot. */
+  renderCurrentScene(bloomStrength: number): void {
+    const startedAt = performance.now();
+    this.bloomPass.strength = bloomStrength;
+
+    if (bloomStrength > 0.02) {
       this.composer.render();
     } else {
       this.renderer.render(this.options.scene, this.options.camera);
     }
 
+    this.gpuFrameTimer.end();
     this.gpuCpuSubmitMs = performance.now() - startedAt;
   }
 
@@ -93,12 +107,17 @@ export class ThreeRenderRuntime implements RenderRuntime {
   }
 
   getStats(): RenderRuntimeStats {
+    const gpuResult = this.gpuFrameTimer.getLatestResult();
     return {
       backendId: this.backendId,
       drawCalls: this.renderer.info.render.calls,
       triangles: this.renderer.info.render.triangles,
       pixelRatio: this.renderer.getPixelRatio(),
       gpuCpuSubmitMs: this.gpuCpuSubmitMs,
+      gpuFrameMs: gpuResult?.durationMs,
+      gpuFrameSequence: gpuResult?.sequence,
+      gpuTimerMode: this.gpuFrameTimer.mode,
+      gpuTimerErrorCount: this.gpuFrameTimer.getErrorCount(),
       fallbackReason: this.capabilities.fallbackReason,
       deviceLost: this.capabilities.deviceLost
     };
@@ -106,6 +125,7 @@ export class ThreeRenderRuntime implements RenderRuntime {
 
   destroy(): void {
     this.setAnimationLoop(null);
+    this.gpuFrameTimer.dispose();
     this.composer.dispose();
     this.renderer.dispose();
     this.canvas.remove();

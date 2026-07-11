@@ -73,6 +73,11 @@ import {
   WebGpuWakeFieldProbe,
   type WebGpuWakeFieldProbeMetrics
 } from "../wake/webGpuWakeFieldProbe";
+import { WebGpuFrameTimer } from "./gpuFrameTimer";
+import {
+  isRenderBenchmarkEnabled,
+  setRenderBenchmarkMetadata
+} from "./renderBenchmark";
 
 export type WebGpuRenderRuntimeOptions = {
   readonly app: HTMLElement;
@@ -91,6 +96,7 @@ export class WebGpuRenderRuntime implements RenderRuntime {
   private gpuCpuSubmitMs = 0;
   private deviceLost = false;
   private submittedFirstFrame = false;
+  private readonly gpuFrameTimer: WebGpuFrameTimer;
 
   private constructor(
     private readonly options: WebGpuRenderRuntimeOptions,
@@ -113,6 +119,10 @@ export class WebGpuRenderRuntime implements RenderRuntime {
     this.canvas = context.canvas;
     this.canvas.dataset.rendererBackend = this.backendId;
     options.app.append(this.canvas);
+    this.gpuFrameTimer = new WebGpuFrameTimer(
+      context.device,
+      context.timestampQueryEnabled
+    );
 
     context.device.lost.then(() => {
       this.deviceLost = true;
@@ -121,7 +131,20 @@ export class WebGpuRenderRuntime implements RenderRuntime {
 
   static async create(options: WebGpuRenderRuntimeOptions): Promise<WebGpuRenderRuntime> {
     const canvas = document.createElement("canvas");
-    const context = await initializeWebGpu(canvas, options.log);
+    const context = await initializeWebGpu(canvas, options.log, {
+      enableTimestampQuery: isRenderBenchmarkEnabled()
+    });
+    setRenderBenchmarkMetadata({
+      webGpuAdapter: context.adapterSummary,
+      webGpuPreferredFormat: context.format,
+      webGpuTimestampQuery: context.timestampQueryEnabled,
+      webGpuFeatures: [...context.device.features].sort(),
+      webGpuLimits: {
+        maxTextureDimension2D: context.device.limits.maxTextureDimension2D,
+        maxStorageBufferBindingSize: context.device.limits.maxStorageBufferBindingSize,
+        maxComputeWorkgroupsPerDimension: context.device.limits.maxComputeWorkgroupsPerDimension
+      }
+    });
     let wakeProbe: WebGpuWakeFieldProbe | undefined;
     let sceneLights: WebGpuSceneLightBuffer | undefined;
     let sceneShadows: WebGpuSceneShadowBuffer | undefined;
@@ -276,6 +299,7 @@ export class WebGpuRenderRuntime implements RenderRuntime {
     const commandEncoder = this.context.device.createCommandEncoder({
       label: "Ripple WebGPU core scene presentation frame"
     });
+    this.gpuFrameTimer.begin(commandEncoder);
     const swapchainView = this.context.canvasContext.getCurrentTexture().createView();
     const sceneTargetView = this.bloom.getSceneTargetView();
     const lightingUpdateMs = this.sceneLights.update(input, this.deviceLost);
@@ -361,7 +385,9 @@ export class WebGpuRenderRuntime implements RenderRuntime {
     });
     const drawStats = this.getCombinedDrawStats();
 
+    this.gpuFrameTimer.end(commandEncoder);
     this.context.device.queue.submit([commandEncoder.finish()]);
+    this.gpuFrameTimer.afterSubmit();
     this.wakeProbe.afterSubmit();
     this.gpuCpuSubmitMs = performance.now() - startedAt;
 
@@ -528,10 +554,10 @@ export class WebGpuRenderRuntime implements RenderRuntime {
     this.animationCallback = callback;
     if (!callback) return;
 
-    const tick = () => {
+    const tick = (frameTimestampMs: number) => {
       if (!this.animationCallback) return;
       this.animationFrameId = requestAnimationFrame(tick);
-      this.animationCallback(performance.now(), undefined as never);
+      this.animationCallback(frameTimestampMs, undefined as never);
     };
 
     this.animationFrameId = requestAnimationFrame(tick);
@@ -547,12 +573,17 @@ export class WebGpuRenderRuntime implements RenderRuntime {
     const echoVisualMetrics = this.echoVisual.getMetrics();
     const trackWallMetrics = this.trackWalls.getMetrics();
     const trainingMarkerMetrics = this.trainingMarker.getMetrics();
+    const gpuResult = this.gpuFrameTimer.getLatestResult();
     return {
       backendId: this.backendId,
       drawCalls: this.deviceLost ? 0 : drawStats.drawCalls,
       triangles: this.deviceLost ? 0 : drawStats.triangles,
       pixelRatio: this.configuration?.pixelRatio ?? 1,
       gpuCpuSubmitMs: this.gpuCpuSubmitMs,
+      gpuFrameMs: gpuResult?.durationMs,
+      gpuFrameSequence: gpuResult?.sequence,
+      gpuTimerMode: this.gpuFrameTimer.mode,
+      gpuTimerErrorCount: this.gpuFrameTimer.getErrorCount(),
       fallbackReason: this.capabilities.fallbackReason,
       deviceLost: this.deviceLost,
       wakeMaxAbsHeight: wakeMetrics.wakeMaxAbsHeight,
@@ -694,6 +725,7 @@ export class WebGpuRenderRuntime implements RenderRuntime {
 
   destroy(): void {
     this.setAnimationLoop(null);
+    this.gpuFrameTimer.dispose();
     this.bloom.dispose();
     this.particlePreview.dispose();
     this.avatarPreview.dispose();

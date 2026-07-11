@@ -11,6 +11,7 @@ import {
 const SCENARIOS = new Set([
   "webgl",
   "webgpu-capabilities",
+  "webgpu-stock",
   "webgpu",
   "webgpu-soak",
   "webgpu-readiness",
@@ -84,6 +85,8 @@ try {
     await verifyWebGlRender(page, pageProblems);
   } else if (scenario === "webgpu-capabilities") {
     await verifyWebGpuCapabilities(page, pageProblems);
+  } else if (scenario === "webgpu-stock") {
+    await verifyStockWebGpuRender(page, pageProblems);
   } else if (scenario === "webgpu") {
     await verifyWebGpuRender(page, pageProblems);
   } else if (scenario === "webgpu-soak") {
@@ -135,6 +138,30 @@ async function verifyWebGlRender(page, pageProblems) {
   await verifyMenuTransitions(page, pageProblems, "webgl");
 
   console.log(`[ripple-field-lab:verify:webgl] visible WebGL scene OK at ${url}`);
+}
+
+async function verifyStockWebGpuRender(page, pageProblems) {
+  const smokeRun = createSmokeRun("webgpu-stock");
+  const url = buildAppUrl(config, { renderer: "webgpu", mode: "arena", smokeRun });
+
+  await page.goto(url, { waitUntil: "domcontentloaded" });
+  await assertNonBlankCanvas(page, "stock Chrome WebGPU canvas", "webgpu");
+  await waitForRunEvent(page, smokeRun, "webgpu.ready", (record) =>
+    record.entry.payload?.timestampQueryEnabled === false
+  );
+  await waitForRunEvent(page, smokeRun, "renderer.mode", (record) =>
+    record.entry.payload?.requestedMode === "webgpu" &&
+    record.entry.payload?.activeBackend === "webgpu"
+  );
+  await waitForRunEvent(page, smokeRun, "renderer.frameSample", (record) =>
+    record.entry.payload?.backendId === "webgpu" &&
+    record.entry.payload?.deviceLost === false
+  );
+
+  const events = await readRunEvents(smokeRun);
+  assertNoDiagnosticErrors(events);
+  pageProblems.assertNoErrors("stock Chrome WebGPU smoke");
+  console.log(`[ripple-field-lab:verify:webgpu:stock] stock Chrome WebGPU scene OK at ${url}`);
 }
 
 async function verifyWebGlDefaultAutoRender(page, pageProblems) {
@@ -2426,10 +2453,12 @@ function formatRecords(records) {
 async function launchBrowser() {
   const launchOptions = {
     headless: process.env.RIPPLE_BROWSER_HEADLESS !== "0",
-    args: [
-      "--enable-unsafe-webgpu",
-      "--ignore-gpu-blocklist"
-    ]
+    args: scenario === "webgpu-stock"
+      ? []
+      : [
+          "--enable-unsafe-webgpu",
+          "--ignore-gpu-blocklist"
+        ]
   };
 
   if (process.env.RIPPLE_CHROME_CHANNEL) {

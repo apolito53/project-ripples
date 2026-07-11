@@ -222,6 +222,10 @@ export type RenderRuntimeStats = {
   readonly triangles: number;
   readonly pixelRatio: number;
   readonly gpuCpuSubmitMs: number;
+  readonly gpuFrameMs?: number;
+  readonly gpuFrameSequence?: number;
+  readonly gpuTimerMode?: string;
+  readonly gpuTimerErrorCount?: number;
   readonly fallbackReason: string;
   readonly deviceLost: boolean;
   readonly wakeMaxAbsHeight?: number;

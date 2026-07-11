@@ -357,6 +357,32 @@ export class PlayerRig {
     if (alignCamera) this.cameraYaw = yaw;
   }
 
+  /**
+   * Applies an externally scripted pose for deterministic renderer benchmarks.
+   * Ordinary gameplay never calls this; controls remain authoritative there.
+   */
+  applyScriptedPose(
+    position: THREE.Vector3,
+    velocity: THREE.Vector3,
+    facingYaw: number,
+    delta: number,
+    timeSeconds: number
+  ): void {
+    this.timeSeconds = timeSeconds;
+    this.keys.clear();
+    this.mobileMoveIntent.set(0, 0);
+    this.position.copy(position);
+    this.velocity.copy(velocity);
+    this.jumpOffset = 0;
+    this.verticalVelocity = 0;
+    this.grounded = true;
+    this.setFacingYaw(facingYaw, true);
+    this.telemetry = this.createTelemetrySnapshot(
+      false, false, false, false, false, false, false, true, false, true
+    );
+    this.updateCamera(Math.max(1 / 120, delta));
+  }
+
   setPlayAreaConstraint(playAreaConstraint: PlayAreaConstraint | null): void {
     // The lab now has separate Arena and Track modes. Keep the movement rig
     // ignorant of mode names; it only needs to know whether an external

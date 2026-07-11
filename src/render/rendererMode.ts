@@ -12,7 +12,7 @@ const RENDERER_MODE_STORAGE_KEY = "rippleRendererMode";
 
 export function resolveRendererMode(
   location: Location = window.location,
-  storage: Storage | null = window.localStorage
+  storage?: Storage | null
 ): RendererModeSelection {
   const queryMode = normalizeRendererMode(new URLSearchParams(location.search).get("renderer"));
   if (queryMode) {
@@ -23,7 +23,8 @@ export function resolveRendererMode(
     };
   }
 
-  const storedMode = normalizeRendererMode(readStoredRendererMode(storage));
+  const resolvedStorage = storage === undefined ? getDefaultStorage() : storage;
+  const storedMode = normalizeRendererMode(readStoredRendererMode(resolvedStorage));
   if (storedMode) {
     return {
       requestedMode: storedMode,
@@ -37,6 +38,14 @@ export function resolveRendererMode(
     source: "default",
     fallbackReason: getCurrentFallbackReason("auto")
   };
+}
+
+function getDefaultStorage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
 }
 
 function normalizeRendererMode(value: string | null): RendererMode | null {
@@ -54,11 +63,11 @@ function readStoredRendererMode(storage: Storage | null): string | null {
 
 function getCurrentFallbackReason(mode: RendererMode): string {
   if (mode === "webgpu") {
-    return "Forced WebGPU uses a diagnostic runtime until field, wake, particle, and postprocessing parity land.";
+    return "Forced WebGPU runs the integration-candidate core renderer.";
   }
 
   if (mode === "auto") {
-    return "Auto mode keeps WebGL as the visual backend until WebGPU render parity is implemented.";
+    return "Auto rollout stage 0 keeps WebGL active while cross-hardware benchmark evidence is gathered.";
   }
 
   return "";
