@@ -59,7 +59,7 @@ The untracked local evidence lives under:
 
 `benchmark-results/2026-07-11T04-43-49-415Z-pid-16668/`
 
-Do not pass this run's `summary.json` to `RIPPLE_BENCHMARK_BASELINE`. A later
-clean full `npm.cmd run benchmark:renderers:package` execution must create the
-first accepted v2 `baseline.json`; no replacement baseline is fabricated by the
-tooling implementation alone.
+Do not pass this run's `summary.json` to `RIPPLE_BENCHMARK_BASELINE`. The clean
+accepted replacement is
+`benchmark-baselines/rtx-4070-ti-2026-07-12-73df45e/baseline.json`, produced by
+the full packaged protocol from commit `73df45e`.

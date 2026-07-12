@@ -5,12 +5,12 @@ concrete follow-ups that we actually intend to revisit.
 
 ## High Priority
 
-- Run `npm.cmd run benchmark:renderers:package` from a clean committed tree to
-  create the first accepted
-  `renderer-benchmark-v2-flat-top-column-stagger` RTX 4070 Ti baseline. The old
-  July 11 dirty pre-column-stagger result is superseded and is not a comparison
-  baseline. After the clean refresh, repeat the package on at least one
+- Repeat the accepted
+  `renderer-benchmark-v2-flat-top-column-stagger` package on at least one
   integrated/lower-power GPU and one older or different-vendor discrete GPU.
+  The clean RTX 4070 Ti baseline is tracked under
+  `devlog/benchmark-baselines/rtx-4070-ti-2026-07-12-73df45e/`; the old July 11
+  dirty pre-column-stagger result remains superseded.
   Stage 0 keeps `auto` on WebGL and `defaultEligible=false` while those artifacts
   establish cross-adapter confidence. Only then implement same-navigation
   startup fallback/runtime-loss recovery and consider a 5% allowlisted cohort.

@@ -37,6 +37,10 @@
 - Added the original RTX 4070 Ti benchmark note as historical evidence; it is
   now explicitly superseded because it came from a dirty pre-column-stagger
   tree and is not an accepted v2 baseline.
+- Added the first accepted v2 RTX 4070 Ti baseline from clean commit `73df45e`.
+  Stable Chrome completed 56/56 samples, 28/28 semantic pairs, all stock and
+  packaging gates, and the two-minute continuity soak; WebGPU remained stable
+  through the 1.68-million-cell Meltdown tier 4.
 
 ### Changed
 

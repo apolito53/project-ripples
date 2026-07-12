@@ -137,8 +137,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `scripts/package-renderer-benchmark.mjs`, and
   `scripts/verify-benchmark-reporting.mjs`
 - Rollout policy checks: `scripts/verify-renderer-rollout.mjs`
-- Benchmark baseline registry and superseded historical evidence:
-  `devlog/benchmark-baselines/README.md` and
+- Benchmark baseline registry, accepted RTX 4070 Ti v2 evidence, and superseded
+  historical evidence: `devlog/benchmark-baselines/README.md`,
+  `devlog/benchmark-baselines/rtx-4070-ti-2026-07-12-73df45e/`, and
   `devlog/WEBGPU_BENCHMARK_BASELINE_2026-07-11.md`
 - Procedural field height sampler: `src/terrain.ts`
 - Prioritized concrete follow-up work: `TODO.md`

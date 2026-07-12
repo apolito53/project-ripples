@@ -1,7 +1,24 @@
 # Renderer Benchmark Baselines
 
 This directory is the registry for accepted cross-hardware renderer benchmark
-evidence. There is currently no accepted v2 baseline checked in.
+evidence.
+
+## Accepted Baselines
+
+- `rtx-4070-ti-2026-07-12-73df45e/` is the first accepted v2 baseline. It was
+  produced from clean commit `73df45e5c61ef87a69f92c26c1847144b24838ea`
+  with stable Chrome on an RTX 4070 Ti. It contains the accepted comparison
+  projection, acceptance gates, full-bundle checksum manifest, and human report.
+  The ignored local portable bundle additionally retains compressed samples,
+  `summary.json`, and representative captures.
+
+Use the tracked comparison projection with:
+
+```powershell
+$env:RIPPLE_BENCHMARK_BASELINE='devlog\benchmark-baselines\rtx-4070-ti-2026-07-12-73df45e\baseline.json'
+$env:RIPPLE_CHROME_CHANNEL='chrome'
+npm.cmd run benchmark:renderers:package
+```
 
 The required protocol/workload is
 `renderer-benchmark-v2-flat-top-column-stagger`. Create evidence only with:

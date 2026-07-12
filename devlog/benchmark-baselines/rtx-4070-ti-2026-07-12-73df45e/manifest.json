@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 2,
+  "protocolVersion": "renderer-benchmark-v2-flat-top-column-stagger",
+  "workloadVersion": "renderer-benchmark-v2-flat-top-column-stagger",
+  "bundleKind": "renderer-benchmark-portable-run",
+  "runId": "2026-07-12T06-54-07-571Z-package",
+  "sourceCommit": "73df45e5c61ef87a69f92c26c1847144b24838ea",
+  "packageProfile": "cross-hardware-acceptance",
+  "decisionGrade": true,
+  "generatedAt": "2026-07-12T07:17:03.540Z",
+  "checksumAlgorithm": "sha256",
+  "manifestPath": "manifest.json",
+  "files": [
+    {
+      "path": "acceptance.json",
+      "sizeBytes": 7357,
+      "sha256": "737806d0e76aca70624cfe8a9d5659975ba0cbfc208289a50b050e7f2b332819"
+    },
+    {
+      "path": "baseline.json",
+      "sizeBytes": 254447,
+      "sha256": "d550dc769b2469c445148fdf161d6bf7854bbb888dedc9c01a659cbaced6c23f"
+    },
+    {
+      "path": "captures/repetition-1/meltdown-ramp-tier-0--webgl.png",
+      "sizeBytes": 587769,
+      "sha256": "ed9e649e70bb559a0a937e888af18522a092e8a59760b8aa07bb126daa19a27f"
+    },
+    {
+      "path": "captures/repetition-1/meltdown-ramp-tier-0--webgpu.png",
+      "sizeBytes": 612370,
+      "sha256": "18c19cc5fb578adebaeb41efa2ad36e56c5e4fdcd2f1db94ec1dbd04eeb32439"
+    },
+    {
+      "path": "captures/repetition-1/meltdown-ramp-tier-1--webgl.png",
+      "sizeBytes": 621448,
+      "sha256": "9f332c001dc132ea104a66a49698c1c7e54ac9e184dfb690d05404366d8be76d"
+    },
+    {
+      "path": "captures/repetition-1/meltdown-ramp-tier-1--webgpu.png",
+      "sizeBytes": 664335,
+      "sha256": "312eaba63e64431da56bfe1fa0410d1b571e9033f02a3835bfe0ede0d780f0cf"
+    },
+    {
+      "path": "captures/repetition-1/meltdown-ramp-tier-2--webgl.png",
+      "sizeBytes": 672707,
+      "sha256": "b37172ffca23fe0c596f9c594d096f3f49014de76cf9d33f65d1fe49912ddfff"
+    },
+    {
+      "path": "captures/repetition-1/meltdown-ramp-tier-2--webgpu.png",
+      "sizeBytes": 749484,
+      "sha256": "4e52cb7903ab35aae0339c1a1e3b10dde02c81245841132501480ff33bfee025"
+    },
+    {
+      "path": "captures/repetition-1/meltdown-ramp-tier-3--webgl.png",
+      "sizeBytes": 694482,
+      "sha256": "c52fa919bd90c65e8fced018d9ae7884566331a0f81d88fdcee8592c3fa71fd3"
+    },
+    {
+      "path": "captures/repetition-1/meltdown-ramp-tier-3--webgpu.png",
+      "sizeBytes": 796971,
+      "sha256": "5d7d55db411ca1a658afc7a400b39bbfea56b3c579c58fb71c5173346bb84d48"
+    },
+    {
+      "path": "captures/repetition-1/meltdown-ramp-tier-4--webgl.png",
+      "sizeBytes": 714143,
+      "sha256": "e2b0a4ed7ace1b4ef7e77b76315fff5a110bbe6ccdf56c911845faf5950dfa28"
+    },
+    {
+      "path": "captures/repetition-1/meltdown-ramp-tier-4--webgpu.png",
+      "sizeBytes": 823996,
+      "sha256": "6f7d168be730fba8cc31dd2a979c4307bb15809d802b6eb1d1d04879910eb0e7"
+    },
+    {
+      "path": "captures/repetition-1/pretty-arena--webgl.png",
+      "sizeBytes": 822262,
+      "sha256": "a11c17274a9f4f96140057d99c7597186eda28bb962f9618e6cee6970f3732ce"
+    },
+    {
+      "path": "captures/repetition-1/pretty-arena--webgpu.png",
+      "sizeBytes": 515052,
+      "sha256": "01badc0f8d3c840b632b6dab01bea9398688a53ed00b8eb7f047baf3b0484634"
+    },
+    {
+      "path": "captures/repetition-1/showoff-track-motion--webgl.png",
+      "sizeBytes": 756823,
+      "sha256": "88303522cad4d072ff1e272337f727058cb1e60cc6871fb62cfbcf5256ee5fd6"
+    },
+    {
+      "path": "captures/repetition-1/showoff-track-motion--webgpu.png",
+      "sizeBytes": 561618,
+      "sha256": "52ae1d8615ec85814c71d1c113fc0ec33f34b9b2d236ea9721d7ae98e0f51728"
+    },
+    {
+      "path": "captures/stock/arena.png",
+      "sizeBytes": 488930,
+      "sha256": "edd6042e1aa57ef2838fb6924524c1e7397604ac35a4fd239bed77d46ca92685"
+    },
+    {
+      "path": "captures/stock/soak-final.png",
+      "sizeBytes": 281368,
+      "sha256": "0deafd1976d4d62886b944e3a5f980f8e60dcbe265bcdc8ec095d3b572731681"
+    },
+    {
+      "path": "captures/stock/soak-initial.png",
+      "sizeBytes": 502886,
+      "sha256": "f096d99c690e720ffa3c600569b382cf8e933e07ab7fd96bbddce465828ce8e3"
+    },
+    {
+      "path": "captures/stock/track.png",
+      "sizeBytes": 522942,
+      "sha256": "de5487c45397eee06d00cc6443ae6c471c7c538a650bddd8f405aff4fb1dd037"
+    },
+    {
+      "path": "captures/stock/training.png",
+      "sizeBytes": 563915,
+      "sha256": "1ff3234f8c66e7cd5956119c66328b732d6e009d06dd03ef052075de4a88a69a"
+    },
+    {
+      "path": "samples.ndjson.gz",
+      "sizeBytes": 2357783,
+      "sha256": "810d871349d243011b69184747f9d702676f6efd4f0671d90f6bf1e4db8b6184"
+    },
+    {
+      "path": "summary.json",
+      "sizeBytes": 364122,
+      "sha256": "0a53bdc89a63004a7182d047aad46131f6050b3ee076a072aaf6dac96b501e8d"
+    },
+    {
+      "path": "summary.md",
+      "sizeBytes": 25792,
+      "sha256": "f954e47b283fccdcb1db59a0b98a04098791bfce1468cda5dd2063cc211dec2e"
+    }
+  ]
+}

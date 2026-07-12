@@ -254,8 +254,8 @@ npm.cmd run benchmark:renderers:package
 
 The package command refuses a dirty Git tree, checks out the recorded commit in
 a temporary detached source worktree, runs `npm ci` from that commit's lockfile,
-builds those exact production assets, and
-owns the strict preview on `127.0.0.1:4183`; an existing listener is an error.
+builds those exact production assets, and owns the strict preview on
+`127.0.0.1:4183`; an existing listener is an error.
 It launches stable Chrome without fallback, verifies stock no-flags WebGPU in
 Arena, Track, and Training, completes a 120-second stock soak, then runs the
 fixed seven-case instrumented benchmark for four repetitions with 5-second
@@ -284,8 +284,12 @@ baseline and is not cross-hardware evidence.
 
 The July 11 RTX 4070 Ti note is retained as superseded historical evidence: it
 was captured from a dirty pre-column-stagger tree and must not be used as a v2
-baseline. The first replacement will be created by a later clean full packaged
-run; no replacement numbers are claimed here.
+baseline. The accepted replacement is tracked under
+`devlog/benchmark-baselines/rtx-4070-ti-2026-07-12-73df45e/`. Its clean stable-
+Chrome package passed all 28 semantic pairs and all acceptance gates; WebGPU
+remained stable through Meltdown tier 4 while WebGL reported no stable Meltdown
+tier under the strict measured-refresh budget. `auto` nevertheless remains
+WebGL at the Stage-0 zero-percent rollout.
 
 ## Development
 
