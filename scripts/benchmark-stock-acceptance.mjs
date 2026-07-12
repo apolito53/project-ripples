@@ -32,7 +32,8 @@ export async function runStockWebGpuAcceptance({
   browserChannel,
   headless,
   outputDirectory,
-  profile
+  profile,
+  registerOwnedBrowser = null
 }) {
   if (browserChannel !== "chrome") {
     throw new Error("Packaged stock acceptance requires the stable Chrome channel \"chrome\".");
@@ -44,8 +45,12 @@ export async function runStockWebGpuAcceptance({
   const browser = await chromium.launch({
     channel: browserChannel,
     headless,
-    args: []
+    args: [],
+    handleSIGHUP: false,
+    handleSIGINT: false,
+    handleSIGTERM: false
   });
+  const releaseOwnedBrowser = registerOwnedBrowser?.(browser) ?? (() => {});
 
   try {
     const context = await browser.newContext({
@@ -107,7 +112,13 @@ export async function runStockWebGpuAcceptance({
       }
     };
   } finally {
-    await browser.close();
+    let closed = false;
+    try {
+      await browser.close();
+      closed = true;
+    } finally {
+      if (closed) releaseOwnedBrowser();
+    }
   }
 }
 

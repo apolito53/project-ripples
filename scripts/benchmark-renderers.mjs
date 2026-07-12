@@ -135,12 +135,14 @@ export async function runRendererBenchmark(overrides = {}) {
   let browser;
   let context;
   let serverScope;
+  let releaseOwnedBrowser = () => {};
   let failure = null;
 
   try {
     serverScope = await ensureBenchmarkApp(config);
     const launch = await launchBrowser(config);
     browser = launch.browser;
+    releaseOwnedBrowser = config.registerOwnedBrowser?.(browser) ?? (() => {});
     metadataSources.browser = {
       name: "Chromium",
       version: browser.version(),
@@ -230,10 +232,14 @@ export async function runRendererBenchmark(overrides = {}) {
       }
     }
     if (browser) {
+      let closed = false;
       try {
         await browser.close();
+        closed = true;
       } catch (error) {
         cleanupErrors.push(`browser process: ${sanitizePortableDiagnostic(formatError(error))}`);
+      } finally {
+        if (closed) releaseOwnedBrowser();
       }
     }
     try {
@@ -657,7 +663,10 @@ function collectPageProblems(page) {
 async function launchBrowser(config) {
   const launchOptions = {
     headless: config.headless,
-    args: [...config.browserArgs]
+    args: [...config.browserArgs],
+    handleSIGHUP: !config.packageMode,
+    handleSIGINT: !config.packageMode,
+    handleSIGTERM: !config.packageMode
   };
   if (config.browserChannel) launchOptions.channel = config.browserChannel;
   return {
@@ -813,6 +822,9 @@ function readConfig(overrides = {}) {
     browserArgs: overrides.browserArgs ?? BENCHMARK_BROWSER_ARGS,
     profile: overrides.profile ?? "standard",
     packageMode: overrides.packageMode === true,
+    registerOwnedBrowser: typeof overrides.registerOwnedBrowser === "function"
+      ? overrides.registerOwnedBrowser
+      : null,
     captureFirstRepetition: overrides.captureFirstRepetition === true ||
       process.env.RIPPLE_BENCHMARK_CAPTURE_FIRST_REPETITION === "1"
   };

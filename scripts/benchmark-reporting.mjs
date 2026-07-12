@@ -581,8 +581,7 @@ export function renderSummaryMarkdown(summary) {
       : []),
     ...(summary.artifacts?.comparisonBaselineJson
       ? ["- `comparison-baseline.json`: checksummed prior baseline used for this regression decision"]
-      : []),
-    ""
+      : [])
   );
 
   return `${lines.join("\n")}\n`;

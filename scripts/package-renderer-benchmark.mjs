@@ -97,7 +97,8 @@ export async function packageRendererBenchmark() {
         browserChannel,
         headless,
         outputDirectory,
-        profile
+        profile,
+        registerOwnedBrowser: (browser) => lifecycle.registerBrowser(browser)
       });
     } catch (error) {
       stockFailure = error;
@@ -122,7 +123,8 @@ export async function packageRendererBenchmark() {
         packageMode: true,
         captureFirstRepetition: true,
         baselinePath: comparisonBaseline?.absolutePath ?? null,
-        baselineDisplayPath: comparisonBaseline?.relativePath ?? null
+        baselineDisplayPath: comparisonBaseline?.relativePath ?? null,
+        registerOwnedBrowser: (browser) => lifecycle.registerBrowser(browser)
       });
     } catch (error) {
       if (!error?.summary) throw error;
@@ -221,10 +223,15 @@ export async function packageRendererBenchmark() {
 }
 
 function createPackageLifecycle() {
+  const browsers = new Set();
   let preview = null;
   let sourceWorktree = null;
   let cleanupPromise = null;
   return {
+    registerBrowser(browser) {
+      browsers.add(browser);
+      return () => browsers.delete(browser);
+    },
     setPreview(value) {
       preview = value;
     },
@@ -235,6 +242,14 @@ function createPackageLifecycle() {
       if (cleanupPromise) return cleanupPromise;
       cleanupPromise = (async () => {
         const errors = [];
+        for (const browser of browsers) {
+          try {
+            await browser.close();
+          } catch (error) {
+            errors.push(new Error(`Browser cleanup failed: ${formatError(error)}`));
+          }
+        }
+        browsers.clear();
         if (preview) {
           try {
             await preview.shutdown();

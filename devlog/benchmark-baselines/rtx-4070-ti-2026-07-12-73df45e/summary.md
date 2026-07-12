@@ -417,4 +417,3 @@ Completed samples: 8
 - `acceptance.json`: per-machine stock, stability, timer, visual, and regression gates
 - `baseline.json`: accepted v2 baseline projection for later compatible comparisons
 - `manifest.json`: relative bundle inventory with SHA-256 checksums
-
