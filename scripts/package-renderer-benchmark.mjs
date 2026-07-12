@@ -5,6 +5,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { stripVTControlCharacters } from "node:util";
 import { delay } from "./ripple-smoke-harness.mjs";
 import {
   createPackageRunId,
@@ -454,7 +455,7 @@ async function startOwnedPreview(expectedIndexHtml, cwd = process.cwd(), onSpawn
   child.stdout.on("data", (chunk) => {
     const text = String(chunk);
     process.stdout.write(`[ripple-field-lab:preview] ${text}`);
-    previewOutput = `${previewOutput}${text}`.slice(-4_096);
+    previewOutput = `${previewOutput}${stripVTControlCharacters(text)}`.slice(-4_096);
     if (previewOutput.includes(PREVIEW_URL)) childAnnouncedPreview = true;
   });
   child.stderr.on("data", (chunk) => process.stderr.write(`[ripple-field-lab:preview] ${chunk}`));
