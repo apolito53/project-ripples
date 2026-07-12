@@ -277,7 +277,7 @@ function createPackageLifecycle() {
 function installInterruptCleanup(lifecycle) {
   let interrupting = false;
   const handlers = new Map();
-  for (const [signal, exitCode] of [["SIGINT", 130], ["SIGTERM", 143]]) {
+  for (const [signal, exitCode] of [["SIGHUP", 129], ["SIGINT", 130], ["SIGTERM", 143]]) {
     const handler = () => {
       if (interrupting) return;
       interrupting = true;
