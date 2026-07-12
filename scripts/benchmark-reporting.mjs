@@ -1,6 +1,21 @@
 const BACKENDS = ["webgl", "webgpu"];
 const DYNAMIC_SEMANTIC_FIELDS = ["activeParticles", "activeSources", "activeEchoes", "playerSpeed"];
 const MAX_MARKDOWN_METRICS = 40;
+const DECISION_GRADE_CASE_IDS = [
+  "pretty-arena",
+  "showoff-track-motion",
+  "meltdown-ramp-tier-0",
+  "meltdown-ramp-tier-1",
+  "meltdown-ramp-tier-2",
+  "meltdown-ramp-tier-3",
+  "meltdown-ramp-tier-4"
+];
+
+export const RENDERER_BENCHMARK_SCHEMA_VERSION = 2;
+export const RENDERER_BENCHMARK_PROTOCOL_VERSION =
+  "renderer-benchmark-v2-flat-top-column-stagger";
+export const RENDERER_BENCHMARK_WORKLOAD_VERSION =
+  "renderer-benchmark-v2-flat-top-column-stagger";
 
 export function normalizeBenchmarkSnapshot(snapshot, context) {
   assertSnapshotShape(snapshot, context.label);
@@ -14,6 +29,7 @@ export function normalizeBenchmarkSnapshot(snapshot, context) {
   for (let index = 0; index < samples.length; index += 1) {
     assertFrameSample(samples[index], index, context);
   }
+  assertSampleWindowCoverage(snapshot, samples, context);
 
   const metrics = buildMetrics(snapshot);
   const metricValues = flattenMetricValues(metrics);
@@ -21,7 +37,9 @@ export function normalizeBenchmarkSnapshot(snapshot, context) {
   assertExpectedSemantics(semanticSummary, context);
 
   return {
-    schemaVersion: 1,
+    schemaVersion: RENDERER_BENCHMARK_SCHEMA_VERSION,
+    protocolVersion: RENDERER_BENCHMARK_PROTOCOL_VERSION,
+    workloadVersion: RENDERER_BENCHMARK_WORKLOAD_VERSION,
     runId: context.runId,
     sequence: context.sequence,
     capturedAt: context.capturedAt,
@@ -84,6 +102,108 @@ export function compareSemanticParity(webglSample, webgpuSample) {
   };
 }
 
+/**
+ * Keep physical machine identity separate from software/runtime conditions.
+ * Controller inventory is intentionally reduced to display names and driver
+ * versions; raw Windows PNP identifiers never enter a portable artifact.
+ */
+export function normalizeBenchmarkMetadata({
+  host = {},
+  browser = {},
+  runtime = {},
+  renderers = {},
+  git = {},
+  package: packageMetadata = {}
+} = {}) {
+  const webgl = isRecord(renderers.webgl) ? renderers.webgl : {};
+  const webgpu = isRecord(renderers.webgpu) ? renderers.webgpu : {};
+  const webGpuAdapter = isRecord(webgpu.webGpuAdapter) ? webgpu.webGpuAdapter : {};
+  const webGpuAdapterSummary = typeof webgpu.webGpuAdapter === "string"
+    ? webgpu.webGpuAdapter
+    : null;
+  const gpuControllers = normalizeGpuControllers(host.gpuControllers);
+
+  return {
+    hardware: {
+      cpu: {
+        model: stringOrNull(host.cpuModel),
+        logicalProcessorCount: finiteOrNull(host.logicalCpuCount),
+        architecture: stringOrNull(host.arch)
+      },
+      memory: {
+        totalBytes: finiteOrNull(host.totalMemoryBytes)
+      },
+      selectedAdapters: {
+        webgl: compactRecord({
+          vendor: stringOrNull(webgl.webGlVendor),
+          renderer: stringOrNull(webgl.webGlRenderer)
+        }),
+        webgpu: compactRecord({
+          vendor: stringOrNull(webGpuAdapter.vendor),
+          architecture: stringOrNull(webGpuAdapter.architecture),
+          device: stringOrNull(webGpuAdapter.device),
+          description: stringOrNull(webGpuAdapter.description ?? webGpuAdapterSummary)
+        })
+      }
+    },
+    environment: {
+      os: compactRecord({
+        platform: stringOrNull(host.platform),
+        release: stringOrNull(host.release),
+        architecture: stringOrNull(host.arch)
+      }),
+      browser: compactRecord({
+        name: stringOrNull(browser.name),
+        version: stringOrNull(browser.version),
+        channel: stringOrNull(browser.channel),
+        headless: typeof browser.headless === "boolean" ? browser.headless : null,
+        displayRefreshIntervalMs: finiteOrNull(browser.displayRefreshIntervalMs)
+      }),
+      runtime: compactRecord({
+        userAgent: stringOrNull(runtime.userAgent),
+        platform: stringOrNull(runtime.platform),
+        language: stringOrNull(runtime.language),
+        hardwareConcurrency: finiteOrNull(runtime.hardwareConcurrency),
+        deviceMemoryGiB: finiteOrNull(runtime.deviceMemoryGiB),
+        devicePixelRatio: finiteOrNull(runtime.devicePixelRatio),
+        viewport: normalizeDimensions(runtime.viewport),
+        screen: normalizeDimensions(runtime.screen),
+        crossOriginIsolated: typeof runtime.crossOriginIsolated === "boolean"
+          ? runtime.crossOriginIsolated
+          : null
+      }),
+      rendererCapabilities: {
+        webgl: compactRecord({
+          version: stringOrNull(webgl.webGlVersion)
+        }),
+        webgpu: compactRecord({
+          preferredFormat: stringOrNull(webgpu.webGpuPreferredFormat),
+          timestampQueryEnabled: typeof webgpu.webGpuTimestampQuery === "boolean"
+            ? webgpu.webGpuTimestampQuery
+            : null,
+          features: normalizeStringArray(webgpu.webGpuFeatures),
+          limits: normalizeNumericRecord(webgpu.webGpuLimits)
+        })
+      },
+      gpuDrivers: gpuControllers,
+      powerPlan: stringOrNull(host.powerPlan),
+      nodeVersion: stringOrNull(host.nodeVersion),
+      freeMemoryBytesAtStart: finiteOrNull(host.freeMemoryBytesAtStart)
+    },
+    sourceControl: compactRecord({
+      commit: stringOrNull(git.commit),
+      branch: stringOrNull(git.branch),
+      dirty: typeof git.dirty === "boolean" ? git.dirty : null,
+      status: normalizeStringArray(git.status)
+    }),
+    package: compactRecord({
+      name: stringOrNull(packageMetadata.name),
+      version: stringOrNull(packageMetadata.version),
+      playwrightVersion: stringOrNull(packageMetadata.playwrightVersion)
+    })
+  };
+}
+
 export function buildBenchmarkSummary({ run, samples, parityChecks, failure = null }) {
   const scenarios = {};
 
@@ -112,7 +232,9 @@ export function buildBenchmarkSummary({ run, samples, parityChecks, failure = nu
   const stableStressTiers = getStableStressTiers(run.config.cases, scenarios);
 
   return {
-    schemaVersion: 1,
+    schemaVersion: RENDERER_BENCHMARK_SCHEMA_VERSION,
+    protocolVersion: RENDERER_BENCHMARK_PROTOCOL_VERSION,
+    workloadVersion: RENDERER_BENCHMARK_WORKLOAD_VERSION,
     runId: run.runId,
     status: failure ? "failed" : semanticParityPassed ? "passed" : "failed",
     startedAt: run.startedAt,
@@ -128,19 +250,84 @@ export function buildBenchmarkSummary({ run, samples, parityChecks, failure = nu
       expectedChecks: run.expectedPairCount,
       checks: parityChecks
     },
+    runtimeHealth: summarizeRuntimeHealth(samples),
     stableStressTiers,
     scenarios,
     artifacts: {
       summaryJson: "summary.json",
-      samplesNdjson: "samples.ndjson",
-      summaryMarkdown: "summary.md"
+      samplesNdjsonGzip: "samples.ndjson.gz",
+      summaryMarkdown: "summary.md",
+      representativeCaptures: samples
+        .filter((sample) => typeof sample.capturePath === "string")
+        .map((sample) => ({
+          caseId: sample.caseId,
+          renderer: sample.renderer,
+          repetition: sample.repetition,
+          path: sample.capturePath
+        }))
     },
     failure
   };
 }
 
+export function createBenchmarkBaseline(summary, { eligible = true, acceptanceStatus = null } = {}) {
+  assertBenchmarkSummaryProtocol(summary, "benchmark summary");
+  return {
+    schemaVersion: RENDERER_BENCHMARK_SCHEMA_VERSION,
+    protocolVersion: RENDERER_BENCHMARK_PROTOCOL_VERSION,
+    workloadVersion: RENDERER_BENCHMARK_WORKLOAD_VERSION,
+    baselineKind: "renderer-benchmark-baseline",
+    eligible,
+    acceptanceStatus,
+    sourceRun: {
+      runId: summary.runId,
+      startedAt: summary.startedAt,
+      finishedAt: summary.finishedAt,
+      status: summary.status
+    },
+    metadata: cloneJsonValue(summary.metadata),
+    config: getComparableConfig(summary.config),
+    stableStressTiers: cloneJsonValue(summary.stableStressTiers),
+    scenarios: cloneBaselineScenarios(summary)
+  };
+}
+
 export function compareBenchmarkBaseline(summary, baseline) {
-  const sameHardware = getHardwareSignature(summary.metadata) === getHardwareSignature(baseline.metadata);
+  assertBenchmarkSummaryProtocol(summary, "current benchmark summary");
+  if (!isRecord(baseline)) {
+    throw new Error("Benchmark baseline must be a JSON object.");
+  }
+
+  const compatibilityReasons = getBaselineCompatibilityReasons(summary, baseline);
+  if (compatibilityReasons.length > 0) {
+    return {
+      classification: "incompatible",
+      sameHardware: false,
+      status: "incompatible",
+      reasons: compatibilityReasons,
+      findings: []
+    };
+  }
+
+  assertCompatibleBaselineShape(baseline);
+  const hardwareDifferences = collectComparisonPaths(
+    getHardwareIdentity(summary.metadata),
+    getHardwareIdentity(baseline.metadata)
+  );
+  const environmentDifferences = collectComparisonPaths(
+    summary.metadata?.environment ?? {},
+    baseline.metadata?.environment ?? {}
+  );
+  const currentRefreshIntervalMs = summary.metadata?.environment?.browser?.displayRefreshIntervalMs;
+  const baselineRefreshIntervalMs = baseline.metadata?.environment?.browser?.displayRefreshIntervalMs;
+  const refreshIntervalComparable = areRefreshIntervalsComparable(
+    currentRefreshIntervalMs,
+    baselineRefreshIntervalMs
+  );
+  const hardwareIdentityAvailable = hasMeaningfulHardwareIdentity(summary.metadata) &&
+    hasMeaningfulHardwareIdentity(baseline.metadata);
+  const sameHardware = hardwareIdentityAvailable && hardwareDifferences.length === 0;
+  const regressionComparable = sameHardware && refreshIntervalComparable;
   const findings = [];
   for (const benchmarkCase of summary.config.cases) {
     for (const backend of BACKENDS) {
@@ -180,18 +367,160 @@ export function compareBenchmarkBaseline(summary, baseline) {
     }
   }
 
-  const effectiveFindings = sameHardware ? findings : findings.map((finding) => ({
+  const effectiveFindings = regressionComparable ? findings : findings.map((finding) => ({
     ...finding,
     severity: "info"
   }));
+  const classification = regressionComparable ? "comparable" : "informational";
+  const reasons = regressionComparable
+    ? [
+        "Physical hardware and display-refresh budget match; same-machine 10% warning and 20% failure thresholds apply.",
+        ...(environmentDifferences.length > 0
+          ? [`Environment differences recorded: ${environmentDifferences.join(", ")}.`]
+          : ["Environment metadata matches."])
+      ]
+    : buildInformationalComparisonReasons({
+        hardwareIdentityAvailable,
+        hardwareDifferences,
+        refreshIntervalComparable,
+        currentRefreshIntervalMs,
+        baselineRefreshIntervalMs
+      });
   return {
+    classification,
     sameHardware,
-    status: effectiveFindings.some((finding) => finding.severity === "fail")
-      ? "failed"
-      : effectiveFindings.some((finding) => finding.severity === "warn")
-        ? "warning"
-        : "passed",
+    status: classification === "informational"
+      ? "informational"
+      : effectiveFindings.some((finding) => finding.severity === "fail")
+        ? "failed"
+        : effectiveFindings.some((finding) => finding.severity === "warn")
+          ? "warning"
+          : "passed",
+    reasons,
     findings: effectiveFindings
+  };
+}
+
+export function buildBenchmarkAcceptance({
+  summary,
+  stock,
+  cleanTree,
+  packageLifecycle = {
+    passed: true,
+    detail: "Package lifecycle was not separately evaluated."
+  },
+  packageProfile,
+  requiredSoakMs
+}) {
+  assertBenchmarkSummaryProtocol(summary, "benchmark summary");
+  const normalCaseIds = ["pretty-arena", "showoff-track-motion"];
+  const timerReports = [];
+  for (const benchmarkCase of summary.config.cases) {
+    for (const backend of BACKENDS) {
+      const report = summary.scenarios?.[benchmarkCase.id]?.backends?.[backend];
+      timerReports.push({ caseId: benchmarkCase.id, backend, report });
+    }
+  }
+
+  const minimumTimerCoverage = Math.min(...timerReports.map(({ report }) =>
+    report?.metrics?.gpuFrameAvailabilityRatio?.min ?? Number.NEGATIVE_INFINITY
+  ));
+  const maximumTimerErrors = Math.max(...timerReports.map(({ report }) =>
+    report?.metrics?.gpuTimerErrorCount?.max ?? Number.POSITIVE_INFINITY
+  ));
+  const normalWebGpuStable = normalCaseIds.every((caseId) =>
+    summary.scenarios?.[caseId]?.backends?.webgpu?.allSamplesStable === true
+  );
+  const stockModes = new Set((stock?.modes ?? []).filter((item) => item.passed).map((item) => item.mode));
+  const visualChecks = stock?.visualChecks ?? [];
+  const comparison = summary.regression ?? null;
+  const decisionGrade = packageProfile === "cross-hardware-acceptance";
+  const decisionGradeProtocol = evaluateDecisionGradeProtocol(summary, packageProfile);
+  const stockAdapterConsistency = evaluateStockAdapterConsistency(stock, summary.metadata);
+  const observedSoakMs = stock?.soak?.observedDurationMs;
+  const soakToleranceMs = Math.min(250, requiredSoakMs * 0.01);
+
+  const gates = {
+    decisionGradeProtocol: gate(
+      decisionGradeProtocol.passed,
+      decisionGradeProtocol.detail
+    ),
+    cleanTree: gate(Boolean(cleanTree?.passed), cleanTree?.detail ?? "Git tree must be clean before packaging."),
+    packageLifecycle: gate(
+      Boolean(packageLifecycle?.passed),
+      packageLifecycle?.detail ?? "Strict preview and source cleanup must complete before acceptance."
+    ),
+    benchmarkCompleted: gate(
+      summary.status === "passed",
+      summary.status === "passed" ? "Instrumented benchmark completed." : summary.failure?.message ?? "Benchmark failed."
+    ),
+    semanticParity: gate(
+      summary.semanticParity.passed,
+      `${summary.semanticParity.passedChecks}/${summary.semanticParity.expectedChecks} paired checks passed.`
+    ),
+    stockModes: gate(
+      ["arena", "track", "training"].every((mode) => stockModes.has(mode)),
+      `Passed stock modes: ${[...stockModes].sort().join(", ") || "none"}.`
+    ),
+    stockSoak: gate(
+      stock?.soak?.passed === true &&
+        stock.soak.requestedDurationMs >= requiredSoakMs &&
+        Number.isFinite(observedSoakMs) && observedSoakMs >= requiredSoakMs - soakToleranceMs,
+      `Observed ${stock?.soak?.observedDurationMs ?? 0} ms of the required ${requiredSoakMs} ms stock soak.`
+    ),
+    adapterConsistency: gate(
+      stockAdapterConsistency.passed,
+      stockAdapterConsistency.detail
+    ),
+    runtimeHealth: gate(
+      stock?.health?.passed === true && summary.runtimeHealth.passed === true,
+      `Stock problems=${stock?.health?.problemCount ?? "unknown"}; benchmark problems=${summary.runtimeHealth.problemCount}.`
+    ),
+    webGpuPrettyShowoffStable: gate(
+      normalWebGpuStable,
+      "WebGPU Pretty Arena and Showoff Track must have every repetition marked stable."
+    ),
+    timerCoverage: gate(
+      Number.isFinite(minimumTimerCoverage) && minimumTimerCoverage >= 0.25,
+      `Minimum fresh GPU timer coverage was ${Number.isFinite(minimumTimerCoverage) ? formatPercent(minimumTimerCoverage * 100) : "unavailable"}; required >=25%.`
+    ),
+    timerErrors: gate(
+      maximumTimerErrors === 0,
+      `Maximum reported GPU timer error count was ${Number.isFinite(maximumTimerErrors) ? maximumTimerErrors : "unavailable"}.`
+    ),
+    visualBounds: gate(
+      visualChecks.length >= 4 && visualChecks.every((item) => item.passed),
+      `${visualChecks.filter((item) => item.passed).length}/${visualChecks.length} stock canvas checks stayed within bounds.`
+    ),
+    baselineRegression: gate(
+      comparison === null || comparison.classification === "informational" || comparison.status === "passed",
+      comparison === null
+        ? "No prior baseline was supplied; this accepted run may become the v2 baseline."
+        : `${comparison.classification}: ${comparison.status}.`
+    )
+  };
+  const failedGateIds = Object.entries(gates)
+    .filter(([, value]) => !value.passed)
+    .map(([id]) => id);
+
+  return {
+    schemaVersion: RENDERER_BENCHMARK_SCHEMA_VERSION,
+    protocolVersion: RENDERER_BENCHMARK_PROTOCOL_VERSION,
+    workloadVersion: RENDERER_BENCHMARK_WORKLOAD_VERSION,
+    runId: summary.runId,
+    packageProfile,
+    decisionGrade,
+    status: failedGateIds.length > 0 ? "failed" : decisionGrade ? "passed" : "test-only-passed",
+    thresholds: {
+      timerCoverageMinimum: 0.25,
+      sameMachineWarningPercent: 10,
+      sameMachineFailurePercent: 20,
+      stockSoakMs: requiredSoakMs
+    },
+    gates,
+    failedGateIds,
+    comparison,
+    stock
   };
 }
 
@@ -201,6 +530,8 @@ export function renderSummaryMarkdown(summary) {
     "",
     `- Status: **${summary.status.toUpperCase()}**`,
     `- Run: \`${escapeInline(summary.runId)}\``,
+    `- Protocol: \`${escapeInline(summary.protocolVersion)}\``,
+    `- Workload: \`${escapeInline(summary.workloadVersion)}\``,
     `- Started: ${summary.startedAt}`,
     `- Duration: ${formatDuration(summary.durationMs)}`,
     `- App URL: \`${escapeInline(summary.config.appUrl)}\``,
@@ -216,6 +547,7 @@ export function renderSummaryMarkdown(summary) {
   appendParity(lines, summary.semanticParity);
   appendStability(lines, summary.stableStressTiers);
   appendRegression(lines, summary.regression);
+  appendAcceptance(lines, summary.acceptance);
 
   for (const benchmarkCase of summary.config.cases) {
     appendScenario(lines, summary.scenarios[benchmarkCase.id]);
@@ -234,8 +566,22 @@ export function renderSummaryMarkdown(summary) {
     "## Artifacts",
     "",
     "- `summary.json`: configuration, metadata, aggregates, and parity checks",
-    "- `samples.ndjson`: one normalized raw record per completed backend sample",
+    "- `samples.ndjson.gz`: gzip-compressed normalized record per completed backend sample",
     "- `summary.md`: this human-readable report",
+    ...(summary.artifacts?.acceptanceJson
+      ? ["- `acceptance.json`: per-machine stock, stability, timer, visual, and regression gates"]
+      : []),
+    ...(summary.artifacts?.baselineJson
+      ? [summary.acceptance?.status === "passed" && summary.acceptance?.decisionGrade === true
+          ? "- `baseline.json`: accepted v2 baseline projection for later compatible comparisons"
+          : "- `baseline.json`: ineligible current-run projection retained for audit only"]
+      : []),
+    ...(summary.artifacts?.manifestJson
+      ? ["- `manifest.json`: relative bundle inventory with SHA-256 checksums"]
+      : []),
+    ...(summary.artifacts?.comparisonBaselineJson
+      ? ["- `comparison-baseline.json`: checksummed prior baseline used for this regression decision"]
+      : []),
     ""
   );
 
@@ -338,6 +684,52 @@ function assertFrameSample(sample, index, context) {
     if (typeof semantic[field] !== "boolean") {
       throw new Error(`${label}.semantic.${field} must be boolean.`);
     }
+  }
+}
+
+function assertSampleWindowCoverage(snapshot, samples, context) {
+  const requestedSampleMs = context.sampleMs;
+  const allowedWindowShortfallMs = Math.min(500, requestedSampleMs * 0.1);
+  const minimumWindowMs = requestedSampleMs - allowedWindowShortfallMs;
+  const observedPhaseMs = snapshot.stoppedAtMs - snapshot.startedAtMs;
+  if (observedPhaseMs < minimumWindowMs) {
+    throw new Error(
+      `${context.label} sampled for ${round(observedPhaseMs)} ms; expected at least ` +
+      `${round(minimumWindowMs)} ms of the requested ${requestedSampleMs} ms window.`
+    );
+  }
+
+  const firstTimestampMs = samples[0].timestampMs;
+  const lastTimestampMs = samples[samples.length - 1].timestampMs;
+  const observedFrameSpanMs = lastTimestampMs - firstTimestampMs;
+  if (observedFrameSpanMs < minimumWindowMs) {
+    throw new Error(
+      `${context.label} frame samples span ${round(observedFrameSpanMs)} ms; expected at least ` +
+      `${round(minimumWindowMs)} ms. The renderer may have stopped producing frames.`
+    );
+  }
+
+  const minimumSampleCount = Math.max(2, Math.floor(requestedSampleMs / 250));
+  if (samples.length < minimumSampleCount) {
+    throw new Error(
+      `${context.label} returned ${samples.length} frames; expected at least ${minimumSampleCount} ` +
+      `across the ${requestedSampleMs} ms sample window.`
+    );
+  }
+
+  let maximumFrameGapMs = 0;
+  for (let index = 1; index < samples.length; index += 1) {
+    const frameGapMs = samples[index].timestampMs - samples[index - 1].timestampMs;
+    if (frameGapMs <= 0) {
+      throw new Error(`${context.label} frame timestamps must increase strictly.`);
+    }
+    maximumFrameGapMs = Math.max(maximumFrameGapMs, frameGapMs);
+  }
+  if (maximumFrameGapMs > 500) {
+    throw new Error(
+      `${context.label} observed a ${round(maximumFrameGapMs)} ms frame gap; ` +
+      "acceptance samples may not hide a renderer stall."
+    );
   }
 }
 
@@ -620,9 +1012,11 @@ function appendRegression(lines, regression) {
   lines.push(
     "## Baseline Comparison",
     "",
-    `Status: **${regression.status.toUpperCase()}** (${regression.sameHardware ? "same hardware" : "cross-machine informational"})`,
+    `Status: **${regression.status.toUpperCase()}** (${regression.classification})`,
     ""
   );
+  for (const reason of regression.reasons ?? []) lines.push(`- ${escapeMarkdown(reason)}`);
+  if ((regression.reasons ?? []).length > 0) lines.push("");
   if (regression.findings.length === 0) return;
   lines.push("| Severity | Case | Backend | Metric | Change |", "| --- | --- | --- | --- | ---: |");
   for (const finding of regression.findings) {
@@ -634,12 +1028,329 @@ function appendRegression(lines, regression) {
   lines.push("");
 }
 
-function getHardwareSignature(metadata) {
-  return JSON.stringify({
-    cpuModel: metadata?.host?.cpuModel ?? null,
-    gpuControllers: metadata?.host?.gpuControllers ?? null,
-    browserChannel: metadata?.browser?.channel ?? null
-  });
+function appendAcceptance(lines, acceptance) {
+  if (!acceptance) return;
+  lines.push(
+    "## Packaged Acceptance",
+    "",
+    `Result: **${acceptance.status.toUpperCase()}**`,
+    "",
+    "| Gate | Result | Detail |",
+    "| --- | --- | --- |"
+  );
+  for (const [id, result] of Object.entries(acceptance.gates ?? {})) {
+    lines.push(
+      `| ${escapeCell(id)} | ${result.passed ? "PASS" : "FAIL"} | ${escapeCell(result.detail)} |`
+    );
+  }
+  lines.push("");
+}
+
+function summarizeRuntimeHealth(samples) {
+  let problemCount = 0;
+  let deviceLostSampleCount = 0;
+  for (const sample of samples) {
+    const problems = sample.pageProblems ?? {};
+    problemCount += (problems.consoleErrors?.length ?? 0) +
+      (problems.pageErrors?.length ?? 0) +
+      (problems.crashes?.length ?? 0);
+    if (sample.semantics?.deviceLost === true) deviceLostSampleCount += 1;
+  }
+  return {
+    passed: problemCount === 0 && deviceLostSampleCount === 0,
+    problemCount,
+    deviceLostSampleCount
+  };
+}
+
+function normalizeGpuControllers(value) {
+  const controllers = Array.isArray(value) ? value : isRecord(value) ? [value] : [];
+  return controllers
+    .map((controller) => compactRecord({
+      name: stringOrNull(controller.Name ?? controller.name),
+      driverVersion: stringOrNull(controller.DriverVersion ?? controller.driverVersion)
+    }))
+    .filter((controller) => Object.keys(controller).length > 0)
+    .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+}
+
+function normalizeDimensions(value) {
+  if (!isRecord(value)) return null;
+  const width = finiteOrNull(value.width);
+  const height = finiteOrNull(value.height);
+  return width === null && height === null ? null : compactRecord({ width, height });
+}
+
+function normalizeNumericRecord(value) {
+  if (!isRecord(value)) return null;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, entry]) => Number.isFinite(entry))
+      .sort(([left], [right]) => left.localeCompare(right))
+  );
+}
+
+function normalizeStringArray(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(stringOrNull)
+    .filter((entry) => entry !== null)
+    .sort();
+}
+
+function compactRecord(value) {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== null && entry !== undefined)
+  );
+}
+
+function stringOrNull(value) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  if (!normalized || /(?:PNPDeviceID|(?:PCI|USB)\\(?:VEN|VID)_)/i.test(normalized)) return null;
+  return normalized;
+}
+
+function finiteOrNull(value) {
+  return Number.isFinite(value) ? value : null;
+}
+
+function gate(passed, detail) {
+  return { passed: Boolean(passed), detail };
+}
+
+function assertBenchmarkSummaryProtocol(summary, label) {
+  if (!isRecord(summary)) throw new Error(`${label} must be an object.`);
+  if (summary.schemaVersion !== RENDERER_BENCHMARK_SCHEMA_VERSION ||
+    summary.protocolVersion !== RENDERER_BENCHMARK_PROTOCOL_VERSION ||
+    summary.workloadVersion !== RENDERER_BENCHMARK_WORKLOAD_VERSION) {
+    throw new Error(
+      `${label} does not use ${RENDERER_BENCHMARK_PROTOCOL_VERSION}. ` +
+      `Observed schema=${JSON.stringify(summary.schemaVersion)}, ` +
+      `protocol=${JSON.stringify(summary.protocolVersion)}, ` +
+      `workload=${JSON.stringify(summary.workloadVersion)}.`
+    );
+  }
+}
+
+function getBaselineCompatibilityReasons(summary, baseline) {
+  const reasons = [];
+  if (baseline.schemaVersion !== summary.schemaVersion) {
+    reasons.push(
+      `Schema mismatch: current=${JSON.stringify(summary.schemaVersion)}, baseline=${JSON.stringify(baseline.schemaVersion)}.`
+    );
+  }
+  if (baseline.protocolVersion !== summary.protocolVersion) {
+    reasons.push(
+      `Protocol mismatch: current=${JSON.stringify(summary.protocolVersion)}, baseline=${JSON.stringify(baseline.protocolVersion)}.`
+    );
+  }
+  if (baseline.workloadVersion !== summary.workloadVersion) {
+    reasons.push(
+      `Workload mismatch: current=${JSON.stringify(summary.workloadVersion)}, baseline=${JSON.stringify(baseline.workloadVersion)}.`
+    );
+  }
+  if (reasons.length > 0) return reasons;
+
+  if (baseline.baselineKind !== "renderer-benchmark-baseline") {
+    reasons.push(`Baseline kind was ${JSON.stringify(baseline.baselineKind)}.`);
+  }
+  if (baseline.eligible !== true) {
+    reasons.push("Baseline is not marked eligible by a passed packaged acceptance run.");
+  }
+  if (isRecord(baseline.config)) {
+    const configDifferences = collectComparisonPaths(getComparableConfig(summary.config), baseline.config);
+    if (configDifferences.length > 0) {
+      reasons.push(`Benchmark configuration differs at: ${configDifferences.join(", ")}.`);
+    }
+  }
+  return reasons;
+}
+
+function assertCompatibleBaselineShape(baseline) {
+  if (!isRecord(baseline.metadata?.hardware) || !isRecord(baseline.metadata?.environment)) {
+    throw new Error("Compatible benchmark baseline metadata must contain hardware and environment objects.");
+  }
+  if (!isRecord(baseline.config) || !Array.isArray(baseline.config.cases) ||
+    !Array.isArray(baseline.config.backends)) {
+    throw new Error("Compatible benchmark baseline config must contain cases and backends arrays.");
+  }
+  if (!isRecord(baseline.stableStressTiers) || !isRecord(baseline.scenarios)) {
+    throw new Error("Compatible benchmark baseline must contain stableStressTiers and scenarios objects.");
+  }
+  for (const benchmarkCase of baseline.config.cases) {
+    if (!isRecord(benchmarkCase) || typeof benchmarkCase.id !== "string") {
+      throw new Error("Compatible benchmark baseline contains a malformed case descriptor.");
+    }
+    const scenario = baseline.scenarios[benchmarkCase.id];
+    if (!isRecord(scenario?.backends?.webgl?.metrics) ||
+      !isRecord(scenario?.backends?.webgpu?.metrics)) {
+      throw new Error(
+        `Compatible benchmark baseline case ${benchmarkCase.id} must contain WebGL and WebGPU metrics.`
+      );
+    }
+  }
+}
+
+function getComparableConfig(config) {
+  return {
+    profile: config?.profile ?? "standard",
+    viewport: cloneJsonValue(config?.viewport ?? null),
+    deviceScaleFactor: config?.deviceScaleFactor ?? null,
+    cases: cloneJsonValue(config?.cases ?? []),
+    backends: cloneJsonValue(config?.backends ?? []),
+    seed: config?.seed ?? null,
+    warmupMs: config?.warmupMs ?? null,
+    sampleMs: config?.sampleMs ?? null,
+    repetitions: config?.repetitions ?? null,
+    headless: config?.headless ?? null,
+    browserChannel: config?.browserChannel ?? null,
+    browserArgs: cloneJsonValue(config?.browserArgs ?? [])
+  };
+}
+
+function cloneBaselineScenarios(summary) {
+  return Object.fromEntries(summary.config.cases.map((benchmarkCase) => {
+    const scenario = summary.scenarios[benchmarkCase.id];
+    return [benchmarkCase.id, {
+      scenario: scenario.scenario,
+      tier: scenario.tier,
+      label: scenario.label,
+      backends: {
+        webgl: cloneJsonValue(scenario.backends.webgl),
+        webgpu: cloneJsonValue(scenario.backends.webgpu)
+      }
+    }];
+  }));
+}
+
+function getHardwareIdentity(metadata) {
+  return {
+    cpu: cloneJsonValue(metadata?.hardware?.cpu ?? {}),
+    memory: cloneJsonValue(metadata?.hardware?.memory ?? {}),
+    selectedAdapters: cloneJsonValue(metadata?.hardware?.selectedAdapters ?? {})
+  };
+}
+
+function hasMeaningfulHardwareIdentity(metadata) {
+  const hardware = metadata?.hardware;
+  const cpuModel = hardware?.cpu?.model;
+  const adapters = hardware?.selectedAdapters;
+  const webGlRenderer = adapters?.webgl?.renderer;
+  const webGpuAdapter = adapters?.webgpu;
+  return typeof cpuModel === "string" && cpuModel.length > 0 &&
+    (typeof webGlRenderer === "string" && webGlRenderer.length > 0 ||
+      getAdapterIdentityKey(webGpuAdapter) !== null);
+}
+
+function areRefreshIntervalsComparable(current, baseline) {
+  if (!Number.isFinite(current) || !Number.isFinite(baseline) || current <= 0 || baseline <= 0) {
+    return false;
+  }
+  const relativeDifference = Math.abs(current - baseline) / Math.max(current, baseline);
+  return relativeDifference <= 0.1;
+}
+
+function buildInformationalComparisonReasons({
+  hardwareIdentityAvailable,
+  hardwareDifferences,
+  refreshIntervalComparable,
+  currentRefreshIntervalMs,
+  baselineRefreshIntervalMs
+}) {
+  const reasons = [];
+  if (!hardwareIdentityAvailable) {
+    reasons.push("One or both runs lack a complete physical hardware identity.");
+  } else if (hardwareDifferences.length > 0) {
+    reasons.push(`Physical hardware differs at: ${hardwareDifferences.join(", ")}.`);
+  }
+  if (!refreshIntervalComparable) {
+    reasons.push(
+      `Display refresh budgets differ or are unavailable: current=${JSON.stringify(currentRefreshIntervalMs)}, ` +
+      `baseline=${JSON.stringify(baselineRefreshIntervalMs)}.`
+    );
+  }
+  reasons.push("Regression deltas are informational and cannot fail acceptance.");
+  return reasons;
+}
+
+function evaluateStockAdapterConsistency(stock, metadata) {
+  const stockAdapters = [
+    ...(stock?.modes ?? []).map((item) => item.selectedAdapter),
+    stock?.soak?.selectedAdapter
+  ];
+  const stockKeys = stockAdapters.map(getAdapterIdentityKey).filter((value) => value !== null);
+  const benchmarkKey = getAdapterIdentityKey(metadata?.hardware?.selectedAdapters?.webgpu);
+  const uniqueStockKeys = [...new Set(stockKeys)];
+  const expectedStockCount = (stock?.modes?.length ?? 0) + (stock?.soak ? 1 : 0);
+  const passed = expectedStockCount >= 4 && stockKeys.length === expectedStockCount &&
+    uniqueStockKeys.length === 1 && benchmarkKey !== null && uniqueStockKeys[0] === benchmarkKey;
+  return {
+    passed,
+    detail: passed
+      ? `Stock and instrumented runs selected ${benchmarkKey}.`
+      : `Stock adapters=${uniqueStockKeys.join(" | ") || "unavailable"}; ` +
+        `instrumented adapter=${benchmarkKey ?? "unavailable"}.`
+  };
+}
+
+function evaluateDecisionGradeProtocol(summary, packageProfile) {
+  if (packageProfile !== "cross-hardware-acceptance") {
+    return {
+      passed: true,
+      detail: `${packageProfile} is a tooling-only profile and cannot mint an eligible baseline.`
+    };
+  }
+  const caseIds = (summary.config?.cases ?? []).map((item) => item.id);
+  const passed = summary.config?.profile === packageProfile &&
+    summary.config?.warmupMs === 5_000 &&
+    summary.config?.sampleMs === 15_000 &&
+    summary.config?.repetitions === 4 &&
+    JSON.stringify(caseIds) === JSON.stringify(DECISION_GRADE_CASE_IDS) &&
+    summary.semanticParity?.expectedChecks === 28 &&
+    summary.expectedSampleCount === 56;
+  return {
+    passed,
+    detail: passed
+      ? "Decision-grade protocol contains seven fixed cases, four repetitions, 28 pairs, and 56 samples."
+      : "Decision-grade profile must use the fixed seven-case, four-repetition, 5s/15s protocol."
+  };
+}
+
+function getAdapterIdentityKey(value) {
+  if (!isRecord(value)) return null;
+  const parts = ["vendor", "architecture", "device", "description"]
+    .map((key) => stringOrNull(value[key])?.toLowerCase() ?? null)
+    .filter((entry) => entry !== null);
+  return parts.length > 0 ? parts.join(" / ") : null;
+}
+
+function collectComparisonPaths(left, right, limit = 16) {
+  const paths = [];
+  const visit = (leftValue, rightValue, currentPath) => {
+    if (paths.length >= limit || Object.is(leftValue, rightValue)) return;
+    if (Array.isArray(leftValue) || Array.isArray(rightValue)) {
+      if (!Array.isArray(leftValue) || !Array.isArray(rightValue) ||
+        JSON.stringify(leftValue) !== JSON.stringify(rightValue)) {
+        paths.push(currentPath || "<root>");
+      }
+      return;
+    }
+    if (isRecord(leftValue) && isRecord(rightValue)) {
+      const keys = [...new Set([...Object.keys(leftValue), ...Object.keys(rightValue)])].sort();
+      for (const key of keys) {
+        visit(leftValue[key], rightValue[key], currentPath ? `${currentPath}.${key}` : key);
+      }
+      return;
+    }
+    paths.push(currentPath || "<root>");
+  };
+  visit(left, right, "");
+  return paths;
+}
+
+function cloneJsonValue(value) {
+  return value === undefined ? null : JSON.parse(JSON.stringify(value));
 }
 
 function compareBackendMetrics(webglMetrics, webgpuMetrics) {
@@ -764,25 +1475,30 @@ function collectDifferences(left, right, fieldPath, differences) {
 }
 
 function appendEnvironment(lines, metadata) {
-  const host = metadata.host ?? {};
-  const browser = metadata.browser ?? {};
-  const runtime = metadata.runtime ?? {};
-  const webgpu = runtime.webgpu ?? {};
+  const hardware = metadata.hardware ?? {};
+  const environment = metadata.environment ?? {};
+  const cpu = hardware.cpu ?? {};
+  const memory = hardware.memory ?? {};
+  const browser = environment.browser ?? {};
+  const runtime = environment.runtime ?? {};
+  const webgl = hardware.selectedAdapters?.webgl ?? {};
+  const webgpu = hardware.selectedAdapters?.webgpu ?? {};
+  const osMetadata = environment.os ?? {};
 
   lines.push(
     "## Environment",
     "",
     "| Item | Value |",
     "| --- | --- |",
-    `| OS | ${escapeCell(`${host.platform ?? "unknown"} ${host.release ?? ""} ${host.arch ?? ""}`.trim())} |`,
-    `| CPU | ${escapeCell(`${host.cpuModel ?? "unknown"} (${host.logicalCpuCount ?? "?"} logical)`)} |`,
-    `| Memory | ${formatBytes(host.totalMemoryBytes)} |`,
+    `| OS | ${escapeCell(`${osMetadata.platform ?? "unknown"} ${osMetadata.release ?? ""} ${osMetadata.architecture ?? ""}`.trim())} |`,
+    `| CPU | ${escapeCell(`${cpu.model ?? "unknown"} (${cpu.logicalProcessorCount ?? "?"} logical)`)} |`,
+    `| Memory | ${formatBytes(memory.totalBytes)} |`,
     `| Browser | ${escapeCell(`${browser.name ?? "Chromium"} ${browser.version ?? "unknown"}`)} |`,
     `| Channel | ${escapeCell(browser.channel ?? "bundled Chromium")} |`,
     `| User agent | ${escapeCell(runtime.userAgent ?? "unavailable")} |`,
-    `| WebGL GPU | ${escapeCell(runtime.webgl?.renderer ?? "unavailable")} |`,
+    `| WebGL GPU | ${escapeCell(webgl.renderer ?? "unavailable")} |`,
     `| WebGPU adapter | ${escapeCell(webgpu.description || webgpu.device || "unavailable")} |`,
-    `| Git | ${escapeCell(formatGit(metadata.git))} |`,
+    `| Git | ${escapeCell(formatGit(metadata.sourceControl))} |`,
     ""
   );
 }

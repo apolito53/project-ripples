@@ -218,7 +218,9 @@ server on `4183` when needed, and compares WebGL with WebGPU at a fixed
 Meltdown field ramp with balanced backend order and four thermally rotated
 repetitions.
 Results are written under `benchmark-results/<timestamp>/` as `summary.json`,
-`samples.ndjson`, and `summary.md`.
+`samples.ndjson.gz`, and `summary.md`. Set
+`RIPPLE_BENCHMARK_CAPTURE_FIRST_REPETITION=1` when the standalone benchmark
+also needs representative canvas captures.
 
 The page-side benchmark API records RAF interval, update CPU, snapshot CPU,
 render/submit CPU, and nonblocking GPU timer-query duration. The report also
@@ -230,13 +232,60 @@ Useful overrides:
 ```powershell
 $env:RIPPLE_BENCHMARK_CASES='pretty-arena,showoff-track-motion'
 $env:RIPPLE_BENCHMARK_REPETITIONS='1'
-$env:RIPPLE_BENCHMARK_BASELINE='benchmark-results\previous\summary.json'
+$env:RIPPLE_BENCHMARK_BASELINE='benchmark-results\previous\baseline.json'
 npm.cmd run benchmark:renderers
 ```
 
-Same-hardware baseline comparisons warn at a 10% p95 regression and fail at
-20% or when a stable Meltdown tier is lost. Comparisons from different hardware
-are retained as informational evidence rather than treated as code regressions.
+The v2 protocol/workload ID is
+`renderer-benchmark-v2-flat-top-column-stagger`. A baseline must match that ID
+and the fixed workload configuration before regression math runs. Compatible
+same-hardware comparisons warn at a 10% p95 regression and fail at 20% or when
+a stable Meltdown tier is lost. Compatible cross-hardware comparisons are
+classified as informational; protocol or workload mismatches are incompatible
+and include reasons. A same-hardware warning remains a warning in the comparison
+report, but it blocks packaged acceptance and baseline promotion until reviewed.
+
+For decision-grade cross-hardware evidence, run:
+
+```powershell
+$env:RIPPLE_CHROME_CHANNEL='chrome'
+npm.cmd run benchmark:renderers:package
+```
+
+The package command refuses a dirty Git tree, checks out the recorded commit in
+a temporary detached source worktree, runs `npm ci` from that commit's lockfile,
+builds those exact production assets, and
+owns the strict preview on `127.0.0.1:4183`; an existing listener is an error.
+It launches stable Chrome without fallback, verifies stock no-flags WebGPU in
+Arena, Track, and Training, completes a 120-second stock soak, then runs the
+fixed seven-case instrumented benchmark for four repetitions with 5-second
+warmup and 15-second sample windows. Acceptance requires complete sample-window
+coverage, semantic parity, the same WebGPU adapter in stock and instrumented
+phases, healthy stock modes/soak, no browser errors, device loss, or fallback,
+stable WebGPU Pretty and Showoff samples, at least 25% fresh GPU timer coverage,
+zero timer errors, and bounded stock canvas metrics. The branch, HEAD, and clean
+state are checked again before the acceptance decision.
+
+Each accepted package contains only relative artifact paths: `manifest.json`,
+`acceptance.json`, `baseline.json`, `summary.json`, `summary.md`,
+`samples.ndjson.gz`, stock captures, and first-repetition renderer captures.
+The manifest records SHA-256 and byte size for every payload file and verifies
+the run, protocol, workload, sample count, and source-commit relationships
+across the bundle. An optional comparison baseline is copied into the package
+and checksummed. Physical hardware and actual selected adapters are separated
+from browser/driver/runtime metadata, raw Windows PNP IDs are excluded, and
+portable failures omit local paths and stacks.
+
+`RIPPLE_BENCHMARK_PACKAGE_TEST=1` selects a deterministic shortened profile
+with one repetition and a 1.5-second soak for tooling verification. A healthy
+test run reports `test-only-passed`, `decisionGrade=false`, and an ineligible
+baseline projection. It is intentionally incompatible with a full acceptance
+baseline and is not cross-hardware evidence.
+
+The July 11 RTX 4070 Ti note is retained as superseded historical evidence: it
+was captured from a dirty pre-column-stagger tree and must not be used as a v2
+baseline. The first replacement will be created by a later clean full packaged
+run; no replacement numbers are claimed here.
 
 ## Development
 
@@ -259,6 +308,7 @@ npm.cmd run verify:renderer:auto-rollout
 npm.cmd run verify:hex-lattice
 npm.cmd run verify:benchmark:reporting
 npm.cmd run benchmark:renderers
+npm.cmd run benchmark:renderers:package
 ```
 
 Local runs emit debug logs for Echo detonations, including particle burst counts

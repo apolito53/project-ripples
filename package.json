@@ -22,6 +22,7 @@
     "verify:hex-lattice": "node scripts/verify-hex-lattice.mjs",
     "verify:benchmark:reporting": "node scripts/verify-benchmark-reporting.mjs",
     "benchmark:renderers": "npm run build && node scripts/benchmark-renderers.mjs",
+    "benchmark:renderers:package": "node scripts/package-renderer-benchmark.mjs",
     "smoke": "node scripts/smoke.mjs",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4183 --strictPort",

@@ -46,6 +46,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `npm.cmd run verify:benchmark:reporting`
 - Production WebGL/WebGPU comparative benchmark:
   `npm.cmd run benchmark:renderers`
+- Clean-tree cross-hardware acceptance package with stock Chrome checks,
+  120-second soak, instrumented benchmark, captures, and checksums:
+  `npm.cmd run benchmark:renderers:package`
 
 ## Fast Lookup
 
@@ -127,10 +130,16 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - JSONL diagnostics parser shared by the receiver and CLI:
   `scripts/debug-log-analysis.mjs`
 - Newest-log diagnostics CLI: `scripts/analyze-debug-log.mjs`
-- Comparative benchmark runner/reporting and rollout policy checks:
+- Comparative benchmark runner, v2 reporting/baseline protocol, stock acceptance,
+  portable package support/orchestration, and focused verifier:
   `scripts/benchmark-renderers.mjs`, `scripts/benchmark-reporting.mjs`,
-  `scripts/verify-benchmark-reporting.mjs`, and `scripts/verify-renderer-rollout.mjs`
-- Current tracked hardware baseline: `devlog/WEBGPU_BENCHMARK_BASELINE_2026-07-11.md`
+  `scripts/benchmark-stock-acceptance.mjs`, `scripts/benchmark-package.mjs`,
+  `scripts/package-renderer-benchmark.mjs`, and
+  `scripts/verify-benchmark-reporting.mjs`
+- Rollout policy checks: `scripts/verify-renderer-rollout.mjs`
+- Benchmark baseline registry and superseded historical evidence:
+  `devlog/benchmark-baselines/README.md` and
+  `devlog/WEBGPU_BENCHMARK_BASELINE_2026-07-11.md`
 - Procedural field height sampler: `src/terrain.ts`
 - Prioritized concrete follow-up work: `TODO.md`
 - Loose visual, interaction, and engine ideas: `SPITBALL_IDEAS.md`
@@ -295,6 +304,21 @@ Purpose: compact map for the standalone ripple-field visual lab.
   acceptance and fallback lifecycle work pass. Forced WebGPU must fail visibly
   instead of falling back, and its WGSL passes should keep explicit pipeline
   layouts and shared field-depth ordering.
+- Decision-grade benchmark evidence uses protocol/workload
+  `renderer-benchmark-v2-flat-top-column-stagger`. The package command requires
+  a clean tree, installs from the recorded lockfile in a detached worktree at the
+  recorded commit, owns strict
+  preview port `4183`, requires stable Chrome without fallback, and runs stock
+  no-flags Arena/Track/Training plus a 120-second soak before the fixed seven-case,
+  four-repetition instrumented benchmark. It rechecks source provenance before
+  acceptance, requires complete sample windows and one stock/instrumented GPU
+  adapter, and validates bundle checksums plus cross-file protocol coherence.
+- Compare only accepted `baseline.json` projections. Same-hardware runs keep the
+  10% warning/20% failure thresholds; compatible different hardware is
+  informational, and protocol/workload/config mismatches are incompatible. A
+  warning is reported distinctly but blocks packaged baseline promotion.
+  `RIPPLE_BENCHMARK_PACKAGE_TEST=1` is a shortened tooling profile that reports
+  `test-only-passed` with an ineligible baseline, not acceptance evidence.
 - Keep the CPU/GPU contract small: pulse uniforms, player position, player
   ground-contact strength, wake texture, and settings go in; shader animation
   comes out. Movement wake must not add entries to `RippleSourceStore`; that

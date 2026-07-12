@@ -5,7 +5,11 @@ concrete follow-ups that we actually intend to revisit.
 
 ## High Priority
 
-- The RTX 4070 Ti production baseline is complete. Repeat it on at least one
+- Run `npm.cmd run benchmark:renderers:package` from a clean committed tree to
+  create the first accepted
+  `renderer-benchmark-v2-flat-top-column-stagger` RTX 4070 Ti baseline. The old
+  July 11 dirty pre-column-stagger result is superseded and is not a comparison
+  baseline. After the clean refresh, repeat the package on at least one
   integrated/lower-power GPU and one older or different-vendor discrete GPU.
   Stage 0 keeps `auto` on WebGL and `defaultEligible=false` while those artifacts
   establish cross-adapter confidence. Only then implement same-navigation

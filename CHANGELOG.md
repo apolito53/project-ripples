@@ -21,14 +21,22 @@
   Track, and Meltdown-ramp workloads, balanced/thermally rotated order, nonblocking
   WebGL/WebGPU GPU timers, semantic parity gates, stable stress tiers, hardware/
   driver metadata, raw artifacts, and optional same-machine baseline checks.
+- Added a clean-tree cross-hardware acceptance package that owns strict preview
+  port `4183`, runs stock no-flags Chrome Arena/Track/Training plus a 120-second
+  soak, executes the four-repetition instrumented benchmark, and emits portable
+  acceptance/baseline/summary evidence with compressed samples, representative
+  captures, relative paths, and SHA-256 checksums.
 - Added a stock-Chrome WebGPU smoke without unsafe/blocklist flags plus a pure
   Stage-0 auto-rollout verifier covering cohort boundaries, denied storage,
   browser/adapter gates, cooldown escalation, recovery, and reload-loop guards.
 - Added benchmark-reporting regression checks for asynchronous GPU sample
-  freshness, timer failures, workload parity, stable-tier continuity, baseline
-  loss, and metric-direction verdicts.
-- Added the first tracked RTX 4070 Ti benchmark baseline, with WebGPU holding
-  the strict stability gate through the 1.68 million-cell Meltdown tier.
+  freshness, timer failures, workload parity, stable-tier continuity, strict v2
+  protocol compatibility, malformed baselines, normalized metadata,
+  cross-hardware classification, portable paths/checksums, baseline loss, and
+  metric-direction verdicts.
+- Added the original RTX 4070 Ti benchmark note as historical evidence; it is
+  now explicitly superseded because it came from a dirty pre-column-stagger
+  tree and is not an accepted v2 baseline.
 
 ### Changed
 
@@ -59,6 +67,16 @@
   aligned Three/WebGL and raw-WebGPU cap orientation and footprint scaling, and
   removed the repeating triangular holes visible in dense Meltdown fields. A
   fast geometry invariant now guards the three equal nearest-neighbor distances.
+- Versioned renderer benchmark artifacts as
+  `renderer-benchmark-v2-flat-top-column-stagger`, separated physical hardware
+  and actual selected adapters from environment metadata, removed raw PNP IDs,
+  and classified baseline comparisons as comparable, informational, or
+  incompatible before applying same-machine 10%/20% regression thresholds.
+- Hardened packaged benchmark provenance by building from a detached worktree at
+  the recorded commit, rechecking the clean branch/HEAD before acceptance,
+  requiring full sample-window coverage and matching stock/instrumented adapters,
+  validating cross-file bundle coherence, and making shortened test packages
+  explicitly ineligible for baseline use.
 
 ## 0.5.3-2-ALPHA - 2026-07-08
 

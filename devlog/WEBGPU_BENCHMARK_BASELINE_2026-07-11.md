@@ -1,7 +1,13 @@
 # WebGPU Renderer Baseline - 2026-07-11
 
-First decision-grade comparative baseline for the WebGPU integration candidate.
-This is hardware-specific evidence, not permission to change `auto` by itself.
+> **Superseded historical evidence.** This run came from a dirty worktree before
+> commit `8caa734` corrected the flat-top lattice to stagger columns. Its
+> workload geometry and provenance do not satisfy
+> `renderer-benchmark-v2-flat-top-column-stagger`; do not use it as a regression
+> baseline or as permission to change renderer rollout policy.
+
+This was the first comparative RTX 4070 Ti run for the WebGPU integration
+candidate. The numbers remain useful only as historical context.
 
 ## Environment
 
@@ -53,6 +59,7 @@ The untracked local evidence lives under:
 
 `benchmark-results/2026-07-11T04-43-49-415Z-pid-16668/`
 
-Use its `summary.json` with `RIPPLE_BENCHMARK_BASELINE` for a future same-machine
-regression run. Cross-machine results remain informational and should be stored
-as their own baseline note.
+Do not pass this run's `summary.json` to `RIPPLE_BENCHMARK_BASELINE`. A later
+clean full `npm.cmd run benchmark:renderers:package` execution must create the
+first accepted v2 `baseline.json`; no replacement baseline is fabricated by the
+tooling implementation alone.

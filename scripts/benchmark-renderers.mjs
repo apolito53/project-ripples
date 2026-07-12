@@ -1,13 +1,22 @@
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { appendFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { chromium } from "playwright";
 import { delay, isOk, waitForOk } from "./ripple-smoke-harness.mjs";
+import {
+  gzipNdjson,
+  sanitizePortableDiagnostic,
+  serializePortableError,
+  toPortableRelativePath,
+  writeTextAtomic
+} from "./benchmark-package.mjs";
 import {
   buildBenchmarkSummary,
   compareBenchmarkBaseline,
   compareSemanticParity,
+  normalizeBenchmarkMetadata,
   normalizeBenchmarkSnapshot,
   renderSummaryMarkdown
 } from "./benchmark-reporting.mjs";
@@ -56,23 +65,37 @@ const BENCHMARK_BROWSER_ARGS = Object.freeze([
   "--disable-renderer-backgrounding"
 ]);
 
-try {
-  await main();
-} catch (error) {
-  console.error(`[ripple-field-lab:benchmark] ${formatError(error)}`);
-  process.exitCode = 1;
+if (isDirectExecution()) {
+  try {
+    await runRendererBenchmark();
+  } catch (error) {
+    console.error(`[ripple-field-lab:benchmark] ${formatError(error)}`);
+    process.exitCode = 1;
+  }
 }
 
-async function main() {
-  const config = readConfig();
+export async function runRendererBenchmark(overrides = {}) {
+  const config = readConfig(overrides);
   const benchmarkCases = selectBenchmarkCases(config.caseFilter);
   const startedAtMs = Date.now();
   const startedAt = new Date(startedAtMs).toISOString();
-  const runId = createRunId(startedAt);
-  const outputDirectory = await createOutputDirectory(config.outputRoot, runId);
-  const samplesPath = path.join(outputDirectory, "samples.ndjson");
+  const runId = overrides.runId ?? createRunId(startedAt);
+  const outputDirectory = overrides.outputDirectory
+    ? path.resolve(overrides.outputDirectory)
+    : await createOutputDirectory(config.outputRoot, runId);
+  await mkdir(outputDirectory, { recursive: true });
+  const samplesPath = path.join(outputDirectory, ".samples.ndjson.partial");
+  const samplesGzipPath = path.join(outputDirectory, "samples.ndjson.gz");
   const samples = [];
   const parityChecks = [];
+  const metadataSources = {
+    host: collectHostMetadata(),
+    git: collectGitMetadata(),
+    package: await collectPackageMetadata(),
+    browser: {},
+    runtime: {},
+    renderers: {}
+  };
   const run = {
     runId,
     startedAt,
@@ -95,19 +118,15 @@ async function main() {
       })),
       apiTimeoutMs: config.apiTimeoutMs,
       headless: config.headless,
-      browserArgs: [...BENCHMARK_BROWSER_ARGS],
-      baselinePath: config.baselinePath
+      browserChannel: config.browserChannel,
+      browserArgs: [...config.browserArgs],
+      baselinePath: config.baselineDisplayPath,
+      profile: config.profile,
+      packageMode: config.packageMode
     },
     expectedPairCount: benchmarkCases.length * config.repetitions,
     expectedSampleCount: benchmarkCases.length * config.repetitions * BACKENDS.length,
-    metadata: {
-      host: collectHostMetadata(),
-      git: collectGitMetadata(),
-      package: await collectPackageMetadata(),
-      browser: null,
-      runtime: null,
-      renderers: {}
-    }
+    metadata: normalizeBenchmarkMetadata(metadataSources)
   };
 
   await writeFile(samplesPath, "", "utf8");
@@ -122,7 +141,7 @@ async function main() {
     serverScope = await ensureBenchmarkApp(config);
     const launch = await launchBrowser(config);
     browser = launch.browser;
-    run.metadata.browser = {
+    metadataSources.browser = {
       name: "Chromium",
       version: browser.version(),
       channel: launch.channel,
@@ -134,7 +153,7 @@ async function main() {
       deviceScaleFactor: FIXED_DEVICE_SCALE_FACTOR
     });
     const displayRefreshIntervalMs = await measureDisplayRefreshInterval(context);
-    run.metadata.browser.displayRefreshIntervalMs = displayRefreshIntervalMs;
+    metadataSources.browser.displayRefreshIntervalMs = displayRefreshIntervalMs;
 
     let sequence = 0;
     for (let repetition = 0; repetition < config.repetitions; repetition += 1) {
@@ -160,16 +179,17 @@ async function main() {
             repetition,
             orderInRepetition,
             sequence,
-            displayRefreshIntervalMs
+            displayRefreshIntervalMs,
+            outputDirectory
           });
 
           sequence += 1;
           pair[renderer] = sample;
-          if (!run.metadata.runtime && sample.runtimeMetadata) {
-            run.metadata.runtime = sample.runtimeMetadata;
+          if (Object.keys(metadataSources.runtime).length === 0 && sample.runtimeMetadata) {
+            metadataSources.runtime = sample.runtimeMetadata;
           }
-          if (!run.metadata.renderers[renderer]) {
-            run.metadata.renderers[renderer] = sample.appMetadata;
+          if (!metadataSources.renderers[renderer]) {
+            metadataSources.renderers[renderer] = sample.appMetadata;
           }
           delete sample.runtimeMetadata;
           samples.push(sample);
@@ -199,41 +219,88 @@ async function main() {
     }
     }
   } catch (error) {
-    failure = serializeError(error);
+    failure = serializePortableError(error);
   } finally {
-    await context?.close().catch(() => {});
-    await browser?.close().catch(() => {});
-    serverScope?.shutdown();
+    const cleanupErrors = [];
+    if (context) {
+      try {
+        await context.close();
+      } catch (error) {
+        cleanupErrors.push(`browser context: ${sanitizePortableDiagnostic(formatError(error))}`);
+      }
+    }
+    if (browser) {
+      try {
+        await browser.close();
+      } catch (error) {
+        cleanupErrors.push(`browser process: ${sanitizePortableDiagnostic(formatError(error))}`);
+      }
+    }
+    try {
+      serverScope?.shutdown();
+    } catch (error) {
+      cleanupErrors.push(`preview process: ${sanitizePortableDiagnostic(formatError(error))}`);
+    }
+    if (cleanupErrors.length > 0) {
+      const cleanupMessage = `Benchmark cleanup failed (${cleanupErrors.join("; ")}).`;
+      failure = failure
+        ? { ...failure, message: `${failure.message} ${cleanupMessage}` }
+        : { name: "BenchmarkCleanupError", message: cleanupMessage, stack: null };
+    }
   }
 
   const finishedAtMs = Date.now();
   run.finishedAt = new Date(finishedAtMs).toISOString();
   run.durationMs = finishedAtMs - startedAtMs;
+  run.metadata = normalizeBenchmarkMetadata(metadataSources);
 
   const summary = buildBenchmarkSummary({ run, samples, parityChecks, failure });
   if (config.baselinePath) {
-    const baseline = JSON.parse(await readFile(config.baselinePath, "utf8"));
-    summary.regression = compareBenchmarkBaseline(summary, baseline);
-    if (summary.regression.status === "failed" && !failure) {
-      failure = {
-        name: "BenchmarkRegressionError",
-        message: "Same-hardware benchmark regression exceeded the configured 20% or stable-tier limit.",
-        stack: null
-      };
+    try {
+      const baseline = JSON.parse(await readFile(config.baselinePath, "utf8"));
+      summary.regression = compareBenchmarkBaseline(summary, baseline);
+      if (summary.regression.classification === "incompatible" && !failure) {
+        failure = {
+          name: "BenchmarkBaselineCompatibilityError",
+          message: `Baseline is incompatible: ${summary.regression.reasons.join(" ")}`,
+          stack: null
+        };
+      } else if (summary.regression.status === "failed" && !failure) {
+        failure = {
+          name: "BenchmarkRegressionError",
+          message: "Same-hardware benchmark regression exceeded the configured 20% or stable-tier limit.",
+          stack: null
+        };
+      }
+    } catch (error) {
+      if (!failure) {
+        failure = {
+          name: "BenchmarkBaselineError",
+          message: `Could not use benchmark baseline: ${sanitizePortableDiagnostic(formatError(error))}`,
+          stack: null
+        };
+      }
+    }
+    if (failure) {
       summary.status = "failed";
       summary.failure = failure;
     }
   }
+  await gzipNdjson(samplesPath, samplesGzipPath);
   await writeArtifacts(outputDirectory, summary);
 
   if (failure) {
-    throw new Error(
+    const benchmarkError = new Error(
       `${failure.message}\nBenchmark artifacts were written to ${outputDirectory}`,
       failure.stack ? { cause: new Error(failure.stack) } : undefined
     );
+    benchmarkError.summary = summary;
+    benchmarkError.outputDirectory = outputDirectory;
+    throw benchmarkError;
   }
 
   console.log(`[ripple-field-lab:benchmark] PASS - artifacts written to ${outputDirectory}`);
+  return { summary, outputDirectory };
 }
 
 function getBenchmarkCaseOrder(cases, repetition) {
@@ -306,7 +373,8 @@ async function runBackendSample(options) {
     await page.goto(pageUrl, { waitUntil: "domcontentloaded", timeout: options.config.apiTimeoutMs });
     const api = await waitForBenchmarkApi(page, pageUrl, options.config.apiTimeoutMs);
     assertBenchmarkApiConfig(api, options.benchmarkCase);
-    await page.locator(`canvas[data-renderer-backend="${options.renderer}"]`).waitFor({
+    const canvas = page.locator(`canvas[data-renderer-backend="${options.renderer}"]`);
+    await canvas.waitFor({
       state: "visible",
       timeout: options.config.apiTimeoutMs
     });
@@ -348,6 +416,16 @@ async function runBackendSample(options) {
       ? await collectRuntimeMetadata(page)
       : null;
     normalized.pageProblems = pageProblems.snapshot();
+    if (options.config.captureFirstRepetition && options.repetition === 0) {
+      const captureDirectory = path.join(options.outputDirectory, "captures", "repetition-1");
+      await mkdir(captureDirectory, { recursive: true });
+      const capturePath = path.join(
+        captureDirectory,
+        `${options.benchmarkCase.id}--${options.renderer}.png`
+      );
+      await canvas.screenshot({ type: "png", path: capturePath });
+      normalized.capturePath = toPortableRelativePath(options.outputDirectory, capturePath);
+    }
     return normalized;
   } catch (error) {
     throw new Error(`Benchmark sample ${label} failed: ${formatError(error)}`, { cause: error });
@@ -579,68 +657,17 @@ function collectPageProblems(page) {
 async function launchBrowser(config) {
   const launchOptions = {
     headless: config.headless,
-    args: [...BENCHMARK_BROWSER_ARGS]
+    args: [...config.browserArgs]
   };
-
-  const requestedChannel = process.env.RIPPLE_CHROME_CHANNEL ||
-    (process.platform === "win32" ? "chrome" : null);
-  if (requestedChannel) launchOptions.channel = requestedChannel;
-
-  try {
-    return {
-      browser: await chromium.launch(launchOptions),
-      channel: requestedChannel ?? "bundled"
-    };
-  } catch (error) {
-    if (process.env.RIPPLE_CHROME_CHANNEL || !requestedChannel) throw error;
-    console.warn(
-      `[ripple-field-lab:benchmark] Chrome channel unavailable (${formatError(error)}); ` +
-      "falling back to bundled Chromium."
-    );
-    delete launchOptions.channel;
-    return {
-      browser: await chromium.launch(launchOptions),
-      channel: "bundled"
-    };
-  }
+  if (config.browserChannel) launchOptions.channel = config.browserChannel;
+  return {
+    browser: await chromium.launch(launchOptions),
+    channel: config.browserChannel ?? "bundled"
+  };
 }
 
 async function collectRuntimeMetadata(page) {
-  return page.evaluate(async () => {
-    const canvas = document.createElement("canvas");
-    const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
-    const debugInfo = gl?.getExtension("WEBGL_debug_renderer_info");
-    const webgl = gl ? {
-      vendor: debugInfo ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR),
-      renderer: debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
-      version: gl.getParameter(gl.VERSION)
-    } : null;
-
-    let webgpu = null;
-    if (navigator.gpu) {
-      try {
-        const adapter = await navigator.gpu.requestAdapter();
-        if (adapter) {
-          const info = adapter.info ?? {};
-          webgpu = {
-            vendor: info.vendor || null,
-            architecture: info.architecture || null,
-            device: info.device || null,
-            description: info.description || null,
-            features: [...adapter.features].sort(),
-            limits: {
-              maxBufferSize: adapter.limits.maxBufferSize,
-              maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize,
-              maxComputeInvocationsPerWorkgroup: adapter.limits.maxComputeInvocationsPerWorkgroup,
-              maxTextureDimension2D: adapter.limits.maxTextureDimension2D
-            }
-          };
-        }
-      } catch (error) {
-        webgpu = { error: error instanceof Error ? error.message : String(error) };
-      }
-    }
-
+  return page.evaluate(() => {
     return {
       userAgent: navigator.userAgent,
       platform: navigator.platform,
@@ -650,9 +677,7 @@ async function collectRuntimeMetadata(page) {
       devicePixelRatio: window.devicePixelRatio,
       viewport: { width: window.innerWidth, height: window.innerHeight },
       screen: { width: window.screen.width, height: window.screen.height },
-      crossOriginIsolated: window.crossOriginIsolated,
-      webgl,
-      webgpu
+      crossOriginIsolated: window.crossOriginIsolated
     };
   });
 }
@@ -689,7 +714,7 @@ function collectWindowsPowerPlan() {
 function collectWindowsGpuControllers() {
   if (process.platform !== "win32") return null;
   try {
-    const command = "Get-CimInstance Win32_VideoController | Select-Object Name,DriverVersion,PNPDeviceID | ConvertTo-Json -Compress";
+    const command = "Get-CimInstance Win32_VideoController | Select-Object Name,DriverVersion | ConvertTo-Json -Compress";
     const value = execFileSync("powershell.exe", ["-NoProfile", "-Command", command], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
@@ -739,43 +764,57 @@ function runGit(args) {
   }).trim();
 }
 
-function readConfig() {
-  const appUrlValue = process.env.RIPPLE_BENCHMARK_APP_URL ||
+function readConfig(overrides = {}) {
+  const appUrlValue = overrides.appUrl || process.env.RIPPLE_BENCHMARK_APP_URL ||
     process.env.RIPPLE_APP_URL ||
     DEFAULT_APP_URL;
-  const appUrlSource = process.env.RIPPLE_BENCHMARK_APP_URL
+  const appUrlSource = overrides.appUrlSource || (process.env.RIPPLE_BENCHMARK_APP_URL
     ? "RIPPLE_BENCHMARK_APP_URL"
     : process.env.RIPPLE_APP_URL
       ? "RIPPLE_APP_URL"
-      : "default-preview";
+      : "default-preview");
   const appUrl = validateAppUrl(appUrlValue);
+  const baselinePath = overrides.baselinePath !== undefined
+    ? overrides.baselinePath
+    : process.env.RIPPLE_BENCHMARK_BASELINE
+      ? path.resolve(process.cwd(), process.env.RIPPLE_BENCHMARK_BASELINE)
+      : null;
 
   return {
     appUrl,
     appUrlSource,
-    warmupMs: readIntegerEnv("RIPPLE_BENCHMARK_WARMUP_MS", DEFAULT_WARMUP_MS, 0, 600_000),
-    sampleMs: readIntegerEnv("RIPPLE_BENCHMARK_SAMPLE_MS", DEFAULT_SAMPLE_MS, 100, 600_000),
-    repetitions: readIntegerEnv(
+    warmupMs: overrides.warmupMs ??
+      readIntegerEnv("RIPPLE_BENCHMARK_WARMUP_MS", DEFAULT_WARMUP_MS, 0, 600_000),
+    sampleMs: overrides.sampleMs ??
+      readIntegerEnv("RIPPLE_BENCHMARK_SAMPLE_MS", DEFAULT_SAMPLE_MS, 100, 600_000),
+    repetitions: overrides.repetitions ?? readIntegerEnv(
       "RIPPLE_BENCHMARK_REPETITIONS",
       DEFAULT_REPETITIONS,
       1,
       50
     ),
-    apiTimeoutMs: readIntegerEnv(
+    apiTimeoutMs: overrides.apiTimeoutMs ?? readIntegerEnv(
       "RIPPLE_BENCHMARK_API_TIMEOUT_MS",
       DEFAULT_API_TIMEOUT_MS,
       1_000,
       300_000
     ),
     outputRoot: path.resolve(
-      process.cwd(),
-      process.env.RIPPLE_BENCHMARK_OUTPUT_DIR || "benchmark-results"
+      overrides.outputRoot || process.env.RIPPLE_BENCHMARK_OUTPUT_DIR || "benchmark-results"
     ),
-    headless: process.env.RIPPLE_BROWSER_HEADLESS !== "0",
-    caseFilter: process.env.RIPPLE_BENCHMARK_CASES?.trim() || "",
-    baselinePath: process.env.RIPPLE_BENCHMARK_BASELINE
-      ? path.resolve(process.cwd(), process.env.RIPPLE_BENCHMARK_BASELINE)
-      : null
+    headless: overrides.headless ?? process.env.RIPPLE_BROWSER_HEADLESS !== "0",
+    caseFilter: overrides.caseFilter ?? process.env.RIPPLE_BENCHMARK_CASES?.trim() ?? "",
+    baselinePath,
+    baselineDisplayPath: overrides.baselineDisplayPath ??
+      (baselinePath ? getPortableInputPath(baselinePath) : null),
+    browserChannel: overrides.browserChannel ?? (
+      process.env.RIPPLE_CHROME_CHANNEL || (process.platform === "win32" ? "chrome" : null)
+    ),
+    browserArgs: overrides.browserArgs ?? BENCHMARK_BROWSER_ARGS,
+    profile: overrides.profile ?? "standard",
+    packageMode: overrides.packageMode === true,
+    captureFirstRepetition: overrides.captureFirstRepetition === true ||
+      process.env.RIPPLE_BENCHMARK_CAPTURE_FIRST_REPETITION === "1"
   };
 }
 
@@ -840,24 +879,31 @@ async function createOutputDirectory(outputRoot, runId) {
 }
 
 async function writeArtifacts(outputDirectory, summary) {
-  await writeAtomic(
+  await writeTextAtomic(
     path.join(outputDirectory, "summary.json"),
     `${JSON.stringify(summary, null, 2)}\n`
   );
-  await writeAtomic(
+  await writeTextAtomic(
     path.join(outputDirectory, "summary.md"),
     renderSummaryMarkdown(summary)
   );
 }
 
-async function writeAtomic(targetPath, contents) {
-  const temporaryPath = `${targetPath}.${process.pid}.tmp`;
-  await writeFile(temporaryPath, contents, "utf8");
-  await rename(temporaryPath, targetPath);
-}
-
 function createRunId(timestamp) {
   return `${timestamp.replaceAll(":", "-").replace(".", "-")}-pid-${process.pid}`;
+}
+
+function getPortableInputPath(targetPath) {
+  const relativePath = path.relative(process.cwd(), path.resolve(targetPath));
+  if (!relativePath.startsWith("..") && !path.isAbsolute(relativePath)) {
+    return relativePath.split(path.sep).join("/");
+  }
+  return path.basename(targetPath);
+}
+
+function isDirectExecution() {
+  if (!process.argv[1]) return false;
+  return pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url;
 }
 
 function printConfiguration(run, outputDirectory) {
@@ -868,13 +914,6 @@ function printConfiguration(run, outputDirectory) {
     `repetitions=${run.config.repetitions}`
   );
   console.log(`[ripple-field-lab:benchmark] output=${outputDirectory}`);
-}
-
-function serializeError(error) {
-  if (error instanceof Error) {
-    return { name: error.name, message: error.message, stack: error.stack ?? null };
-  }
-  return { name: "Error", message: String(error), stack: null };
 }
 
 function redactUrl(value) {
