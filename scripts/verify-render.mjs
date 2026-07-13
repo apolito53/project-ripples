@@ -36,6 +36,8 @@ const WEBGPU_SHADOW_GEOMETRY_MODE = "shape-proxy-casters";
 const WEBGPU_AVATAR_MODE = "hover-pod";
 const WEBGPU_AVATAR_ASSET_ID = "webgpu-hover-pod";
 const WEBGPU_MOTE_AVATAR_ASSET_ID = "mote-core-orbit";
+const WEBGPU_PRESENTATION_PROFILE = "core";
+const WEBGL_PRESENTATION_PROFILE = "webgl-reference";
 const WEBGPU_REQUIRED_REMAINING_GAPS = [];
 const scenario = process.argv[2] ?? "";
 
@@ -111,6 +113,7 @@ async function verifyWebGlRender(page, pageProblems) {
   await assertNonBlankCanvas(page, "WebGL canvas");
   await waitForRunEvent(page, smokeRun, "renderer.mode", (record) =>
     record.entry.payload.activeBackend === "webgl" &&
+    record.entry.payload.presentationProfile === WEBGL_PRESENTATION_PROFILE &&
     record.entry.payload.playMode === "arena" &&
     record.entry.payload.raceTrackEnabled === false &&
     record.entry.payload.trackMaskUploaded === false &&
@@ -123,6 +126,7 @@ async function verifyWebGlRender(page, pageProblems) {
   await waitForRunEvent(page, smokeRun, "renderer.frameSample", (record) => {
     const payload = record.entry.payload;
     return payload.backendId === "webgl" &&
+      payload.presentationProfile === WEBGL_PRESENTATION_PROFILE &&
       payload.playMode === "arena" &&
       payload.raceTrackEnabled === false &&
       payload.arenaBarrierEnabled === true;
@@ -1782,8 +1786,13 @@ async function verifyWebGpuUnavailable(page, pageProblems) {
   await page.getByRole("heading", { name: "WebGPU unavailable" }).waitFor({ timeout: 15000 });
   await page.getByRole("paragraph").filter({ hasText: "No WebGL fallback was used for this forced renderer mode." }).waitFor({ timeout: 15000 });
 
-  await waitForRunEvent(page, smokeRun, "webgpu.unavailable");
-  await waitForRunEvent(page, smokeRun, "webgpu.fallback", (record) => record.entry.payload.activeBackend === "none");
+  await waitForRunEvent(page, smokeRun, "webgpu.unavailable", (record) =>
+    record.entry.payload.requestedPresentationProfile === WEBGPU_PRESENTATION_PROFILE
+  );
+  await waitForRunEvent(page, smokeRun, "webgpu.fallback", (record) =>
+    record.entry.payload.activeBackend === "none" &&
+    record.entry.payload.requestedPresentationProfile === WEBGPU_PRESENTATION_PROFILE
+  );
 
   const events = await readRunEvents(smokeRun);
   assertNoChannels(events, ["renderer.mode", "wake.init", "skybox.load"], "forced WebGPU unavailable");
@@ -1950,6 +1959,7 @@ function hasDiagnosticCoreReadiness(payload) {
   if (!Array.isArray(payload?.remainingGaps)) return false;
   const remainingGaps = payload.remainingGaps;
   return payload?.readinessTier === WEBGPU_READINESS_TIER &&
+    payload?.presentationProfile === WEBGPU_PRESENTATION_PROFILE &&
     payload.defaultEligible === WEBGPU_DEFAULT_ELIGIBLE &&
     remainingGaps.length === WEBGPU_REQUIRED_REMAINING_GAPS.length &&
     WEBGPU_REQUIRED_REMAINING_GAPS.every((gap) => remainingGaps.includes(gap));

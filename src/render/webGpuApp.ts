@@ -45,6 +45,13 @@ import {
   setRenderBenchmarkMetadata
 } from "./renderBenchmark";
 import {
+  createVisualCaptureCourseState,
+  createVisualCaptureEchoState,
+  createVisualCaptureSourceState,
+  createRenderVisualCaptureController,
+  hashVisualCaptureNumbers
+} from "./renderVisualCapture";
+import {
   RENDER_SCENE_LOCAL_LIGHT_LIMIT,
   RENDER_SCENE_SHADOW_CASTER_LIMIT,
   type RenderAvatarPresentationSnapshot,
@@ -92,6 +99,7 @@ const WEBGPU_BLOOM_STRENGTH_CAP = 0.32;
 const WEBGPU_READINESS_TIER = "diagnostic-core";
 const WEBGPU_DEFAULT_ELIGIBLE = false;
 const WEBGPU_ROLLOUT_STAGE = "stage-0-disabled";
+const WEBGPU_PRESENTATION_PROFILE = "core" as const;
 const WEBGPU_REMAINING_GAPS: string[] = [];
 const RENDERER_FRAME_SAMPLE_SECONDS = 0.5;
 const DEFAULT_READINESS_FRAME_SECONDS = 2;
@@ -189,6 +197,7 @@ export async function startWebGpuApp(
       initialSkyboxId: settings.skyboxId
     });
     setRenderBenchmarkMetadata({
+      presentationProfile: WEBGPU_PRESENTATION_PROFILE,
       userAgent: navigator.userAgent,
       hardwareConcurrency: navigator.hardwareConcurrency,
       deviceMemoryGiB: (navigator as Navigator & { readonly deviceMemory?: number }).deviceMemory ?? null
@@ -198,11 +207,13 @@ export async function startWebGpuApp(
     debugEvent("webgpu.unavailable", "Forced WebGPU renderer unavailable", {
       requestedMode: rendererModeSelection.requestedMode,
       selectionSource: rendererModeSelection.source,
+      requestedPresentationProfile: WEBGPU_PRESENTATION_PROFILE,
       message
     }, "error");
     debugEvent("webgpu.fallback", "Forced WebGPU renderer failed without fallback", {
       ok: false,
       activeBackend: "none",
+      requestedPresentationProfile: WEBGPU_PRESENTATION_PROFILE,
       fallbackReason: "Forced WebGPU does not fall back to WebGL.",
       message
     }, "error");
@@ -240,6 +251,12 @@ export async function startWebGpuApp(
   syncControlValues();
   resize();
   runtime.prewarm();
+
+  const visualCapture = createRenderVisualCaptureController({
+    fixedStepSeconds: SIM_STEP_SECONDS,
+    describe: describeWebGpuVisualCapture,
+    waitForGpuIdle: () => runtime.waitForGpuIdle()
+  });
 
   const requestedMode = readRequestedPlayMode();
   if (requestedMode) {
@@ -411,16 +428,22 @@ export async function startWebGpuApp(
     if (activePlayMode === "track") {
       for (let index = 0; index < ECHO_ZONE_INITIAL_COUNT; index += 1) {
         const fraction = ECHO_ZONE_TRACK_SEED_FRACTIONS[index] ?? index / ECHO_ZONE_INITIAL_COUNT;
-        const lateral = index % 2 === 0
+        const lateral = index === 1
           ? raceTrack.getSafeEchoJitterMeters(ECHO_ZONE_RADIUS) * 0.34
           : -raceTrack.getSafeEchoJitterMeters(ECHO_ZONE_RADIUS) * 0.22;
-        spawnEchoAtTrackFraction(fraction, lateral, time);
+        if (!spawnEchoAtTrackFraction(fraction, lateral, time)) {
+          spawnRandomTrackEcho(time);
+        }
       }
     } else {
       for (let index = 0; index < ECHO_ZONE_INITIAL_COUNT; index += 1) {
         const seed = ECHO_ZONE_ARENA_SEED_POLAR[index] ?? { angle: index / ECHO_ZONE_INITIAL_COUNT, radius: 0.4 };
         const position = createArenaEchoSeedPosition(seed.angle, seed.radius);
-        if (position) addEcho(position, time);
+        if (!position || !echoState.isPositionClear(position, ECHO_ZONE_MIN_ZONE_DISTANCE)) {
+          spawnRandomArenaEcho(time);
+          continue;
+        }
+        addEcho(position, time);
       }
     }
     nextEchoZoneAt = time + ECHO_ZONE_SPAWN_INTERVAL_SECONDS;
@@ -445,8 +468,8 @@ export async function startWebGpuApp(
     const maxJitter = raceTrack.getSafeEchoJitterMeters(ECHO_ZONE_RADIUS);
     for (let attempt = 0; attempt < ECHO_ZONE_SPAWN_ATTEMPTS; attempt += 1) {
       const position = raceTrack.samplePointAt(Math.random(), (Math.random() * 2 - 1) * maxJitter);
-      position.y = sampleFieldHeight(position.x, position.z) + 0.35;
-      if (position.distanceTo(player.position) < ECHO_ZONE_MIN_PLAYER_DISTANCE) continue;
+      position.y = sampleFieldHeight(position.x, position.z) + 0.16;
+      if (Math.hypot(position.x - player.position.x, position.z - player.position.z) < ECHO_ZONE_MIN_PLAYER_DISTANCE) continue;
       if (!echoState.isPositionClear(position, ECHO_ZONE_MIN_ZONE_DISTANCE)) continue;
       addEcho(position, time);
       return true;
@@ -456,15 +479,15 @@ export async function startWebGpuApp(
 
   function spawnRandomArenaEcho(time: number): boolean {
     for (let attempt = 0; attempt < ECHO_ZONE_SPAWN_ATTEMPTS; attempt += 1) {
-      const angle = Math.random() * Math.PI * 2;
       const radius = Math.sqrt(Math.random()) * Math.max(0, preset.fieldRadius - ECHO_ZONE_RADIUS - PLAYER_BOUNDARY_PADDING);
+      const angle = Math.random() * Math.PI * 2;
       const position = new THREE.Vector3(
         Math.cos(angle) * radius,
         0,
         Math.sin(angle) * radius
       );
-      position.y = sampleFieldHeight(position.x, position.z) + 0.35;
-      if (position.distanceTo(player.position) < ECHO_ZONE_MIN_PLAYER_DISTANCE) continue;
+      position.y = sampleFieldHeight(position.x, position.z) + 0.16;
+      if (Math.hypot(position.x - player.position.x, position.z - player.position.z) < ECHO_ZONE_MIN_PLAYER_DISTANCE) continue;
       if (!echoState.isPositionClear(position, ECHO_ZONE_MIN_ZONE_DISTANCE)) continue;
       addEcho(position, time);
       return true;
@@ -474,7 +497,7 @@ export async function startWebGpuApp(
 
   function spawnEchoAtTrackFraction(fraction: number, lateralOffsetMeters: number, time: number): boolean {
     const position = raceTrack.samplePointAt(fraction, lateralOffsetMeters);
-    position.y = sampleFieldHeight(position.x, position.z) + 0.35;
+    position.y = sampleFieldHeight(position.x, position.z) + 0.16;
     if (!echoState.isPositionClear(position, ECHO_ZONE_MIN_ZONE_DISTANCE)) return false;
     addEcho(position, time);
     return true;
@@ -488,8 +511,10 @@ export async function startWebGpuApp(
       0,
       Math.sin(angle) * maxRadius * radiusFraction
     );
-    position.y = sampleFieldHeight(position.x, position.z) + 0.35;
-    return position.distanceTo(player.position) >= ECHO_ZONE_MIN_PLAYER_DISTANCE ? position : null;
+    position.y = sampleFieldHeight(position.x, position.z) + 0.16;
+    return Math.hypot(position.x - player.position.x, position.z - player.position.z) >= ECHO_ZONE_MIN_PLAYER_DISTANCE
+      ? position
+      : null;
   }
 
   function addEcho(position: THREE.Vector3, time: number): void {
@@ -528,9 +553,10 @@ export async function startWebGpuApp(
   }
 
   function animate(frameTimestampMs = performance.now()): void {
-    const rawDelta = clock.getDelta();
+    const rawDelta = visualCapture.resolveFrameDelta(clock.getDelta());
     const frameStartedAt = performance.now();
     const simulatedDelta = runSimulationFrame(rawDelta);
+    visualCapture.recordSimulation(simulatedDelta);
 
     if (appState === "playing" && simulatedDelta > 0 && settings.particlesEnabled) {
       const speed = player.getSpeed();
@@ -558,6 +584,7 @@ export async function startWebGpuApp(
     updateRuntimeUi(input, rawDelta);
     emitFrameDiagnostics(input, performance.now() - frameStartedAt);
     previousPlayerPosition.copy(player.position);
+    visualCapture.afterRender();
   }
 
   function recordWebGpuBenchmarkFrame(input: RenderFrameInput, frameTimestampMs: number): void {
@@ -589,6 +616,67 @@ export async function startWebGpuApp(
         deviceLost: stats.deviceLost
       }
     }, frameTimestampMs);
+  }
+
+  function describeWebGpuVisualCapture(tick: number): Readonly<Record<string, unknown>> {
+    const input = createRenderInput(0);
+    const fieldMetrics = runtime.getFieldMetrics();
+    const particleMetrics = runtime.getParticleMetrics();
+    return {
+      backendId: "webgpu",
+      presentationProfile: input.scenePresentation.profile,
+      playMode: input.playMode,
+      tick,
+      simulationTimeSeconds,
+      qualityId: input.qualityPreset.id,
+      fieldInstances: fieldMetrics.instanceCount,
+      activeSources: input.pulseSources.activeCount,
+      activeEchoes: input.echoVisualState.activeEchoes,
+      activeParticles: particleMetrics.activeParticles,
+      sourceState: createVisualCaptureSourceState(input.pulseSources),
+      echoState: createVisualCaptureEchoState(input.echoVisualState),
+      field: {
+        mode: fieldLayout.buildStats.mode,
+        fullHexCount: fieldLayout.buildStats.fullHexCount,
+        culledHexCount: fieldLayout.buildStats.culledHexCount,
+        instanceCount: fieldLayout.buildStats.instanceCount
+      },
+      course: createVisualCaptureCourseState(
+        input.raceTrack.enabled,
+        input.raceTrack.mask,
+        input.raceTrack.walls
+      ),
+      player: {
+        position: input.player.position,
+        velocity: input.player.velocity,
+        speed: input.player.speed,
+        groundContact: input.player.groundContact,
+        facingYawRadians: input.player.facingYawRadians
+      },
+      camera: {
+        position: input.camera.position,
+        quaternion: input.camera.quaternion,
+        viewProjectionMatrix: input.camera.viewProjectionMatrix
+      },
+      training: input.training.enabled ? {
+        active: input.training.active,
+        complete: input.training.complete,
+        stepId: input.training.stepId,
+        stepIndex: input.training.stepIndex,
+        markerVisible: input.training.marker.visible,
+        markerDigest: hashVisualCaptureNumbers([
+          input.training.marker.position.x,
+          input.training.marker.position.y,
+          input.training.marker.position.z,
+          input.training.marker.facingYawRadians
+        ])
+      } : null,
+      viewport: {
+        width: runtime.canvas.width,
+        height: runtime.canvas.height,
+        pixelRatio: runtime.getStats().pixelRatio
+      }
+    };
   }
 
   function runSimulationFrame(rawDelta: number): number {
@@ -731,6 +819,7 @@ export async function startWebGpuApp(
       requestedMode: rendererModeSelection.requestedMode,
       selectionSource: rendererModeSelection.source,
       activeBackend: "webgpu",
+      presentationProfile: WEBGPU_PRESENTATION_PROFILE,
       rolloutStage: WEBGPU_ROLLOUT_STAGE,
       rolloutDecisionCode: "explicit-webgpu",
       playMode: activePlayMode ?? "none",
@@ -804,6 +893,7 @@ export async function startWebGpuApp(
       stateMode: "playable",
       integrationSurface: "core-render-snapshot",
       scenePresentationMode: input.scenePresentation.mode,
+      presentationProfile: input.scenePresentation.profile,
       playMode: input.playMode,
       cameraMode: input.camera.projection.cameraMode,
       frameMs: roundMetric(frameMs),
@@ -1303,6 +1393,7 @@ function createScenePresentationSnapshot(settings: LabSettings, preset: QualityP
   const postGlowStrength = getWebGpuBloomStrength(settings);
   return {
     mode: "webgpu-core-scene",
+    profile: WEBGPU_PRESENTATION_PROFILE,
     arenaRadius: preset.fieldRadius,
     skyboxId: skybox.id,
     skybox,
@@ -1519,6 +1610,7 @@ function getWebGpuBloomStrength(settings: LabSettings): number {
 function readinessPayload(): RippleDebugPayload {
   return {
     readinessTier: WEBGPU_READINESS_TIER,
+    presentationProfile: WEBGPU_PRESENTATION_PROFILE,
     defaultEligible: WEBGPU_DEFAULT_ELIGIBLE,
     remainingGaps: [...WEBGPU_REMAINING_GAPS]
   };

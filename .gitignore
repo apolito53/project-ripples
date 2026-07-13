@@ -5,3 +5,4 @@ dist/
 *.local
 logs/**/*.jsonl
 benchmark-results/
+parity-results/

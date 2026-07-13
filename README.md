@@ -210,6 +210,32 @@ but automatic selection is held at rollout Stage 0 with a hard-zero cohort.
 hardware acceptance is gathered; explicit `webgl` and `webgpu` requests remain
 immune to the cohort policy.
 
+The current forced-WebGPU art direction is now named the `core` presentation
+profile: the minimalist, WebGPU-native field/effect treatment used throughout
+the port. It remains the only active WebGPU presentation and is explicitly
+preserved. A future `classic` profile is reserved for closer Three/WebGL art
+direction; it will not be exposed until it has a meaningful visual difference
+and dedicated coverage.
+
+### Renderer Presentation Audit
+
+`npm.cmd run audit:render:parity` captures fixed-tick WebGL and WebGPU Core
+fixtures for Pretty Arena, Showoff Track, and Pretty Training at 1280x720/DPR 1.
+The command builds current sources and owns strict preview port `4184`. The
+capture-only controller advances both simulations to exact ticks, freezes
+animation, flushes GPU work, checks same-backend repeatability, and verifies
+matching camera/player/mode/field state plus pulse-source, Echo, Track-mask,
+wall-geometry, and Training-marker identity before producing image evidence. Set
+`RIPPLE_PARITY_APP_URL` only when deliberately targeting an existing server.
+External-server reports are marked `external-unverified` and are not attributed
+to the current workspace commit.
+
+Ignored results land under `parity-results/<timestamp>/` as raw PNGs, side-by-
+side amplified-diff strips, `report.json`, and `summary.md`. Cross-renderer
+histogram, coarse-luma, edge-density, and RGB-delta metrics guide review but do
+not assert naive pixel equality. The tracked classification and remaining
+fixtures live in `devlog/renderer-parity/README.md`.
+
 ### Renderer Benchmark
 
 `npm.cmd run benchmark:renderers` builds production assets, starts the preview
@@ -311,6 +337,7 @@ npm.cmd run verify:render:webgpu:default-soak
 npm.cmd run verify:renderer:auto-rollout
 npm.cmd run verify:hex-lattice
 npm.cmd run verify:benchmark:reporting
+npm.cmd run audit:render:parity
 npm.cmd run benchmark:renderers
 npm.cmd run benchmark:renderers:package
 ```

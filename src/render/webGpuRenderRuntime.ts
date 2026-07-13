@@ -289,6 +289,11 @@ export class WebGpuRenderRuntime implements RenderRuntime {
     // fill in real pass accounting.
   }
 
+  /** Wait for deterministic capture callers without blocking ordinary frames. */
+  async waitForGpuIdle(): Promise<void> {
+    await this.context.device.queue.onSubmittedWorkDone();
+  }
+
   renderFrame(input: RenderFrameInput): void {
     if (this.deviceLost) {
       this.gpuCpuSubmitMs = 0;
@@ -405,6 +410,7 @@ export class WebGpuRenderRuntime implements RenderRuntime {
       this.options.log("webgpu.firstFrame", "Submitted WebGPU core scene presentation frame", {
         integrationSurface: "core-render-snapshot",
         scenePresentationMode: input.scenePresentation.mode,
+        presentationProfile: input.scenePresentation.profile,
         playMode: input.playMode,
         raceTrackEnabled: input.raceTrack.enabled,
         raceTrackStrength: roundMetric(input.raceTrack.strength),

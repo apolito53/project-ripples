@@ -41,6 +41,15 @@
   Stable Chrome completed 56/56 samples, 28/28 semantic pairs, all stock and
   packaging gates, and the two-minute continuity soak; WebGPU remained stable
   through the 1.68-million-cell Meltdown tier 4.
+- Added a capture-only fixed-tick controller shared by WebGL and WebGPU plus
+  `audit:render:parity`, which freezes matched Arena/Track/Training fixtures,
+  flushes GPU work, checks semantic state and same-backend repeatability, and
+  writes paired captures, amplified diffs, structural image metrics, and a
+  review-required report under ignored `parity-results/`.
+- Added a tracked renderer presentation matrix under
+  `devlog/renderer-parity/README.md` that separates exact/shared behavior,
+  WebGPU-native equivalents, intentional Core differences, parity suspects,
+  and the remaining visual audit fixtures.
 
 ### Changed
 
@@ -67,6 +76,11 @@
   omitted/auto requests still resolve to WebGL.
 - Aligned continuous and pulse/Echo particle-density formulas across WebGL and
   WebGPU so comparative workloads carry the same configured particle budgets.
+- Aligned forced-WebGPU Arena/Track Echo placement with current WebGL gameplay
+  rules, including vertical lift, deterministic Track offsets, horizontal
+  clearance checks, and random Arena sampling order. The fixed-tick audit now
+  verifies Echo/source identity plus Track mask/wall and Training marker state,
+  not only matching counts.
 - Corrected the shared flat-top hex lattice to stagger columns instead of rows,
   aligned Three/WebGL and raw-WebGPU cap orientation and footprint scaling, and
   removed the repeating triangular holes visible in dense Meltdown fields. A
@@ -81,6 +95,11 @@
   requiring full sample-window coverage and matching stock/instrumented adapters,
   validating cross-file bundle coherence, and making shortened test packages
   explicitly ineligible for baseline use.
+- Named the current minimalist WebGPU presentation profile `core` and reserved
+  `classic` for future WebGL-inspired styling. Diagnostics and benchmark
+  metadata now identify Core so accepted renderer evidence remains auditable by
+  presentation profile; Classic remains deliberately unselectable until it has
+  a real implementation and dedicated coverage.
 
 ## 0.5.3-2-ALPHA - 2026-07-08
 

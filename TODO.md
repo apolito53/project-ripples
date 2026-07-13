@@ -5,6 +5,18 @@ concrete follow-ups that we actually intend to revisit.
 
 ## High Priority
 
+- Close the renderer presentation audit without erasing WebGPU Core.
+  The fixed-tick Arena/Track/Training audit now proves matching semantic state
+  and records paired captures under `parity-results/`, while the tracked matrix
+  in `devlog/renderer-parity/README.md` separates intentional Core differences
+  from Classic parity suspects. Add Clean jump/Echo, Training completion,
+  Meltdown grazing-camera, all-skybox, and Track wake-persistence fixtures;
+  resolve the immediate player trough, particle depth, skybox/fog, Echo field
+  response, arena curtain, stage-floor/fixture, light/shadow, and output-transform
+  decisions behind a future `classic` profile. Add a named renderer-neutral
+  particle RNG stream so particle placement can join the exact audit snapshot.
+  Keep `core` intact and make it selectable when Classic becomes a real option.
+
 - Repeat the accepted
   `renderer-benchmark-v2-flat-top-column-stagger` package on at least one
   integrated/lower-power GPU and one older or different-vendor discrete GPU.
@@ -64,6 +76,10 @@ concrete follow-ups that we actually intend to revisit.
 
 ## Done / Recent Decisions
 
+- Named the current minimalist WebGPU art direction `core`, reserved `classic`
+  for a future WebGL-inspired profile, and added a deterministic fixed-tick
+  renderer presentation audit with state matching, repeatability checks, paired
+  captures, image metrics, and amplified diffs.
 - Filled the circular arena with cubes instead of stopping the field at a square
   patch.
 - Clamped the player avatar inside the same circular arena used by the cube

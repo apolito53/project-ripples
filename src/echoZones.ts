@@ -5,6 +5,7 @@ import {
   ECHO_COLUMN_HEIGHT,
   EchoZoneStateStore,
   type EchoZoneOptions,
+  type EchoVisualStateSnapshot,
   type TriggeredEchoZone
 } from "./echoState";
 
@@ -282,6 +283,10 @@ export class EchoZoneField {
 
   getCollectBurstCount(): number {
     return this.collectBursts.length;
+  }
+
+  getRenderSnapshot(time: number, limit = Number.POSITIVE_INFINITY): EchoVisualStateSnapshot {
+    return this.stateStore.getRenderSnapshot(time, limit);
   }
 
   isPositionClear(position: THREE.Vector3, clearance: number): boolean {

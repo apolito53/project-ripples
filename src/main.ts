@@ -44,6 +44,13 @@ import {
   recordRenderBenchmarkFrame,
   setRenderBenchmarkMetadata
 } from "./render/renderBenchmark";
+import {
+  createVisualCaptureCourseState,
+  createVisualCaptureEchoState,
+  createVisualCaptureSourceState,
+  createRenderVisualCaptureController,
+  hashVisualCaptureNumbers
+} from "./render/renderVisualCapture";
 import { ThreeRenderRuntime } from "./render/threeRenderRuntime";
 import { startWebGpuApp } from "./render/webGpuApp";
 import { RippleField } from "./rippleField";
@@ -333,6 +340,7 @@ const bloomPass = renderRuntime.bloomPass;
 const webGlContext = renderer.getContext();
 const webGlDebugInfo = webGlContext.getExtension("WEBGL_debug_renderer_info");
 setRenderBenchmarkMetadata({
+  presentationProfile: "webgl-reference",
   userAgent: navigator.userAgent,
   hardwareConcurrency: navigator.hardwareConcurrency,
   deviceMemoryGiB: (navigator as Navigator & { readonly deviceMemory?: number }).deviceMemory ?? null,
@@ -441,6 +449,14 @@ prewarmRenderPipelines();
 window.addEventListener("resize", resize);
 window.visualViewport?.addEventListener("resize", resize);
 window.visualViewport?.addEventListener("scroll", resize);
+
+const visualCapture = createRenderVisualCaptureController({
+  fixedStepSeconds: SIM_STEP_SECONDS,
+  describe: describeWebGlVisualCapture,
+  waitForGpuIdle: async () => {
+    webGlContext.finish();
+  }
+});
 
 const requestedMode = readRequestedPlayMode();
 if (requestedMode) {
@@ -676,14 +692,16 @@ function renderTrainingProgress(state: TrainingHudState): void {
 }
 
 function animate(frameTimestampMs = performance.now()): void {
-  const rawDelta = clock.getDelta();
+  const rawDelta = visualCapture.resolveFrameDelta(clock.getDelta());
   lastRawDeltaMs = rawDelta * 1000;
   const frameStartedAt = performance.now();
   const simulatedDeltaThisFrame = runSimulationFrame(rawDelta);
+  visualCapture.recordSimulation(simulatedDeltaThisFrame);
   const updateFinishedAt = performance.now();
   lastFrameUpdateMs = updateFinishedAt - frameStartedAt;
 
   renderPresentation(rawDelta, simulatedDeltaThisFrame, frameStartedAt, updateFinishedAt, frameTimestampMs);
+  visualCapture.afterRender();
 }
 
 function runSimulationFrame(rawDelta: number): number {
@@ -857,6 +875,82 @@ function recordWebGlBenchmarkFrame(frameTimestampMs: number): void {
       deviceLost: false
     }
   }, frameTimestampMs);
+}
+
+function describeWebGlVisualCapture(tick: number): Readonly<Record<string, unknown>> {
+  camera.updateMatrixWorld();
+  const sourceSnapshot = rippleSources.getRenderSourceSnapshot(simulationTimeSeconds);
+  const echoSnapshot = echoZones.getRenderSnapshot(simulationTimeSeconds);
+  const fieldBuild = rippleField.getBuildStats();
+  const courseEnabled = activePlayMode === "track" || activePlayMode === "training";
+  const courseMask = courseEnabled ? raceTrack.getMaskSnapshot() : null;
+  const courseWalls = courseEnabled ? raceTrack.getWallSnapshot() : null;
+  const viewProjectionMatrix = new THREE.Matrix4()
+    .multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+    .toArray();
+  const training = activePlayMode === "training"
+    ? trainingRun.getPresentationSnapshot()
+    : null;
+  return {
+    backendId: "webgl",
+    presentationProfile: "webgl-reference",
+    playMode: activePlayMode ?? "none",
+    tick,
+    simulationTimeSeconds,
+    qualityId: preset.id,
+    fieldInstances: rippleField.getInstanceCount(),
+    activeSources: sourceSnapshot.activeCount,
+    activeEchoes: echoSnapshot.activeEchoes,
+    activeParticles: particles.getActiveCount(),
+    sourceState: createVisualCaptureSourceState(sourceSnapshot),
+    echoState: createVisualCaptureEchoState(echoSnapshot),
+    field: {
+      mode: fieldBuild.mode,
+      fullHexCount: fieldBuild.fullHexCount,
+      culledHexCount: fieldBuild.culledHexCount,
+      instanceCount: fieldBuild.instanceCount
+    },
+    course: createVisualCaptureCourseState(courseEnabled, courseMask, courseWalls),
+    player: {
+      position: exactVectorSnapshot(player.position),
+      velocity: exactVectorSnapshot(player.velocity),
+      speed: player.getSpeed(),
+      groundContact: player.getGroundContactStrength(),
+      facingYawRadians: player.getFacingYaw()
+    },
+    camera: {
+      position: exactVectorSnapshot(camera.position),
+      quaternion: {
+        x: camera.quaternion.x,
+        y: camera.quaternion.y,
+        z: camera.quaternion.z,
+        w: camera.quaternion.w
+      },
+      viewProjectionMatrix
+    },
+    training: training ? {
+      active: training.active,
+      complete: training.complete,
+      stepId: training.stepId,
+      stepIndex: training.stepIndex,
+      markerVisible: training.marker.visible,
+      markerDigest: hashVisualCaptureNumbers([
+        training.marker.position.x,
+        training.marker.position.y,
+        training.marker.position.z,
+        training.marker.facingYawRadians
+      ])
+    } : null,
+    viewport: {
+      width: renderer.domElement.width,
+      height: renderer.domElement.height,
+      pixelRatio: renderer.getPixelRatio()
+    }
+  };
+}
+
+function exactVectorSnapshot(value: THREE.Vector3): { readonly x: number; readonly y: number; readonly z: number } {
+  return { x: value.x, y: value.y, z: value.z };
 }
 
 function spawnPulse(
@@ -2863,6 +2957,7 @@ function reportWebGlRendererMode(): void {
     requestedMode: rendererModeSelection.requestedMode,
     selectionSource: rendererModeSelection.source,
     activeBackend: "webgl",
+    presentationProfile: "webgl-reference",
     rolloutStage: RENDERER_ROLLOUT_STAGE,
     rolloutDecisionCode: rendererRolloutDecision.decisionCode,
     rolloutPercent: rendererRolloutDecision.rolloutPercent ?? RENDERER_ROLLOUT_PERCENT,
@@ -2895,6 +2990,7 @@ function emitWebGlRendererFrameSample(time: number): void {
     : null;
   debugEvent("renderer.frameSample", "Renderer frame sample", {
     backendId: stats.backendId,
+    presentationProfile: "webgl-reference",
     rolloutStage: RENDERER_ROLLOUT_STAGE,
     rolloutDecisionCode: rendererRolloutDecision.decisionCode,
     defaultEligible: false,

@@ -1,6 +1,6 @@
 # Codebase Index
 
-Last reviewed: 2026-07-11
+Last reviewed: 2026-07-13
 
 Purpose: compact map for the standalone ripple-field visual lab.
 
@@ -12,7 +12,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
   shader-customized `InstancedMesh`, additive `Points`, and dynamic lights.
 - Current alpha baseline: `v0.5.3-2-ALPHA`; keep release tags in alpha prerelease
   territory until the lab graduates from prototype status.
-- Dedicated dev port `5183`; preview port `4183`.
+- Dedicated dev port `5183`; benchmark preview port `4183`; strict renderer
+  presentation-audit preview port `4184`.
 
 ## Commands
 
@@ -44,6 +45,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Flat-top honeycomb geometry invariant: `npm.cmd run verify:hex-lattice`
 - Benchmark statistics/parity regression verifier:
   `npm.cmd run verify:benchmark:reporting`
+- Fixed-tick WebGL/WebGPU presentation audit with paired captures and diffs:
+  `npm.cmd run audit:render:parity`
 - Production WebGL/WebGPU comparative benchmark:
   `npm.cmd run benchmark:renderers`
 - Clean-tree cross-hardware acceptance package with stock Chrome checks,
@@ -65,6 +68,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Stage-0 cohort/cooldown policy, benchmark recorder, and nonblocking GPU timers:
   `src/render/rendererRollout.ts`, `src/render/renderBenchmark.ts`, and
   `src/render/gpuFrameTimer.ts`
+- Capture-only deterministic simulation control and renderer state descriptions:
+  `src/render/renderVisualCapture.ts`, `src/main.ts`, and
+  `src/render/webGpuApp.ts`
 - WebGPU course-wall and Training marker passes with explicit layouts and shared
   field depth: `src/render/webGpuTrackWallPass.ts` and
   `src/render/webGpuTrainingMarkerPass.ts` plus their WGSL shaders
@@ -136,6 +142,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `scripts/benchmark-stock-acceptance.mjs`, `scripts/benchmark-package.mjs`,
   `scripts/package-renderer-benchmark.mjs`, and
   `scripts/verify-benchmark-reporting.mjs`
+- Fixed-tick presentation capture/reporting and non-gating image comparison:
+  `scripts/audit-renderer-parity.mjs`, `scripts/render-parity-analysis.mjs`, and
+  `devlog/renderer-parity/README.md`
 - Rollout policy checks: `scripts/verify-renderer-rollout.mjs`
 - Benchmark baseline registry, accepted RTX 4070 Ti v2 evidence, and superseded
   historical evidence: `devlog/benchmark-baselines/README.md`,
@@ -305,6 +314,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
   acceptance and fallback lifecycle work pass. Forced WebGPU must fail visibly
   instead of falling back, and its WGSL passes should keep explicit pipeline
   layouts and shared field-depth ordering.
+- WebGPU presentation profile `core` is the preserved minimalist art direction.
+  `classic` is reserved for future WebGL-inspired presentation work and must
+  remain unavailable until it has distinct visuals and audit coverage.
 - Decision-grade benchmark evidence uses protocol/workload
   `renderer-benchmark-v2-flat-top-column-stagger`. The package command requires
   a clean tree, installs from the recorded lockfile in a detached worktree at the
