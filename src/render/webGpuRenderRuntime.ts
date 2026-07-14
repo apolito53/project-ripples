@@ -6,6 +6,7 @@ import type { RippleFieldLayout } from "../rippleFieldLayout";
 import type { SkyboxId } from "../skybox";
 import type {
   RenderFrameInput,
+  RenderPresentationProfile,
   RenderRuntime,
   RenderRuntimeCapabilities,
   RenderRuntimeStats
@@ -85,6 +86,7 @@ export type WebGpuRenderRuntimeOptions = {
   readonly fallbackReason: string;
   readonly initialQualityPreset: QualityPreset;
   readonly initialSkyboxId: SkyboxId;
+  readonly initialPresentationProfile: RenderPresentationProfile;
   readonly onDeviceLost?: (info: GPUDeviceLostInfo) => void;
 };
 
@@ -190,6 +192,7 @@ export class WebGpuRenderRuntime implements RenderRuntime {
         context.format,
         options.initialQualityPreset,
         options.log,
+        options.initialPresentationProfile,
         sceneLights.getBindGroupLayout(),
         sceneShadows.getBindGroupLayout(),
         shadowMap.getSampleBindGroupLayout()
@@ -420,6 +423,12 @@ export class WebGpuRenderRuntime implements RenderRuntime {
         integrationSurface: "core-render-snapshot",
         scenePresentationMode: input.scenePresentation.mode,
         presentationProfile: input.scenePresentation.profile,
+        fieldGeometryMode: fieldMetrics.fieldGeometryMode,
+        fieldVerticesPerInstance: fieldMetrics.fieldVerticesPerInstance,
+        fieldTrianglesPerInstance: fieldMetrics.fieldTrianglesPerInstance,
+        visibleSideFaceCount: fieldMetrics.visibleSideFaceCount,
+        bottomFaceIncluded: fieldMetrics.bottomFaceIncluded,
+        tileHeightMode: fieldMetrics.tileHeightMode,
         playMode: input.playMode,
         raceTrackEnabled: input.raceTrack.enabled,
         raceTrackStrength: roundMetric(input.raceTrack.strength),

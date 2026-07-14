@@ -10,18 +10,20 @@ evidence.
   with stable Chrome on an RTX 4070 Ti. It contains the accepted comparison
   projection, acceptance gates, full-bundle checksum manifest, and human report.
   The ignored local portable bundle additionally retains compressed samples,
-  `summary.json`, and representative captures.
+  `summary.json`, and representative captures. It measured the older flat Core
+  field and is historical evidence only after the Classic 3D profile became the
+  forced-WebGPU default.
 
-Use the tracked comparison projection with:
+Do not use that v2 projection for current Classic regression math; the protocol
+mismatch is intentional. A new accepted v3 projection will use:
 
 ```powershell
-$env:RIPPLE_BENCHMARK_BASELINE='devlog\benchmark-baselines\rtx-4070-ti-2026-07-12-73df45e\baseline.json'
 $env:RIPPLE_CHROME_CHANNEL='chrome'
 npm.cmd run benchmark:renderers:package
 ```
 
 The required protocol/workload is
-`renderer-benchmark-v2-flat-top-column-stagger`. Create evidence only with:
+`renderer-benchmark-v3-classic-3d-tiles`. Create evidence only with:
 
 ```powershell
 $env:RIPPLE_CHROME_CHANNEL='chrome'

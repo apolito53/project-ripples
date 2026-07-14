@@ -64,6 +64,14 @@ struct VertexOutput {
   @location(5) contactShadow: f32,
   @location(6) shadowClip: vec4f,
   @location(7) trackSignal: vec4f,
+  @location(8) worldNormal: vec3f,
+  @location(9) faceData: vec2f,
+};
+
+struct ProceduralFieldVertex {
+  local: vec2f,
+  normal: vec3f,
+  faceData: vec2f,
 };
 
 @group(0) @binding(0) var<uniform> field: FieldParams;
@@ -207,7 +215,7 @@ fn hexCorner(index: u32) -> vec2f {
   return corners[index % 6u];
 }
 
-fn hexLocal(vertexIndex: u32) -> vec2f {
+fn coreHexLocal(vertexIndex: u32) -> vec2f {
   let triangle = vertexIndex / 3u;
   let corner = vertexIndex % 3u;
 
@@ -218,6 +226,61 @@ fn hexLocal(vertexIndex: u32) -> vec2f {
     return hexCorner(triangle);
   }
   return hexCorner(triangle + 1u);
+}
+
+fn classicTopHexLocal(vertexIndex: u32) -> vec2f {
+  let triangle = vertexIndex / 3u;
+  let corner = vertexIndex % 3u;
+
+  if (corner == 0u) {
+    return vec2f(0.0, 0.0);
+  }
+  if (corner == 1u) {
+    return hexCorner(triangle + 1u);
+  }
+  return hexCorner(triangle);
+}
+
+fn classicFieldVertex(vertexIndex: u32) -> ProceduralFieldVertex {
+  if (vertexIndex < 18u) {
+    return ProceduralFieldVertex(
+      classicTopHexLocal(vertexIndex),
+      vec3f(0.0, 1.0, 0.0),
+      vec2f(0.0, 1.0)
+    );
+  }
+
+  if (vertexIndex < 54u) {
+    let sideVertexIndex = vertexIndex - 18u;
+    let sideIndex = sideVertexIndex / 6u;
+    let cornerIndex = sideVertexIndex % 6u;
+    let cornerA = hexCorner(sideIndex);
+    let cornerB = hexCorner(sideIndex + 1u);
+    let vertices = array<vec3f, 6>(
+      vec3f(cornerA.x, 0.0, cornerA.y),
+      vec3f(cornerA.x, 1.0, cornerA.y),
+      vec3f(cornerB.x, 0.0, cornerB.y),
+      vec3f(cornerB.x, 0.0, cornerB.y),
+      vec3f(cornerA.x, 1.0, cornerA.y),
+      vec3f(cornerB.x, 1.0, cornerB.y)
+    );
+    let position = vertices[cornerIndex];
+    // CylinderGeometry shares radial normals across neighboring side faces.
+    // Match that smooth reference instead of giving every wall a flat normal.
+    let outward = normalize(position.xz);
+    return ProceduralFieldVertex(
+      position.xz,
+      vec3f(outward.x, 0.0, outward.y),
+      vec2f(1.0, position.y)
+    );
+  }
+
+  let bottomVertexIndex = vertexIndex - 54u;
+  return ProceduralFieldVertex(
+    coreHexLocal(bottomVertexIndex),
+    vec3f(0.0, -1.0, 0.0),
+    vec2f(2.0, 0.0)
+  );
 }
 
 fn localLightingAt(worldPosition: vec3f) -> vec3f {
@@ -314,14 +377,11 @@ fn shadowMapOcclusion(shadowClip: vec4f, interior: f32) -> f32 {
   return clamp((1.0 - visibility) * edgeFade * interior * validSample * strength, 0.0, 0.28);
 }
 
-@vertex
-fn vertexMain(
-  @builtin(vertex_index) vertexIndex: u32,
-  @builtin(instance_index) instanceIndex: u32
-) -> VertexOutput {
+// Keep Core's original flat-cap math isolated. Classic may evolve toward the
+// Three reference without quietly retuning the minimalist profile.
+fn buildCoreFieldVertex(instanceIndex: u32, local: vec2f) -> VertexOutput {
   let cell = cells[instanceIndex];
   let cellPosition = cell.positionPhase.xz;
-  let local = hexLocal(vertexIndex);
   let wake = loadWake(cellPosition);
   let trackSignal = trackSignalAt(cellPosition);
   let sourceWave = sourceWaveAt(cellPosition);
@@ -330,9 +390,6 @@ fn vertexMain(
   let crestEnergy = clamp(max(wake.z, 0.0) * 2.2 + max(sourceWave, 0.0) * 0.64, 0.0, 1.0);
   let velocityEnergy = clamp(abs(wake.y) * 10.0, 0.0, 1.0);
   let shimmer = 0.5 + 0.5 * sin(field.timing.x * 3.7 + cell.positionPhase.w);
-  // `hexLocal` uses a unit circumradius while Three's cap uses 0.5. Convert the
-  // shared point-to-point diameter to a radius here so both backends occupy the
-  // same flat-top honeycomb instead of WebGPU masking a sheared grid by overlap.
   let footprintDiameter = field.shape.z + crestEnergy * 0.05 + echoSignal.x * 0.012;
   let footprint = footprintDiameter * field.render.z * 0.5;
   let worldOffset = local * footprint;
@@ -356,6 +413,8 @@ fn vertexMain(
   output.contactShadow = contactShadowAt(worldPosition);
   output.shadowClip = shadowMap.lightViewProjection * vec4f(worldPosition + vec3f(0.0, 0.04, 0.0), 1.0);
   output.trackSignal = trackSignal;
+  output.worldNormal = vec3f(0.0, 1.0, 0.0);
+  output.faceData = vec2f(0.0);
   output.color = cell.tint.rgb * (0.48 + terrainWhiteness * 0.34 + shimmer * 0.05);
   output.color = output.color + max(heightEnergy, 0.0) * vec3f(0.04, 0.42, 0.5);
   output.color = output.color + max(-heightEnergy, 0.0) * vec3f(0.34, 0.09, 0.44);
@@ -373,8 +432,128 @@ fn vertexMain(
   return output;
 }
 
+fn buildClassicFieldVertex(
+  instanceIndex: u32,
+  local: vec2f,
+  localHeight: f32,
+  worldNormal: vec3f,
+  faceData: vec2f,
+  prismWeight: f32
+) -> VertexOutput {
+  let cell = cells[instanceIndex];
+  let cellPosition = cell.positionPhase.xz;
+  let wake = loadWake(cellPosition);
+  let trackSignal = trackSignalAt(cellPosition);
+  let sourceWave = sourceWaveAt(cellPosition);
+  let echoSignal = echoSignalAt(cellPosition);
+  let heightEnergy = clamp(wake.x * 10.0 + sourceWave * 0.88, -1.0, 1.0);
+  let crestEnergy = clamp(max(wake.z, 0.0) * 2.2 + max(sourceWave, 0.0) * 0.64, 0.0, 1.0);
+  let velocityEnergy = clamp(abs(wake.y) * 10.0, 0.0, 1.0);
+  let shimmer = 0.5 + 0.5 * sin(field.timing.x * 3.7 + cell.positionPhase.w);
+  // Procedural corners use a unit circumradius while Three's prism uses 0.5. Convert the
+  // shared point-to-point diameter to a radius here so both backends occupy the
+  // same flat-top honeycomb instead of WebGPU masking a sheared grid by overlap.
+  let footprintDiameter = field.shape.z + crestEnergy * 0.05 + echoSignal.x * 0.012;
+  let footprint = footprintDiameter * field.render.z * 0.5;
+  let worldOffset = local * footprint;
+  let playerDistance = distance(cellPosition, field.player.xy);
+  let playerContact = clamp(field.player.w, 0.0, 1.0);
+  let bodyPressure = (1.0 - smoothstep(0.15, 2.55, playerDistance)) * playerContact;
+  let pressureRim = exp(-pow((playerDistance - 2.35) / 0.9, 2.0)) * playerContact;
+  let movementPush = clamp(field.player.z / 16.0, 0.0, 1.0) * playerContact;
+  let pressureResponse = (
+    -bodyPressure * (0.35 + shimmer * 0.09 + movementPush * 0.115) +
+    pressureRim * (0.16 + shimmer * 0.14 + movementPush * 0.1)
+  ) * field.render.x;
+  let baseLift = clamp(heightEnergy * field.render.x + sourceWave * 0.36 + echoSignal.z * 0.72, -1.6, 2.5);
+  let lift = clamp(baseLift + pressureResponse * prismWeight, -1.6, 2.5);
+  let tileHeight = max(
+    0.02,
+    (
+      field.shape.w +
+      pressureRim * 0.16 +
+      max(sourceWave, 0.0) * 0.44 +
+      max(heightEnergy, 0.0) * 0.22 -
+      bodyPressure * 0.009
+    ) * field.render.z
+  );
+  let worldPosition = vec3f(
+    cellPosition.x + worldOffset.x,
+    cell.positionPhase.y + lift + tileHeight * localHeight * prismWeight,
+    cellPosition.y + worldOffset.y
+  );
+  let terrainWhiteness = smoothstep(
+    -0.75,
+    3.05,
+    cell.positionPhase.y + lift + tileHeight * prismWeight
+  );
+  let keyLight = max(dot(worldNormal, normalize(-sceneLights.keyDirection.xyz)), 0.0);
+  let topRim = 0.2 + 0.16 * smoothstep(0.1, 0.98, abs(local.x)) + shimmer * 0.04;
+  let sideRim = 0.16 + 0.22 * (1.0 - abs(dot(worldNormal, normalize(sceneLights.rimDirection.xyz)))) + shimmer * 0.04;
+  let sideFace = step(0.5, faceData.x) * (1.0 - step(1.5, faceData.x));
+  let bottomFace = step(1.5, faceData.x);
+  let topFace = 1.0 - sideFace - bottomFace;
+  let bottomRim = 0.08 + keyLight * 0.08 + shimmer * 0.02;
+  let rim = topRim * topFace + sideRim * sideFace + bottomRim * bottomFace;
+  let crestLight = crestEnergy * (0.28 + shimmer * 0.12);
+
+  var output: VertexOutput;
+  output.position = field.viewProjection * vec4f(worldPosition, 1.0);
+  output.local = local;
+  output.energy = vec3f(heightEnergy, velocityEnergy, max(crestEnergy, echoSignal.y * 0.34));
+  output.lighting = vec3f(keyLight, rim, crestLight);
+  output.localLighting = localLightingAt(worldPosition);
+  output.contactShadow = contactShadowAt(worldPosition);
+  output.shadowClip = shadowMap.lightViewProjection * vec4f(worldPosition + vec3f(0.0, 0.04, 0.0), 1.0);
+  output.trackSignal = trackSignal;
+  output.worldNormal = worldNormal;
+  output.faceData = faceData;
+  output.color = cell.tint.rgb * (0.48 + terrainWhiteness * 0.34 + shimmer * 0.05);
+  output.color = output.color + max(heightEnergy, 0.0) * vec3f(0.04, 0.42, 0.5);
+  output.color = output.color + max(-heightEnergy, 0.0) * vec3f(0.34, 0.09, 0.44);
+  output.color = output.color + velocityEnergy * vec3f(0.03, 0.2, 0.11);
+  output.color = output.color + crestEnergy * vec3f(0.62, 0.52, 0.2);
+  output.color = output.color + echoSignal.x * vec3f(0.18, 0.36, 0.3);
+  output.color = output.color + echoSignal.y * vec3f(0.42, 0.28, 0.1);
+  let trackBody = mix(1.0, trackSignal.r, trackSignal.w);
+  let trackEdge = trackSignal.g * trackSignal.w;
+  let trackCenter = trackSignal.b * trackSignal.w;
+  let offTrackDim = mix(0.035, 1.1, smoothstep(0.08, 0.78, trackBody));
+  output.color = output.color * offTrackDim;
+  output.color = mix(output.color, vec3f(0.1, 0.82, 0.9), trackSignal.r * trackSignal.w * 0.36);
+  output.color = mix(output.color, vec3f(0.82, 1.0, 0.94), trackEdge * 0.74 + trackCenter * 0.16);
+  let sideShade = 0.48 + keyLight * 0.26 + faceData.y * 0.12;
+  output.color = output.color * mix(1.0, sideShade, sideFace);
+  return output;
+}
+
+@vertex
+fn vertexCoreMain(
+  @builtin(vertex_index) vertexIndex: u32,
+  @builtin(instance_index) instanceIndex: u32
+) -> VertexOutput {
+  let local = coreHexLocal(vertexIndex);
+  return buildCoreFieldVertex(instanceIndex, local);
+}
+
+@vertex
+fn vertexClassicMain(
+  @builtin(vertex_index) vertexIndex: u32,
+  @builtin(instance_index) instanceIndex: u32
+) -> VertexOutput {
+  let vertex = classicFieldVertex(vertexIndex);
+  return buildClassicFieldVertex(
+    instanceIndex,
+    vertex.local,
+    vertex.faceData.y,
+    vertex.normal,
+    vertex.faceData,
+    1.0
+  );
+}
+
 @fragment
-fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
+fn fragmentCoreMain(input: VertexOutput) -> @location(0) vec4f {
   let radial = length(input.local);
   let interior = 1.0 - smoothstep(0.9, 1.02, radial);
   let gridLine = smoothstep(0.76, 1.0, radial) * 0.22;
@@ -391,6 +570,41 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   color = color + gridLine * vec3f(0.015, 0.07, 0.075);
   color = color + input.energy.z * interior * vec3f(0.16, 0.22, 0.09);
   color = color + input.lighting.z * vec3f(0.18, 0.16, 0.06);
+  color = color + localLight;
+  let trackGlowBody = input.trackSignal.r * input.trackSignal.w;
+  let trackGlowEdge = input.trackSignal.g * input.trackSignal.w;
+  let trackGlowCenter = input.trackSignal.b * input.trackSignal.w;
+  color = color + vec3f(0.06, 0.74, 0.72) * trackGlowBody * (0.04 + field.render.z * 0.08) * interior;
+  color = color + vec3f(0.62, 1.0, 0.92) * (trackGlowEdge * 0.68 + trackGlowCenter * 0.08) * (0.44 + field.render.z) * interior;
+  return vec4f(pow(max(color, vec3f(0.0)), vec3f(0.92)), 1.0);
+}
+
+@fragment
+fn fragmentClassicMain(input: VertexOutput) -> @location(0) vec4f {
+  let radial = length(input.local);
+  let sideFace = step(0.5, input.faceData.x) * (1.0 - step(1.5, input.faceData.x));
+  let bottomFace = step(1.5, input.faceData.x);
+  let topInterior = 1.0 - smoothstep(0.9, 1.02, radial);
+  let interior = mix(topInterior, 1.0, sideFace);
+  let gridLine = smoothstep(0.76, 1.0, radial) * 0.22 * (1.0 - sideFace - bottomFace);
+  let ambient = sceneLights.ambient.rgb * sceneLights.ambient.w;
+  let normal = normalize(input.worldNormal);
+  let keyResponse = max(dot(normal, normalize(-sceneLights.keyDirection.xyz)), 0.0);
+  let rimResponse = max(dot(normal, normalize(-sceneLights.rimDirection.xyz)), 0.0);
+  let key = sceneLights.keyColor.rgb * keyResponse * sceneLights.keyDirection.w * 0.36;
+  let rim = sceneLights.rimColor.rgb * max(input.lighting.y, rimResponse) * sceneLights.rimDirection.w * 0.22;
+  let globalLight = vec3f(0.32) + ambient + key + rim;
+  let localLight = input.localLighting * interior * (0.18 + input.energy.z * 0.16) * mix(1.0, 0.72, sideFace);
+  let contactShadow = input.contactShadow * interior;
+  let directionalShadow = shadowMapOcclusion(input.shadowClip, interior);
+  let combinedShadow = min(contactShadow + directionalShadow, 0.44);
+  var color = input.color * globalLight * (0.78 + interior * 0.22);
+  color = color * mix(1.0, 0.7 + input.faceData.y * 0.3, sideFace);
+  color = color * (1.0 - combinedShadow);
+  color = color + gridLine * vec3f(0.015, 0.07, 0.075);
+  let crestFaceStrength = mix(1.0, 0.34, sideFace);
+  color = color + input.energy.z * interior * vec3f(0.16, 0.22, 0.09) * crestFaceStrength;
+  color = color + input.lighting.z * vec3f(0.18, 0.16, 0.06) * crestFaceStrength;
   color = color + localLight;
   let trackGlowBody = input.trackSignal.r * input.trackSignal.w;
   let trackGlowEdge = input.trackSignal.g * input.trackSignal.w;

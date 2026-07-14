@@ -38,6 +38,12 @@ import changelogMarkdown from "../../CHANGELOG.md?raw";
 import packageMetadata from "../../package.json";
 import type { RendererModeSelection } from "./rendererMode";
 import {
+  isRenderPresentationProfile,
+  persistWebGpuPresentationProfile,
+  resolveWebGpuPresentationProfile,
+  type PresentationProfileSelection
+} from "./presentationProfile";
+import {
   applyRenderBenchmarkSettings,
   createRenderBenchmarkMotion,
   isRenderBenchmarkEnabled,
@@ -65,7 +71,8 @@ import {
   type RenderSceneShadowCasterSnapshot,
   type RenderSceneShadowSnapshot,
   type RenderTrainingSnapshot,
-  type RenderVector3Snapshot
+  type RenderVector3Snapshot,
+  type RenderPresentationProfile
 } from "./types";
 import { WebGpuRenderRuntime } from "./webGpuRenderRuntime";
 import { WEBGPU_MOTE_AVATAR_ASSET_ID } from "./webGpuMoteAvatarAsset";
@@ -100,7 +107,6 @@ const WEBGPU_BLOOM_STRENGTH_CAP = 0.32;
 const WEBGPU_READINESS_TIER = "diagnostic-core";
 const WEBGPU_DEFAULT_ELIGIBLE = false;
 const WEBGPU_ROLLOUT_STAGE = "stage-0-disabled";
-const WEBGPU_PRESENTATION_PROFILE = "core" as const;
 const WEBGPU_REMAINING_GAPS: string[] = [];
 const RENDERER_FRAME_SAMPLE_SECONDS = 0.5;
 const DEFAULT_READINESS_FRAME_SECONDS = 2;
@@ -166,12 +172,14 @@ export async function startWebGpuApp(
   createCourseGameplay: WebGpuCourseGameplayFactory
 ): Promise<void> {
   const dom = getDom();
+  const presentationSelection = resolveWebGpuPresentationProfile();
   const runtimeHolder: { current: WebGpuRenderRuntime | null } = { current: null };
   const cleanupHolder: { current: (() => void) | null } = { current: null };
   try {
     await startWebGpuAppInternal(
       rendererModeSelection,
       createCourseGameplay,
+      presentationSelection,
       dom,
       (runtime) => { runtimeHolder.current = runtime; },
       (cleanup) => { cleanupHolder.current = cleanup; }
@@ -183,13 +191,14 @@ export async function startWebGpuApp(
       runtimeHolder.current?.destroy();
     }
     const message = error instanceof Error ? error.message : String(error);
-    reportWebGpuFatalFailure(dom, rendererModeSelection, message, "startup");
+    reportWebGpuFatalFailure(dom, rendererModeSelection, presentationSelection.profile, message, "startup");
   }
 }
 
 async function startWebGpuAppInternal(
   rendererModeSelection: RendererModeSelection,
   createCourseGameplay: WebGpuCourseGameplayFactory,
+  presentationSelection: PresentationProfileSelection,
   dom: WebGpuDom,
   registerRuntime: (runtime: WebGpuRenderRuntime) => void,
   registerCleanup: (cleanup: () => void) => void
@@ -197,6 +206,7 @@ async function startWebGpuAppInternal(
   const settings = cloneDefaultSettings();
   applyRenderBenchmarkSettings(settings);
   let preset = getQualityPreset(settings);
+  let presentationProfile = presentationSelection.profile;
   let particleState = new ParticleVeilState(preset.particleBudget);
   const rippleSources = new RippleSourceStore();
   const echoState = new EchoZoneStateStore();
@@ -255,6 +265,7 @@ async function startWebGpuAppInternal(
     reportWebGpuFatalFailure(
       dom,
       rendererModeSelection,
+      presentationProfile,
       `WebGPU device lost (${reason})${detail}`,
       "device-lost"
     );
@@ -267,6 +278,7 @@ async function startWebGpuAppInternal(
       fallbackReason: "",
       initialQualityPreset: preset,
       initialSkyboxId: settings.skyboxId,
+      initialPresentationProfile: presentationProfile,
       onDeviceLost: handleDeviceLost
     });
     runtimeReference = runtime;
@@ -278,16 +290,29 @@ async function startWebGpuAppInternal(
       return;
     }
     setRenderBenchmarkMetadata({
-      presentationProfile: WEBGPU_PRESENTATION_PROFILE,
+      presentationProfile,
       userAgent: navigator.userAgent,
       hardwareConcurrency: navigator.hardwareConcurrency,
       deviceMemoryGiB: (navigator as Navigator & { readonly deviceMemory?: number }).deviceMemory ?? null
     });
+    debugEvent("webgpu.presentation.init", "Initialized WebGPU presentation profile", {
+      presentationProfile,
+      presentationProfileSource: presentationSelection.source,
+      rejectedPresentationProfile: presentationSelection.rejectedValue,
+      defaultPresentationProfile: "classic"
+    }, "info");
+    if (presentationSelection.rejectedValue !== null) {
+      debugEvent("webgpu.presentation.invalid", "Rejected invalid WebGPU presentation profile", {
+        rejectedPresentationProfile: presentationSelection.rejectedValue,
+        resolvedPresentationProfile: presentationProfile,
+        presentationProfileSource: presentationSelection.source
+      }, "warn");
+    }
   } catch (error) {
     if (runtimeReference) cleanupAfterTerminalFailure();
     if (runtimeFatalFailureShown) return;
     const message = error instanceof Error ? error.message : String(error);
-    reportWebGpuFatalFailure(dom, rendererModeSelection, message, "startup");
+    reportWebGpuFatalFailure(dom, rendererModeSelection, presentationProfile, message, "startup");
     return;
   }
 
@@ -319,6 +344,7 @@ async function startWebGpuAppInternal(
   playerReference = player;
 
   wireUi();
+  dom.presentationProfileRow.hidden = false;
   syncControlValues();
   resize();
   runtime.prewarm();
@@ -877,7 +903,7 @@ async function startWebGpuAppInternal(
         }
       },
       player: playerSnapshot,
-      scenePresentation: createScenePresentationSnapshot(settings, preset),
+      scenePresentation: createScenePresentationSnapshot(settings, preset, presentationProfile),
       avatarPresentation,
       sceneLighting: createSceneLightingSnapshot(settings, playerSnapshot, pulseSources, echoVisualState),
       sceneShadows: createSceneShadowSnapshot(playerSnapshot, pulseSources, echoVisualState),
@@ -912,11 +938,18 @@ async function startWebGpuAppInternal(
   function emitRendererMode(): void {
     const raceSnapshot = createRaceTrackSnapshot();
     const trainingSnapshot = createTrainingSnapshot();
+    const fieldMetrics = runtime.getFieldMetrics();
     debugEvent("renderer.mode", "Renderer mode selected", {
       requestedMode: rendererModeSelection.requestedMode,
       selectionSource: rendererModeSelection.source,
       activeBackend: "webgpu",
-      presentationProfile: WEBGPU_PRESENTATION_PROFILE,
+      presentationProfile,
+      fieldGeometryMode: fieldMetrics.fieldGeometryMode,
+      fieldVerticesPerInstance: fieldMetrics.fieldVerticesPerInstance,
+      fieldTrianglesPerInstance: fieldMetrics.fieldTrianglesPerInstance,
+      visibleSideFaceCount: fieldMetrics.visibleSideFaceCount,
+      bottomFaceIncluded: fieldMetrics.bottomFaceIncluded,
+      tileHeightMode: fieldMetrics.tileHeightMode,
       rolloutStage: WEBGPU_ROLLOUT_STAGE,
       rolloutDecisionCode: "explicit-webgpu",
       playMode: activePlayMode ?? "none",
@@ -931,7 +964,7 @@ async function startWebGpuAppInternal(
       trainingStepIndex: trainingSnapshot.stepIndex,
       trainingMarkerVisible: trainingSnapshot.marker.visible,
       integrationSurface: "core-render-snapshot",
-      ...readinessPayload(),
+      ...readinessPayload(presentationProfile),
       supportsBloom: true,
       supportsLocalLights: true
     }, "info");
@@ -991,6 +1024,12 @@ async function startWebGpuAppInternal(
       integrationSurface: "core-render-snapshot",
       scenePresentationMode: input.scenePresentation.mode,
       presentationProfile: input.scenePresentation.profile,
+      fieldGeometryMode: fieldMetrics.fieldGeometryMode,
+      fieldVerticesPerInstance: fieldMetrics.fieldVerticesPerInstance,
+      fieldTrianglesPerInstance: fieldMetrics.fieldTrianglesPerInstance,
+      visibleSideFaceCount: fieldMetrics.visibleSideFaceCount,
+      bottomFaceIncluded: fieldMetrics.bottomFaceIncluded,
+      tileHeightMode: fieldMetrics.tileHeightMode,
       playMode: input.playMode,
       cameraMode: input.camera.projection.cameraMode,
       simulationTimeSeconds: roundMetric(simulationTimeSeconds),
@@ -1088,7 +1127,7 @@ async function startWebGpuAppInternal(
       trainingMarkerTriangles: trainingMarkerMetrics.triangles,
       viewportWidth: input.viewport.width,
       viewportHeight: input.viewport.height,
-      ...readinessPayload()
+      ...readinessPayload(presentationProfile)
     };
   }
 
@@ -1112,10 +1151,11 @@ async function startWebGpuAppInternal(
     const field = runtime.getFieldMetrics();
     const particles = runtime.getParticleMetrics();
     const modeLabel = getPlayModeLabel();
+    const profileLabel = presentationProfile === "classic" ? "Classic" : "Core";
     dom.qualityBadge.textContent = activePlayMode ? `${modeLabel} / ${preset.label}` : preset.label;
     dom.statsLine.textContent = `${modeLabel} | ${formatCompactCount(field.instanceCount)} cells | ${input.echoVisualState.activeEchoes} echoes`;
     dom.mediumLine.textContent = `${getBasePropagationSpeedMetersPerSecond(settings.waveMedium).toFixed(1)} m/s | ${formatVoxelSize(settings.voxelSizeMeters)} hex | ${settings.arenaRadiusMeters.toFixed(0)}m arena`;
-    dom.perfOverlayQuality.textContent = `${modeLabel} / WebGPU`;
+    dom.perfOverlayQuality.textContent = `${modeLabel} / WebGPU ${profileLabel}`;
     dom.perfFrame.textContent = `${(rawDelta * 1000).toFixed(1)} ms`;
     dom.perfUpdate.textContent = `${lastFrameUpdateMs.toFixed(1)} ms`;
     dom.perfRender.textContent = `${lastFrameRenderMs.toFixed(1)} ms`;
@@ -1230,6 +1270,7 @@ async function startWebGpuAppInternal(
     dom.changelogContent.textContent = changelogMarkdown;
     dom.qualitySelect.value = settings.qualityId;
     dom.skyboxSelect.value = settings.skyboxId;
+    dom.presentationProfileSelect.value = presentationProfile;
     dom.voxelSizeSlider.value = String(settings.voxelSizeMeters);
     dom.voxelSizeValue.textContent = formatVoxelSize(settings.voxelSizeMeters);
     dom.arenaRadiusSlider.value = String(settings.arenaRadiusMeters);
@@ -1266,6 +1307,9 @@ async function startWebGpuAppInternal(
       if (event.target === dom.changelogBackdrop) setChangelogVisible(false);
     }, listenerOptions);
     dom.qualitySelect.addEventListener("change", () => applyQualityChange(dom.qualitySelect.value), listenerOptions);
+    dom.presentationProfileSelect.addEventListener("change", () => {
+      applyPresentationProfileChange(dom.presentationProfileSelect.value);
+    }, listenerOptions);
     dom.skyboxSelect.addEventListener("change", () => {
       if (!isSkyboxId(dom.skyboxSelect.value)) return;
       settings.skyboxId = dom.skyboxSelect.value;
@@ -1328,7 +1372,7 @@ async function startWebGpuAppInternal(
       const inputEnabled = appState === "playing" && activePlayMode !== null && !changelogVisible;
       if (inputEnabled) player.triggerPulse();
       debugEvent("webgpu.pulse.button", "Forced WebGPU pulse button pressed", {
-        ...readinessPayload(),
+        ...readinessPayload(presentationProfile),
         stateMode: "playable",
         inputEnabled,
         triggered: inputEnabled,
@@ -1365,6 +1409,35 @@ async function startWebGpuAppInternal(
     window.visualViewport?.addEventListener("resize", resize, listenerOptions);
     window.visualViewport?.addEventListener("scroll", resize, listenerOptions);
     wireTouchSticks(listenerOptions);
+  }
+
+  function applyPresentationProfileChange(value: string): void {
+    if (!isRenderPresentationProfile(value) || value === presentationProfile) {
+      syncControlValues();
+      return;
+    }
+
+    const startedAt = performance.now();
+    const previousProfile = presentationProfile;
+    const previousSimulationTimeSeconds = simulationTimeSeconds;
+    const previousPlayerPosition = player.position.clone();
+    presentationProfile = value;
+    const persisted = persistWebGpuPresentationProfile(value);
+    setRenderBenchmarkMetadata({ presentationProfile });
+    syncControlValues();
+
+    debugEvent("webgpu.presentation.change", "Changed WebGPU presentation profile without resetting the session", {
+      previousPresentationProfile: previousProfile,
+      presentationProfile,
+      persisted,
+      profileSwitchPreservedSession: true,
+      profileSwitchMs: roundMetric(performance.now() - startedAt),
+      simulationTimeSeconds: roundMetric(simulationTimeSeconds),
+      previousSimulationTimeSeconds: roundMetric(previousSimulationTimeSeconds),
+      playerPosition: vectorPayload(player.position),
+      previousPlayerPosition: vectorPayload(previousPlayerPosition),
+      playMode: activePlayMode ?? "none"
+    }, "info");
   }
 
   function updatePlayerSpeeds(changed: "base" | "boost"): void {
@@ -1421,7 +1494,7 @@ async function startWebGpuAppInternal(
 
   function logSettingsChange(setting: string, value: unknown, extra: RippleDebugPayload = {}): void {
     debugEvent("webgpu.settings.change", "Forced WebGPU setting changed", {
-      ...readinessPayload(),
+      ...readinessPayload(presentationProfile),
       stateMode: "playable",
       simulationTimeSeconds: roundMetric(simulationTimeSeconds),
       playerPosition: vectorPayload(player.position),
@@ -1492,12 +1565,16 @@ function createRenderSettingsSnapshot(settings: LabSettings): RenderFrameInput["
   };
 }
 
-function createScenePresentationSnapshot(settings: LabSettings, preset: QualityPreset): RenderFrameInput["scenePresentation"] {
+function createScenePresentationSnapshot(
+  settings: LabSettings,
+  preset: QualityPreset,
+  profile: RenderPresentationProfile
+): RenderFrameInput["scenePresentation"] {
   const skybox = getSkyboxOption(settings.skyboxId);
   const postGlowStrength = getWebGpuBloomStrength(settings);
   return {
     mode: "webgpu-core-scene",
-    profile: WEBGPU_PRESENTATION_PROFILE,
+    profile,
     arenaRadius: preset.fieldRadius,
     skyboxId: skybox.id,
     skybox,
@@ -1711,10 +1788,10 @@ function getWebGpuBloomStrength(settings: LabSettings): number {
   return settings.bloomEnabled ? Math.min(settings.bloomStrength, WEBGPU_BLOOM_STRENGTH_CAP) : 0;
 }
 
-function readinessPayload(): RippleDebugPayload {
+function readinessPayload(presentationProfile: RenderPresentationProfile): RippleDebugPayload {
   return {
     readinessTier: WEBGPU_READINESS_TIER,
-    presentationProfile: WEBGPU_PRESENTATION_PROFILE,
+    presentationProfile,
     defaultEligible: WEBGPU_DEFAULT_ELIGIBLE,
     remainingGaps: [...WEBGPU_REMAINING_GAPS]
   };
@@ -1756,6 +1833,7 @@ function updateEffectToggle(button: HTMLButtonElement, enabled: boolean, slider:
 function reportWebGpuFatalFailure(
   dom: WebGpuDom,
   rendererModeSelection: RendererModeSelection,
+  presentationProfile: RenderPresentationProfile,
   message: string,
   failureKind: "startup" | "device-lost"
 ): void {
@@ -1764,14 +1842,14 @@ function reportWebGpuFatalFailure(
     failureKind,
     requestedMode: rendererModeSelection.requestedMode,
     selectionSource: rendererModeSelection.source,
-    requestedPresentationProfile: WEBGPU_PRESENTATION_PROFILE,
+    requestedPresentationProfile: presentationProfile,
     message
   }, "error");
   debugEvent("webgpu.fallback", "Forced WebGPU renderer failed without fallback", {
     ok: false,
     activeBackend: "none",
     failureKind,
-    requestedPresentationProfile: WEBGPU_PRESENTATION_PROFILE,
+    requestedPresentationProfile: presentationProfile,
     fallbackReason: "Forced WebGPU does not fall back to WebGL.",
     message
   }, "error");
@@ -1842,6 +1920,8 @@ function getDom() {
     versionLink: requireElement<HTMLButtonElement>("#version-link"),
     qualitySelect: requireElement<HTMLSelectElement>("#quality-select"),
     skyboxSelect: requireElement<HTMLSelectElement>("#skybox-select"),
+    presentationProfileRow: requireElement<HTMLElement>("#presentation-profile-row"),
+    presentationProfileSelect: requireElement<HTMLSelectElement>("#presentation-profile-select"),
     perfOverlayToggle: requireElement<HTMLButtonElement>("#perf-overlay-toggle"),
     voxelSizeSlider: requireElement<HTMLInputElement>("#voxel-size-slider"),
     voxelSizeValue: requireElement<HTMLOutputElement>("#voxel-size-value"),

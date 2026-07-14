@@ -26,6 +26,7 @@ const VISUAL_LIMITS = Object.freeze({
 });
 const SOAK_POLL_INTERVAL_MS = 250;
 const SOAK_MAX_FRAME_GAP_MS = 2_000;
+const STOCK_WEBGPU_PRESENTATION_PROFILE = "classic";
 
 export async function runStockWebGpuAcceptance({
   appUrl,
@@ -320,6 +321,7 @@ function createStockUrl(appUrl, descriptor) {
   url.searchParams.set("debug", "1");
   url.searchParams.set("logServer", "0");
   url.searchParams.set("renderer", "webgpu");
+  url.searchParams.set("presentation", STOCK_WEBGPU_PRESENTATION_PROFILE);
   url.searchParams.set("mode", descriptor.mode);
   return url.toString();
 }
@@ -349,7 +351,9 @@ async function waitForStockEvidence(page, descriptor) {
       entry.channel === "webgpu.ready" && entry.payload?.timestampQueryEnabled === false
     ) && entries.some((entry) =>
       entry.channel === "renderer.mode" && entry.payload?.activeBackend === "webgpu" &&
-      entry.payload?.playMode === mode
+      entry.payload?.playMode === mode &&
+      entry.payload?.presentationProfile === "classic" &&
+      entry.payload?.fieldGeometryMode === "hex-prism"
     ) && entries.some((entry) =>
       entry.channel === "renderer.frameSample" && entry.payload?.backendId === "webgpu" &&
       entry.payload?.playMode === mode && entry.payload?.quality === qualityId &&
@@ -376,6 +380,12 @@ function assertStockEvidence(evidence, descriptor, label) {
     entry.payload?.playMode === descriptor.mode
   );
   if (!mode) throw new Error(`${label} did not confirm forced WebGPU ${descriptor.mode} mode.`);
+  if (mode.payload?.presentationProfile !== STOCK_WEBGPU_PRESENTATION_PROFILE ||
+    mode.payload?.fieldGeometryMode !== "hex-prism" ||
+    mode.payload?.fieldTrianglesPerInstance !== 24 ||
+    mode.payload?.bottomFaceIncluded !== true) {
+    throw new Error(`${label} did not confirm the Classic 3D WebGPU presentation.`);
+  }
   const frameSamples = evidence.entries.filter((entry) => entry.channel === "renderer.frameSample");
   if (frameSamples.length === 0 || frameSamples.some((entry) =>
     entry.payload?.backendId !== "webgpu" || entry.payload?.playMode !== descriptor.mode ||

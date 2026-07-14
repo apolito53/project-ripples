@@ -13,6 +13,7 @@ const SCENARIOS = new Set([
   "webgpu-capabilities",
   "webgpu-stock",
   "webgpu",
+  "webgpu-core",
   "webgpu-soak",
   "webgpu-readiness",
   "webgpu-default-soak",
@@ -37,7 +38,8 @@ const WEBGPU_SHADOW_GEOMETRY_MODE = "shape-proxy-casters";
 const WEBGPU_AVATAR_MODE = "hover-pod";
 const WEBGPU_AVATAR_ASSET_ID = "webgpu-hover-pod";
 const WEBGPU_MOTE_AVATAR_ASSET_ID = "mote-core-orbit";
-const WEBGPU_PRESENTATION_PROFILE = "core";
+const WEBGPU_PRESENTATION_PROFILE = "classic";
+const WEBGPU_CORE_PRESENTATION_PROFILE = "core";
 const WEBGL_PRESENTATION_PROFILE = "webgl-reference";
 const WEBGPU_REQUIRED_REMAINING_GAPS = [];
 const WEBGPU_SUCCESS_FORBIDDEN_CHANNELS = Object.freeze([
@@ -101,6 +103,8 @@ try {
     await verifyStockWebGpuRender(page, pageProblems);
   } else if (scenario === "webgpu") {
     await verifyWebGpuRender(page, pageProblems);
+  } else if (scenario === "webgpu-core") {
+    await verifyWebGpuCoreProfile(page, pageProblems);
   } else if (scenario === "webgpu-soak") {
     await verifyWebGpuSoak(page, pageProblems);
   } else if (scenario === "webgpu-readiness") {
@@ -167,10 +171,12 @@ async function verifyStockWebGpuRender(page, pageProblems) {
   );
   await waitForRunEvent(page, smokeRun, "renderer.mode", (record) =>
     record.entry.payload?.requestedMode === "webgpu" &&
-    record.entry.payload?.activeBackend === "webgpu"
+    record.entry.payload?.activeBackend === "webgpu" &&
+    hasClassicFieldGeometry(record.entry.payload)
   );
   await waitForRunEvent(page, smokeRun, "renderer.frameSample", (record) =>
     record.entry.payload?.backendId === "webgpu" &&
+    hasClassicFieldGeometry(record.entry.payload) &&
     record.entry.payload?.deviceLost === false
   );
 
@@ -510,6 +516,7 @@ async function verifyWebGpuRender(page, pageProblems) {
     const payload = record.entry.payload;
     return payload.scenePresentationMode === "webgpu-core-scene" &&
       hasDiagnosticCoreReadiness(payload) &&
+      hasClassicFieldGeometry(payload) &&
       payload.stateMode === "playable" &&
       payload.playMode === "arena" &&
       payload.raceTrackEnabled === false &&
@@ -535,6 +542,7 @@ async function verifyWebGpuRender(page, pageProblems) {
   await waitForRunEvent(page, smokeRun, "webgpu.readiness.init", (record) => {
     const payload = record.entry.payload;
     return hasDiagnosticCoreReadiness(payload) &&
+      hasClassicFieldGeometry(payload) &&
       payload.activeBackend === "webgpu" &&
       payload.stateMode === "playable" &&
       payload.scenePresentationMode === "webgpu-core-scene" &&
@@ -553,6 +561,7 @@ async function verifyWebGpuRender(page, pageProblems) {
   await waitForRunEvent(page, smokeRun, "webgpu.firstFrame", (record) => {
     const payload = record.entry.payload;
     return payload.scenePresentationMode === "webgpu-core-scene" &&
+      hasClassicFieldGeometry(payload) &&
       payload.playMode === "arena" &&
       payload.raceTrackEnabled === false &&
       payload.arenaBarrierEnabled === true &&
@@ -687,6 +696,7 @@ async function verifyWebGpuRender(page, pageProblems) {
   await waitForRunEvent(page, smokeRun, "ripple.webgpu.preview.init", (record) => {
     const payload = record.entry.payload;
     return payload.mode === "webgpu-field-preview" &&
+      hasClassicFieldGeometry(payload) &&
       payload.projectionMode === "perspective" &&
       payload.depthFormat === "depth24plus" &&
       payload.drawCalls === 1 &&
@@ -790,6 +800,7 @@ async function verifyWebGpuRender(page, pageProblems) {
   await waitForRunEvent(page, smokeRun, "ripple.webgpu.preview.frame", (record) => {
     const payload = record.entry.payload;
     return payload.mode === "webgpu-field-preview" &&
+      hasClassicFieldGeometry(payload) &&
       payload.projectionMode === "perspective" &&
       payload.cameraMode === "playable" &&
       payload.depthFormat === "depth24plus" &&
@@ -817,6 +828,7 @@ async function verifyWebGpuRender(page, pageProblems) {
     const payload = record.entry.payload;
     return payload.activeBackend === "webgpu" &&
       hasDiagnosticCoreReadiness(payload) &&
+      hasClassicFieldGeometry(payload) &&
       payload.supportsBloom === true &&
       payload.supportsLocalLights === true;
   });
@@ -824,6 +836,7 @@ async function verifyWebGpuRender(page, pageProblems) {
     const payload = record.entry.payload;
     return payload.backendId === "webgpu" &&
       hasDiagnosticCoreReadiness(payload) &&
+      hasClassicFieldGeometry(payload) &&
       payload.scenePresentationMode === "webgpu-core-scene" &&
       payload.stateMode === "playable" &&
       payload.cameraMode === "playable" &&
@@ -848,6 +861,7 @@ async function verifyWebGpuRender(page, pageProblems) {
       payload.scenePresentationMode === "webgpu-core-scene" &&
       payload.cameraMode === "playable" &&
       hasDiagnosticCoreReadiness(payload) &&
+      hasClassicFieldGeometry(payload) &&
       hasHoverPodAvatarPresentation(payload) &&
       hasShapeProxyShadowMap(payload) &&
       payload.supportsBloom === true &&
@@ -858,6 +872,7 @@ async function verifyWebGpuRender(page, pageProblems) {
     const payload = record.entry.payload;
     return payload.integrationSurface === "core-render-snapshot" &&
       hasDiagnosticCoreReadiness(payload) &&
+      hasClassicFieldGeometry(payload) &&
       payload.activeBackend === "webgpu" &&
       hasShapeProxyShadowMap(payload) &&
       typeof payload.wakeEnergyEstimate === "number" &&
@@ -955,6 +970,91 @@ async function verifyWebGpuRender(page, pageProblems) {
   console.log(`[ripple-field-lab:verify:webgpu] visible WebGPU diagnostic runtime OK at ${url}`);
 }
 
+async function verifyWebGpuCoreProfile(page, pageProblems) {
+  const smokeRun = createSmokeRun("webgpu-core");
+  const url = buildAppUrl(config, {
+    renderer: "webgpu",
+    presentation: WEBGPU_CORE_PRESENTATION_PROFILE,
+    mode: "arena",
+    smokeRun
+  });
+
+  await page.goto(url, { waitUntil: "domcontentloaded" });
+  await waitForRunEvent(page, smokeRun, "webgpu.presentation.init", (record) => {
+    const payload = record.entry.payload;
+    return payload.presentationProfile === WEBGPU_CORE_PRESENTATION_PROFILE &&
+      payload.presentationProfileSource === "query" &&
+      payload.rejectedPresentationProfile === null;
+  });
+  const coreGeometry = await waitForRunEvent(page, smokeRun, "ripple.webgpu.geometry", (record) =>
+    hasCoreFieldGeometry(record.entry.payload) &&
+    record.entry.payload.geometrySelectionReason === "startup" &&
+    record.entry.payload.profileSwitchPreservedSession === undefined
+  );
+  const coreFrame = await waitForRunEvent(page, smokeRun, "webgpu.sceneState.frame", (record) => {
+    const payload = record.entry.payload;
+    return record.entry.index > coreGeometry.entry.index &&
+      payload.activeBackend === "webgpu" &&
+      payload.readinessTier === WEBGPU_READINESS_TIER &&
+      payload.defaultEligible === WEBGPU_DEFAULT_ELIGIBLE &&
+      payload.stateMode === "playable" &&
+      payload.playMode === "arena" &&
+      hasCoreFieldGeometry(payload) &&
+      typeof payload.simulationTimeSeconds === "number" &&
+      payload.playerPosition &&
+      payload.deviceLost === false;
+  });
+  const selectedProfile = await page.locator("#presentation-profile-select").inputValue();
+  if (selectedProfile !== WEBGPU_CORE_PRESENTATION_PROFILE) {
+    throw new Error(`Core profile selector reported ${JSON.stringify(selectedProfile)}.`);
+  }
+
+  const coreCapture = await assertNonBlankCanvas(page, "WebGPU Core profile canvas", "webgpu");
+  assertWebGpuVisualBounds(coreCapture.analysis, "WebGPU Core profile canvas");
+
+  await setControlValue(page, "#presentation-profile-select", WEBGPU_PRESENTATION_PROFILE, "change");
+  const profileChange = await waitForRunEvent(page, smokeRun, "webgpu.presentation.change", (record) => {
+    const payload = record.entry.payload;
+    return record.entry.index > coreFrame.entry.index &&
+      payload.previousPresentationProfile === WEBGPU_CORE_PRESENTATION_PROFILE &&
+      payload.presentationProfile === WEBGPU_PRESENTATION_PROFILE &&
+      payload.persisted === true &&
+      payload.profileSwitchPreservedSession === true &&
+      payload.playMode === "arena" &&
+      payload.simulationTimeSeconds === payload.previousSimulationTimeSeconds &&
+      vectorsApproximatelyEqual(payload.playerPosition, payload.previousPlayerPosition, 0.0001);
+  });
+  await waitForRunEvent(page, smokeRun, "ripple.webgpu.geometry", (record) =>
+    record.entry.index > profileChange.entry.index &&
+    hasClassicFieldGeometry(record.entry.payload) &&
+    record.entry.payload.geometrySelectionReason === "profile-switch" &&
+    record.entry.payload.previousPresentationProfile === WEBGPU_CORE_PRESENTATION_PROFILE &&
+    record.entry.payload.profileSwitchPreservedSession === true
+  );
+  await waitForRunEvent(page, smokeRun, "webgpu.sceneState.frame", (record) => {
+    const payload = record.entry.payload;
+    return record.entry.index > profileChange.entry.index &&
+      hasDiagnosticCoreReadiness(payload) &&
+      hasClassicFieldGeometry(payload) &&
+      payload.playMode === "arena" &&
+      payload.simulationTimeSeconds >= coreFrame.entry.payload.simulationTimeSeconds &&
+      payload.deviceLost === false;
+  });
+
+  await delay(700);
+  const classicCapture = await captureCanvasPng(page);
+  const classicAnalysis = analyzePng(classicCapture);
+  assertAnimatedPng(coreCapture.png, classicCapture, "WebGPU Core-to-Classic profile switch");
+  assertWebGpuVisualBounds(classicAnalysis, "WebGPU Classic profile after Core switch");
+
+  const events = await readRunEvents(smokeRun);
+  assertNoDiagnosticErrors(events);
+  assertNoChannels(events, WEBGPU_SUCCESS_FORBIDDEN_CHANNELS, "forced WebGPU Core profile");
+  pageProblems.assertNoErrors("WebGPU Core profile smoke");
+
+  console.log(`[ripple-field-lab:verify:webgpu:core] Core preservation and live Classic switch OK at ${url}`);
+}
+
 async function verifyWebGpuTrackRender(page, pageProblems) {
   const smokeRun = createSmokeRun("webgpu-track");
   const url = buildAppUrl(config, { renderer: "webgpu", mode: "track", smokeRun });
@@ -963,10 +1063,18 @@ async function verifyWebGpuTrackRender(page, pageProblems) {
   await waitForRunEvent(page, smokeRun, "webgpu.support", (record) => record.entry.payload.available === true);
   await waitForRunEvent(page, smokeRun, "webgpu.ready");
   await waitForRunEvent(page, smokeRun, "webgpu.runtime.init");
+  await waitForRunEvent(page, smokeRun, "webgpu.presentation.init", (record) =>
+    record.entry.payload.presentationProfile === WEBGPU_PRESENTATION_PROFILE &&
+    record.entry.payload.rejectedPresentationProfile === null
+  );
+  await waitForRunEvent(page, smokeRun, "ripple.webgpu.geometry", (record) =>
+    hasClassicFieldGeometry(record.entry.payload)
+  );
   await waitForRunEvent(page, smokeRun, "renderer.mode", (record) => {
     const payload = record.entry.payload;
     return payload.activeBackend === "webgpu" &&
       hasDiagnosticCoreReadiness(payload) &&
+      hasClassicFieldGeometry(payload) &&
       payload.playMode === "track" &&
       payload.raceTrackEnabled === true &&
       payload.trackMaskUploaded === true &&
@@ -978,6 +1086,7 @@ async function verifyWebGpuTrackRender(page, pageProblems) {
   await waitForRunEvent(page, smokeRun, "webgpu.firstFrame", (record) => {
     const payload = record.entry.payload;
     return payload.scenePresentationMode === "webgpu-core-scene" &&
+      hasClassicFieldGeometry(payload) &&
       payload.playMode === "track" &&
       payload.raceTrackEnabled === true &&
       payload.trackMaskUploaded === true &&
@@ -991,6 +1100,7 @@ async function verifyWebGpuTrackRender(page, pageProblems) {
     const payload = record.entry.payload;
     return payload.scenePresentationMode === "webgpu-core-scene" &&
       hasDiagnosticCoreReadiness(payload) &&
+      hasClassicFieldGeometry(payload) &&
       payload.stateMode === "playable" &&
       payload.playMode === "track" &&
       payload.raceTrackEnabled === true &&
@@ -1013,6 +1123,7 @@ async function verifyWebGpuTrackRender(page, pageProblems) {
   await waitForRunEvent(page, smokeRun, "ripple.webgpu.preview.frame", (record) => {
     const payload = record.entry.payload;
     return payload.mode === "webgpu-field-preview" &&
+      hasClassicFieldGeometry(payload) &&
       payload.playMode === "track" &&
       payload.raceTrackEnabled === true &&
       payload.raceTrackMaskWidth > 1 &&
@@ -1032,6 +1143,7 @@ async function verifyWebGpuTrackRender(page, pageProblems) {
     const payload = record.entry.payload;
     return payload.backendId === "webgpu" &&
       hasDiagnosticCoreReadiness(payload) &&
+      hasClassicFieldGeometry(payload) &&
       payload.playMode === "track" &&
       payload.raceTrackEnabled === true &&
       payload.trackMaskUploaded === true &&
@@ -1405,6 +1517,7 @@ async function exerciseViewportAndFocusChurn(page, smokeRun) {
 async function verifyWebGpuSoak(page, pageProblems) {
   const smokeRun = createSmokeRun("webgpu-soak");
   const url = buildAppUrl(config, { renderer: "webgpu", mode: "arena", smokeRun });
+  const retainedEvents = new Map();
 
   await page.goto(url, { waitUntil: "domcontentloaded" });
   const first = await assertNonBlankCanvas(page, "WebGPU soak canvas", "webgpu");
@@ -1450,6 +1563,7 @@ async function verifyWebGpuSoak(page, pageProblems) {
       typeof payload.wakeEnergyEstimate === "number" &&
       payload.deviceLost === false;
   });
+  await retainRunEvents(smokeRun, retainedEvents);
 
   await focusSceneCanvas(page);
   await page.keyboard.down("w");
@@ -1466,6 +1580,7 @@ async function verifyWebGpuSoak(page, pageProblems) {
       payload.depthMode === "field-depth-read" &&
       payload.deviceLost === false;
   }, 20000);
+  await retainRunEvents(smokeRun, retainedEvents);
   await dispatchPointerDown(page, "#pulse-button");
   await delay(1000);
   await setControlValue(page, "#quality-select", "showoff", "change");
@@ -1490,6 +1605,7 @@ async function verifyWebGpuSoak(page, pageProblems) {
       payload.scenePresentationMode === "webgpu-core-scene" &&
       payload.deviceLost === false;
   }, 20000);
+  await retainRunEvents(smokeRun, retainedEvents);
   await setControlValue(page, "#voxel-size-slider", "1.15", "input");
   await waitForRunEvent(page, smokeRun, "webgpu.settings.change", (record) => {
     const payload = record.entry.payload;
@@ -1522,14 +1638,19 @@ async function verifyWebGpuSoak(page, pageProblems) {
       payload.waveSpeed > 0 &&
       payload.deviceLost === false;
   }, 20000);
-  await delay(WEBGPU_SOAK_MOVEMENT_MS);
+  await retainRunEvents(smokeRun, retainedEvents);
+  await delayAndRetainRunEvents(smokeRun, WEBGPU_SOAK_MOVEMENT_MS, retainedEvents);
   await page.keyboard.up("w");
 
   const second = await captureCanvasPng(page);
   assertAnimatedPng(first.png, second, "WebGPU soak canvas");
   assertWebGpuVisualBounds(analyzePng(second), "WebGPU soak canvas after movement");
 
-  const events = await readRunEvents(smokeRun);
+  await flushDebugLog(page);
+  await retainRunEvents(smokeRun, retainedEvents);
+  const events = [...retainedEvents.values()].sort(
+    (left, right) => (left.entry.index ?? -1) - (right.entry.index ?? -1)
+  );
   assertNoDiagnosticErrors(events);
   assertNoChannels(events, WEBGPU_SUCCESS_FORBIDDEN_CHANNELS, "forced WebGPU soak");
   assertWebGpuSoakEvents(events);
@@ -1542,6 +1663,7 @@ async function verifyWebGpuReadiness(page, pageProblems) {
   const smokeRun = createSmokeRun("webgpu-readiness");
   const url = buildAppUrl(config, { renderer: "webgpu", mode: "arena", smokeRun });
   const startedAt = Date.now();
+  const retainedEvents = new Map();
 
   await page.goto(url, { waitUntil: "domcontentloaded" });
   const first = await assertNonBlankCanvas(page, "WebGPU readiness canvas", "webgpu");
@@ -1582,6 +1704,7 @@ async function verifyWebGpuReadiness(page, pageProblems) {
     return hasShapeProxyShadowMap(payload) &&
       payload.deviceLost === false;
   });
+  await retainRunEvents(smokeRun, retainedEvents);
 
   await focusSceneCanvas(page);
   await page.keyboard.down("w");
@@ -1621,6 +1744,7 @@ async function verifyWebGpuReadiness(page, pageProblems) {
         payload.depthMode === "field-depth-read" &&
         payload.deviceLost === false;
     }, 20000);
+    await retainRunEvents(smokeRun, retainedEvents);
 
     await exerciseWebGpuSettings(page, smokeRun);
     await waitForRunEvent(page, smokeRun, "webgpu.integrationReadiness.frame", (record) => {
@@ -1647,9 +1771,10 @@ async function verifyWebGpuReadiness(page, pageProblems) {
         payload.wakeEnergyEstimate <= WEBGPU_SOAK_MAX_WAKE_ENERGY_ESTIMATE &&
         payload.deviceLost === false;
     }, 20000);
+    await retainRunEvents(smokeRun, retainedEvents);
 
     const remainingMs = Math.max(0, WEBGPU_READINESS_MOVEMENT_MS - (Date.now() - startedAt));
-    await delay(remainingMs);
+    await delayAndRetainRunEvents(smokeRun, remainingMs, retainedEvents);
   } finally {
     await page.keyboard.up("w");
   }
@@ -1658,7 +1783,11 @@ async function verifyWebGpuReadiness(page, pageProblems) {
   assertAnimatedPng(first.png, second, "WebGPU readiness canvas");
   assertWebGpuVisualBounds(analyzePng(second), "WebGPU readiness canvas after readiness run");
 
-  const events = await readRunEvents(smokeRun);
+  await flushDebugLog(page);
+  await retainRunEvents(smokeRun, retainedEvents);
+  const events = [...retainedEvents.values()].sort(
+    (left, right) => (left.entry.index ?? -1) - (right.entry.index ?? -1)
+  );
   assertNoDiagnosticErrors(events);
   assertNoChannels(events, WEBGPU_SUCCESS_FORBIDDEN_CHANNELS, "forced WebGPU readiness");
   assertWebGpuReadinessEvents(events);
@@ -1671,6 +1800,7 @@ async function verifyWebGpuDefaultSoak(page, pageProblems) {
   const smokeRun = createSmokeRun("webgpu-default-soak");
   const url = buildAppUrl(config, { renderer: "webgpu", mode: "arena", smokeRun });
   const startedAt = Date.now();
+  const retainedEvents = new Map();
 
   await page.goto(url, { waitUntil: "domcontentloaded" });
   const first = await assertNonBlankCanvas(page, "WebGPU default-readiness canvas", "webgpu");
@@ -1699,6 +1829,7 @@ async function verifyWebGpuDefaultSoak(page, pageProblems) {
       typeof payload.wakeEnergyEstimate === "number" &&
       payload.deviceLost === false;
   });
+  await retainRunEvents(smokeRun, retainedEvents);
 
   await focusSceneCanvas(page);
   await page.keyboard.down("w");
@@ -1747,9 +1878,10 @@ async function verifyWebGpuDefaultSoak(page, pageProblems) {
         payload.wakeEnergyEstimate <= WEBGPU_SOAK_MAX_WAKE_ENERGY_ESTIMATE &&
         payload.deviceLost === false;
     }, 20000);
+    await retainRunEvents(smokeRun, retainedEvents);
 
     const remainingMs = Math.max(0, WEBGPU_DEFAULT_SOAK_MOVEMENT_MS - (Date.now() - startedAt));
-    await delay(remainingMs);
+    await delayAndRetainRunEvents(smokeRun, remainingMs, retainedEvents);
   } finally {
     await page.keyboard.up("w");
   }
@@ -1766,8 +1898,11 @@ async function verifyWebGpuDefaultSoak(page, pageProblems) {
       payload.deviceLost === false;
   }, 5000);
   await flushDebugLog(page);
+  await retainRunEvents(smokeRun, retainedEvents);
 
-  const events = await readRunEvents(smokeRun);
+  const events = [...retainedEvents.values()].sort(
+    (left, right) => (left.entry.index ?? -1) - (right.entry.index ?? -1)
+  );
   assertNoDiagnosticErrors(events);
   assertNoChannels(events, WEBGPU_SUCCESS_FORBIDDEN_CHANNELS, "forced WebGPU default readiness soak");
   assertWebGpuReadinessEvents(events);
@@ -2002,6 +2137,23 @@ async function readRunEvents(smokeRun) {
     }));
 }
 
+async function retainRunEvents(smokeRun, retainedEvents) {
+  const records = await readRunEvents(smokeRun);
+  for (const record of records) {
+    const key = record.entry.index ?? `${record.receivedAt ?? "unknown"}:${record.entry.channel}`;
+    retainedEvents.set(key, record);
+  }
+}
+
+async function delayAndRetainRunEvents(smokeRun, durationMs, retainedEvents) {
+  const deadline = Date.now() + durationMs;
+  while (Date.now() < deadline) {
+    await retainRunEvents(smokeRun, retainedEvents);
+    await delay(Math.min(5_000, Math.max(0, deadline - Date.now())));
+  }
+  await retainRunEvents(smokeRun, retainedEvents);
+}
+
 async function getLatestRunEntryIndex(page, smokeRun) {
   await flushDebugLog(page);
   const records = await readRunEvents(smokeRun);
@@ -2100,6 +2252,33 @@ function hasDiagnosticCoreReadiness(payload) {
     WEBGPU_REQUIRED_REMAINING_GAPS.every((gap) => remainingGaps.includes(gap));
 }
 
+function hasClassicFieldGeometry(payload) {
+  return payload?.presentationProfile === WEBGPU_PRESENTATION_PROFILE &&
+    payload?.fieldGeometryMode === "hex-prism" &&
+    payload?.fieldVerticesPerInstance === 72 &&
+    payload?.fieldTrianglesPerInstance === 24 &&
+    payload?.visibleSideFaceCount === 6 &&
+    payload?.bottomFaceIncluded === true &&
+    payload?.tileHeightMode === "animated-prism";
+}
+
+function hasCoreFieldGeometry(payload) {
+  return payload?.presentationProfile === WEBGPU_CORE_PRESENTATION_PROFILE &&
+    payload?.fieldGeometryMode === "hex-cap" &&
+    payload?.fieldVerticesPerInstance === 18 &&
+    payload?.fieldTrianglesPerInstance === 6 &&
+    payload?.visibleSideFaceCount === 0 &&
+    payload?.bottomFaceIncluded === false &&
+    payload?.tileHeightMode === "flat-cap";
+}
+
+function vectorsApproximatelyEqual(left, right, tolerance) {
+  if (!left || !right) return false;
+  return Math.abs((left.x ?? 0) - (right.x ?? 0)) <= tolerance &&
+    Math.abs((left.y ?? 0) - (right.y ?? 0)) <= tolerance &&
+    Math.abs((left.z ?? 0) - (right.z ?? 0)) <= tolerance;
+}
+
 async function verifyWebGpuDeviceLost(page, pageProblems) {
   const smokeRun = createSmokeRun("webgpu-device-lost");
   const url = buildAppUrl(config, {
@@ -2168,6 +2347,7 @@ async function verifyWebGpuDeviceLost(page, pageProblems) {
 function hasDefaultReadinessPayload(payload) {
   return payload?.defaultReadinessSurface === "forced-webgpu-core" &&
     hasDiagnosticCoreReadiness(payload) &&
+    hasClassicFieldGeometry(payload) &&
     payload?.defaultRolloutSoakGapClosed === true &&
     payload?.remainingGapCount === WEBGPU_REQUIRED_REMAINING_GAPS.length &&
     payload?.scenePresentationMode === "webgpu-core-scene" &&
@@ -2365,6 +2545,7 @@ function assertWebGpuSoakEvents(records) {
   }
   if (!frameSamples.some((record) =>
     hasDiagnosticCoreReadiness(record.entry.payload) &&
+    hasClassicFieldGeometry(record.entry.payload) &&
     record.entry.payload?.supportsBloom === true &&
     record.entry.payload?.supportsLocalLights === true &&
     record.entry.payload?.renderedLocalLights > 0 &&
@@ -2517,6 +2698,7 @@ function assertWebGpuReadinessEvents(records) {
   }
   if (!frameSamples.some((record) =>
     hasDiagnosticCoreReadiness(record.entry.payload) &&
+    hasClassicFieldGeometry(record.entry.payload) &&
     record.entry.payload?.scenePresentationMode === "webgpu-core-scene" &&
     hasHoverPodAvatarPresentation(record.entry.payload) &&
     record.entry.payload?.supportsBloom === true &&

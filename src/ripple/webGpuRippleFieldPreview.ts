@@ -8,7 +8,7 @@ import {
 } from "../rippleFieldLayout";
 import { MAX_SHADER_RIPPLE_SOURCES, RIPPLE_LIFETIME_SECONDS, type RippleRenderSourceSnapshot } from "../rippleSources";
 import type { QualityPreset } from "../qualityPresets";
-import type { RenderFrameInput } from "../render/types";
+import type { RenderFrameInput, RenderPresentationProfile } from "../render/types";
 import type { WebGpuDiagnosticLogger } from "../render/webgpu";
 import type { WebGpuWakeFieldProbeMetrics } from "../wake/webGpuWakeFieldProbe";
 import { getBasePropagationSpeedMetersPerSecond } from "../waveMedium";
@@ -22,9 +22,12 @@ const SOURCE_FLOATS = 8;
 const ECHO_FLOATS = 8;
 const MAX_WEBGPU_ECHO_MARKERS = 8;
 const MAX_WEBGPU_ECHO_COLLECTION_EVENTS = 8;
-const FIELD_VERTEX_COUNT = 18;
+const CORE_FIELD_VERTEX_COUNT = 18;
+const CLASSIC_FIELD_VERTEX_COUNT = 72;
 const FIELD_DRAW_CALLS = 1;
-const FIELD_TRIANGLES_PER_INSTANCE = 6;
+const CORE_FIELD_TRIANGLES_PER_INSTANCE = 6;
+const CLASSIC_FIELD_TRIANGLES_PER_INSTANCE = 24;
+const CLASSIC_FIELD_VISIBLE_SIDE_FACE_COUNT = 6;
 export const FIELD_DEPTH_FORMAT: GPUTextureFormat = "depth24plus";
 
 export type WebGpuRippleFieldPreviewFrameInput = {
@@ -46,6 +49,13 @@ export type WebGpuRippleFieldPreviewMetrics = {
   readonly cameraMode: string;
   readonly depthFormat: GPUTextureFormat;
   readonly qualityId: string;
+  readonly presentationProfile: RenderPresentationProfile;
+  readonly fieldGeometryMode: "hex-cap" | "hex-prism";
+  readonly fieldVerticesPerInstance: number;
+  readonly fieldTrianglesPerInstance: number;
+  readonly visibleSideFaceCount: number;
+  readonly bottomFaceIncluded: boolean;
+  readonly tileHeightMode: "flat-cap" | "animated-prism";
   readonly instanceCount: number;
   readonly sourceLimit: number;
   readonly activeSources: number;
@@ -75,7 +85,8 @@ export type WebGpuRippleFieldPreviewMetrics = {
 
 export class WebGpuRippleFieldPreview {
   private readonly bindGroupLayout: GPUBindGroupLayout;
-  private readonly pipeline: GPURenderPipeline;
+  private readonly corePipeline: GPURenderPipeline;
+  private readonly classicPipeline: GPURenderPipeline;
   private readonly uniformBuffer: GPUBuffer;
   private readonly sourceBuffer: GPUBuffer;
   private readonly echoBuffer: GPUBuffer;
@@ -117,17 +128,23 @@ export class WebGpuRippleFieldPreview {
   private presentationWidth = 1;
   private presentationHeight = 1;
   private cameraMode = "diagnostic-orbit";
+  private presentationProfile: RenderPresentationProfile;
+  private lastGeometryLogProfile: RenderPresentationProfile | null = null;
 
   private constructor(
     private readonly device: GPUDevice,
     format: GPUTextureFormat,
     private readonly log: WebGpuDiagnosticLogger,
     initialPreset: QualityPreset,
+    initialPresentationProfile: RenderPresentationProfile,
     bindGroupLayout: GPUBindGroupLayout,
-    pipeline: GPURenderPipeline
+    corePipeline: GPURenderPipeline,
+    classicPipeline: GPURenderPipeline
   ) {
     this.bindGroupLayout = bindGroupLayout;
-    this.pipeline = pipeline;
+    this.corePipeline = corePipeline;
+    this.classicPipeline = classicPipeline;
+    this.presentationProfile = initialPresentationProfile;
     this.uniformBuffer = device.createBuffer({
       label: "Ripple WebGPU field preview uniforms",
       size: FIELD_UNIFORM_FLOATS * Float32Array.BYTES_PER_ELEMENT,
@@ -168,6 +185,9 @@ export class WebGpuRippleFieldPreview {
       echoLimit: MAX_WEBGPU_ECHO_MARKERS,
       echoBurstLimit: MAX_WEBGPU_ECHO_COLLECTION_EVENTS,
       trackMaskFormat: "rgba8unorm",
+      supportedPresentationProfiles: "classic,core",
+      presentationProfile: this.presentationProfile,
+      ...getFieldGeometryMetrics(this.presentationProfile),
       drawCalls: FIELD_DRAW_CALLS,
       triangles: this.getTriangleCount()
     });
@@ -178,6 +198,7 @@ export class WebGpuRippleFieldPreview {
     format: GPUTextureFormat,
     initialPreset: QualityPreset,
     log: WebGpuDiagnosticLogger,
+    initialPresentationProfile: RenderPresentationProfile,
     sceneLightBindGroupLayout: GPUBindGroupLayout,
     sceneShadowBindGroupLayout: GPUBindGroupLayout,
     shadowMapBindGroupLayout: GPUBindGroupLayout
@@ -190,43 +211,58 @@ export class WebGpuRippleFieldPreview {
         label: "Ripple WebGPU field preview shader",
         code: rippleFieldPreviewSource
       });
-      const pipeline = await device.createRenderPipelineAsync({
-        label: "Ripple WebGPU field preview pipeline",
-        layout: device.createPipelineLayout({
-          label: "Ripple WebGPU field preview pipeline layout",
-          bindGroupLayouts: [
-            bindGroupLayout,
-            sceneLightBindGroupLayout,
-            sceneShadowBindGroupLayout,
-            shadowMapBindGroupLayout
-          ]
-        }),
-        vertex: {
-          module: shaderModule,
-          entryPoint: "vertexMain"
-        },
-        fragment: {
-          module: shaderModule,
-          entryPoint: "fragmentMain",
-          targets: [{ format }]
-        },
-        primitive: {
-          topology: "triangle-list",
-          cullMode: "none"
-        },
-        depthStencil: {
-          format: FIELD_DEPTH_FORMAT,
-          depthWriteEnabled: true,
-          depthCompare: "less"
-        }
+      const pipelineLayout = device.createPipelineLayout({
+        label: "Ripple WebGPU field preview pipeline layout",
+        bindGroupLayouts: [
+          bindGroupLayout,
+          sceneLightBindGroupLayout,
+          sceneShadowBindGroupLayout,
+          shadowMapBindGroupLayout
+        ]
       });
+      const createPipeline = (profile: RenderPresentationProfile): Promise<GPURenderPipeline> =>
+        device.createRenderPipelineAsync({
+          label: `Ripple WebGPU ${profile} field preview pipeline`,
+          layout: pipelineLayout,
+          vertex: {
+            module: shaderModule,
+            entryPoint: profile === "classic" ? "vertexClassicMain" : "vertexCoreMain"
+          },
+          fragment: {
+            module: shaderModule,
+            entryPoint: profile === "classic" ? "fragmentClassicMain" : "fragmentCoreMain",
+            targets: [{ format }]
+          },
+          primitive: {
+            topology: "triangle-list",
+            cullMode: profile === "classic" ? "back" : "none"
+          },
+          depthStencil: {
+            format: FIELD_DEPTH_FORMAT,
+            depthWriteEnabled: true,
+            depthCompare: "less"
+          }
+        });
+      const [corePipeline, classicPipeline] = await Promise.all([
+        createPipeline("core"),
+        createPipeline("classic")
+      ]);
 
       const scopedError = await device.popErrorScope();
       if (scopedError) {
         throw new Error(scopedError.message);
       }
 
-      return new WebGpuRippleFieldPreview(device, format, log, initialPreset, bindGroupLayout, pipeline);
+      return new WebGpuRippleFieldPreview(
+        device,
+        format,
+        log,
+        initialPreset,
+        initialPresentationProfile,
+        bindGroupLayout,
+        corePipeline,
+        classicPipeline
+      );
     } catch (error) {
       const scopedError = await device.popErrorScope().catch(() => null);
       const message = scopedError?.message ?? (error instanceof Error ? error.message : String(error));
@@ -308,6 +344,8 @@ export class WebGpuRippleFieldPreview {
     this.writeUniforms(input.renderInput, input.wakeMetrics, renderedSourceCount, echoCounts);
     const depthView = this.getDepthTextureView(input.renderInput);
     this.cameraMode = input.renderInput.camera.projection.cameraMode;
+    this.presentationProfile = input.renderInput.scenePresentation.profile;
+    this.maybeLogGeometry();
 
     const bindGroup = this.device.createBindGroup({
       label: "Ripple WebGPU field preview bind group",
@@ -338,12 +376,12 @@ export class WebGpuRippleFieldPreview {
       }
     });
 
-    pass.setPipeline(this.pipeline);
+    pass.setPipeline(this.presentationProfile === "classic" ? this.classicPipeline : this.corePipeline);
     pass.setBindGroup(0, bindGroup);
     pass.setBindGroup(1, input.sceneLightBindGroup);
     pass.setBindGroup(2, input.sceneShadowBindGroup);
     pass.setBindGroup(3, input.shadowMapBindGroup);
-    pass.draw(FIELD_VERTEX_COUNT, this.layout.instanceCount);
+    pass.draw(getFieldVertexCount(this.presentationProfile), this.layout.instanceCount);
     pass.end();
 
     this.passMs = performance.now() - startedAt;
@@ -363,6 +401,8 @@ export class WebGpuRippleFieldPreview {
       cameraMode: this.cameraMode,
       depthFormat: FIELD_DEPTH_FORMAT,
       qualityId: this.layout.qualityId,
+      presentationProfile: this.presentationProfile,
+      ...getFieldGeometryMetrics(this.presentationProfile),
       instanceCount: this.layout.instanceCount,
       sourceLimit: this.layout.renderedRippleSourceLimit,
       activeSources: this.activeSourceCount,
@@ -651,6 +691,8 @@ export class WebGpuRippleFieldPreview {
       depthFormat: FIELD_DEPTH_FORMAT,
       passMs: roundMetric(this.passMs),
       quality: this.layout.qualityId,
+      presentationProfile: this.presentationProfile,
+      ...getFieldGeometryMetrics(this.presentationProfile),
       instanceCount: this.layout.instanceCount,
       sourceLimit: this.layout.renderedRippleSourceLimit,
       activeSources: this.activeSourceCount,
@@ -723,7 +765,22 @@ export class WebGpuRippleFieldPreview {
   }
 
   private getTriangleCount(): number {
-    return this.layout.instanceCount * FIELD_TRIANGLES_PER_INSTANCE;
+    return this.layout.instanceCount * getFieldTrianglesPerInstance(this.presentationProfile);
+  }
+
+  private maybeLogGeometry(): void {
+    if (this.lastGeometryLogProfile === this.presentationProfile) return;
+    const previousPresentationProfile = this.lastGeometryLogProfile;
+    this.lastGeometryLogProfile = this.presentationProfile;
+    this.log("ripple.webgpu.geometry", "Selected WebGPU RippleField geometry profile", {
+      presentationProfile: this.presentationProfile,
+      previousPresentationProfile,
+      geometrySelectionReason: previousPresentationProfile === null ? "startup" : "profile-switch",
+      ...getFieldGeometryMetrics(this.presentationProfile),
+      instanceCount: this.layout.instanceCount,
+      triangles: this.getTriangleCount(),
+      ...(previousPresentationProfile === null ? {} : { profileSwitchPreservedSession: true })
+    }, "info");
   }
 
   private getDepthTextureView(input: RenderFrameInput): GPUTextureView {
@@ -818,6 +875,28 @@ function analyzeTrackMaskCoverage(
 
 function finiteOrDefault(value: number | undefined, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function getFieldVertexCount(profile: RenderPresentationProfile): number {
+  return profile === "classic" ? CLASSIC_FIELD_VERTEX_COUNT : CORE_FIELD_VERTEX_COUNT;
+}
+
+function getFieldTrianglesPerInstance(profile: RenderPresentationProfile): number {
+  return profile === "classic"
+    ? CLASSIC_FIELD_TRIANGLES_PER_INSTANCE
+    : CORE_FIELD_TRIANGLES_PER_INSTANCE;
+}
+
+function getFieldGeometryMetrics(profile: RenderPresentationProfile) {
+  const classic = profile === "classic";
+  return {
+    fieldGeometryMode: classic ? "hex-prism" as const : "hex-cap" as const,
+    fieldVerticesPerInstance: getFieldVertexCount(profile),
+    fieldTrianglesPerInstance: getFieldTrianglesPerInstance(profile),
+    visibleSideFaceCount: classic ? CLASSIC_FIELD_VISIBLE_SIDE_FACE_COUNT : 0,
+    bottomFaceIncluded: classic,
+    tileHeightMode: classic ? "animated-prism" as const : "flat-cap" as const
+  };
 }
 
 function roundMetric(value: number): number {

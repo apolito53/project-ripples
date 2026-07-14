@@ -417,6 +417,7 @@ async function runBackendSample(options) {
       viewport: FIXED_VIEWPORT,
       deviceScaleFactor: FIXED_DEVICE_SCALE_FACTOR
     });
+    assertBenchmarkPresentationProfile(normalized, options.renderer, label);
 
     normalized.runtimeMetadata = options.sequence === 0
       ? await collectRuntimeMetadata(page)
@@ -625,6 +626,7 @@ function createScenarioUrl(options) {
   url.searchParams.set("debug", "0");
   url.searchParams.set("logServer", "0");
   url.searchParams.set("renderer", options.renderer);
+  if (options.renderer === "webgpu") url.searchParams.set("presentation", "classic");
   url.searchParams.set("mode", SCENARIO_MODES[options.benchmarkCase.scenario]);
   url.searchParams.set("benchmark", "1");
   url.searchParams.set("benchmarkScenario", options.benchmarkCase.scenario);
@@ -634,6 +636,16 @@ function createScenarioUrl(options) {
   url.searchParams.set("benchmarkRun", options.runId);
   url.searchParams.set("benchmarkRepetition", String(options.repetition));
   return url.toString();
+}
+
+function assertBenchmarkPresentationProfile(sample, renderer, label) {
+  const expected = renderer === "webgpu" ? "classic" : "webgl-reference";
+  if (sample.appMetadata?.presentationProfile !== expected) {
+    throw new Error(
+      `Benchmark sample ${label} reported presentationProfile=${JSON.stringify(sample.appMetadata?.presentationProfile)}; ` +
+      `expected ${JSON.stringify(expected)}.`
+    );
+  }
 }
 
 function collectPageProblems(page) {

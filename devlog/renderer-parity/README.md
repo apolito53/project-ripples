@@ -6,34 +6,37 @@ but independent rendering does not imply identical art direction.
 
 ## Presentation Profiles
 
-- `core`: the current WebGPU-native minimalist presentation. Preserve its cap-
+- `core`: the preserved WebGPU-native minimalist presentation. Preserve its cap-
   focused field, graphic lighting, dense orb Echoes, hover-pod treatment, and
   bounded custom bloom as a supported style.
-- `classic`: reserved for a future WebGL-inspired treatment. Do not expose it in
-  the UI or accept it from storage/query settings until it produces a real,
-  verified visual difference.
+- `classic`: the default forced-WebGPU parity candidate. Its field uses true
+  procedural hex prisms with top caps, six visible side faces, animated tile
+  height, a closed underside, and WebGL-inspired pressure/material response.
 - `webgl-reference`: the current Three/WebGL scene used as the audit reference;
   it is a report label, not a WebGPU profile.
 
-Any closer-to-WebGL shader or pass work must branch behind `classic`. Changing
-`core` merely to reduce a diff is not parity closure.
+Closer-to-WebGL shader or pass work stays behind `classic`. Changing `core`
+merely to reduce a diff is not parity closure. Both profiles are selectable by
+the pause-menu **Field Style** control or `?presentation=classic|core`.
 
 ## Current Finding
 
 Functional and fixed-tick semantic parity is established for the audited Arena,
-Track, and Training fixtures. Strict presentation parity is **review-required**.
-The first deterministic audit matched player/camera/mode/field state, pulse
+Track, and Training fixtures for both profiles. Strict Classic presentation
+parity is **review-required**. The deterministic audit matched player/camera/mode/field state, pulse
 sources, Echo identity, Track mask/walls, and Training marker state at every
 fixture while showing substantial, expected visual differences between
-`webgl-reference` and `core`.
+`webgl-reference` and each selected WebGPU profile.
 
 Run the current audit with:
 
 ```powershell
 npm.cmd run audit:render:parity
+npm.cmd run audit:render:parity:core
 ```
 
-It writes ignored evidence under `parity-results/<timestamp>/`: raw captures,
+The first command audits Classic; the second preserves Core evidence. They write
+ignored evidence under `parity-results/<profile>-<timestamp>/`: raw captures,
 WebGL/WebGPU/amplified-diff strips, `report.json`, and `summary.md`. Each page
 uses the benchmark seed plus a capture-only fixed-step controller. Arena and
 Track freeze at tick 180; Training freezes at tick 60; pulse fixtures advance
@@ -57,8 +60,8 @@ cross-backend snapshot.
 | System | Current classification | Core policy | Classic audit target |
 | --- | --- | --- | --- |
 | Gameplay, camera, mode, field placement, Track mask, Training state | Shared/exact | Keep shared neutral ownership | No change unless a fixed-tick state mismatch appears |
-| Ripple field geometry/material | Intentional Core difference | Preserve cap-focused graphic treatment | Compare prism thickness, side faces, material response, and field horizon |
-| Immediate player trough/rim/body wake | Missing from WebGPU field shader | Decide whether the cleaner Core response is intentional | Restore the WebGL proximity deformation as a profile branch |
+| Ripple field geometry/material | Classic 3D geometry restored; material remains review-required | Preserve cap-focused graphic treatment | Tune prism thickness, side-face material response, and field horizon without flattening geometry |
+| Immediate player trough/rim/body wake | Classic approximation implemented | Keep the cleaner Core response | Review pressure/rim shape against WebGL without reviving arena-wide wash |
 | Persistent wake solver | Suspect | Keep bounded settling that prevented arena wash | Reconcile WebGPU global settling and WebGL final clamps without reviving wash |
 | Avatar | Intentional Core difference | Preserve WebGPU hover-pod/mote treatment and saved mote asset | Compare dimensional silhouette, fins, thrusters, trails, and fixtures |
 | Active Echoes and collection | WebGPU-native equivalent | Preserve dense tiny-sun orbs as the Core read | Compare Three shells/columns, event mist, and field-response duplication |

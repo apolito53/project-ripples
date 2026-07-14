@@ -22,7 +22,7 @@ const FIXED_DEVICE_SCALE_FACTOR = 1;
 const BENCHMARK_SEED = 1_337;
 const PULSE_SETTLE_TICKS = readIntegerEnv("RIPPLE_PARITY_PULSE_TICKS", 36, 12, 300);
 const PAGE_TIMEOUT_MS = readIntegerEnv("RIPPLE_PARITY_TIMEOUT_MS", 60_000, 15_000, 180_000);
-const WEBGPU_PRESENTATION_PROFILE = "core";
+const WEBGPU_PRESENTATION_PROFILE = readWebGpuPresentationProfile();
 const WEBGL_PRESENTATION_PROFILE = "webgl-reference";
 const DEFAULT_AUDIT_APP_URL = "http://127.0.0.1:4184/";
 
@@ -58,7 +58,7 @@ const config = {
   appUrl: appServer.appUrl,
   logServerQueryValue: "0"
 };
-const runId = createRunId();
+const runId = `${WEBGPU_PRESENTATION_PROFILE}-${createRunId()}`;
 const outputDirectory = path.resolve(
   process.env.RIPPLE_PARITY_OUTPUT_DIR || "parity-results",
   runId
@@ -276,6 +276,7 @@ function createSceneUrl(scene, backendId) {
     debug: "1",
     logServer: "0",
     renderer: backendId,
+    presentation: backendId === "webgpu" ? WEBGPU_PRESENTATION_PROFILE : undefined,
     mode: scene.mode,
     benchmark: "1",
     benchmarkScenario: scene.benchmarkScenario,
@@ -388,9 +389,16 @@ async function readRuntimeDiagnostics(page, backendId, mode) {
       `expected ${JSON.stringify(expectedProfile)}.`
     );
   }
+  if (backendId === "webgpu") assertWebGpuPresentationGeometry(frameSample.payload);
 
   return {
     presentationProfile: frameSample.payload.presentationProfile,
+    fieldGeometryMode: frameSample.payload.fieldGeometryMode ?? null,
+    fieldVerticesPerInstance: frameSample.payload.fieldVerticesPerInstance ?? null,
+    fieldTrianglesPerInstance: frameSample.payload.fieldTrianglesPerInstance ?? null,
+    visibleSideFaceCount: frameSample.payload.visibleSideFaceCount ?? null,
+    bottomFaceIncluded: frameSample.payload.bottomFaceIncluded ?? null,
+    tileHeightMode: frameSample.payload.tileHeightMode ?? null,
     quality: frameSample.payload.quality ?? evidence.benchmark?.samples?.at(-1)?.semantic?.qualityId ?? "unknown",
     drawCalls: frameSample.payload.drawCalls ?? null,
     triangles: frameSample.payload.triangles ?? null,
@@ -571,7 +579,7 @@ function renderSummary(report) {
     "",
     "## Interpretation",
     "",
-    "- The left image in each review strip is WebGL, the center is the preserved Core (Minimal) WebGPU profile, and the right is an amplified absolute difference.",
+    `- The left image in each review strip is WebGL, the center is the ${WEBGPU_PRESENTATION_PROFILE === "classic" ? "Classic 3D" : "Core (Minimal)"} WebGPU profile, and the right is an amplified absolute difference.`,
     "- Histogram overlap and coarse luma correlation help distinguish broad composition drift from expected shader-level differences.",
     "- No metric in this report automatically declares artistic parity. Update the tracked parity matrix after visual review.",
     ""
@@ -725,6 +733,46 @@ function toPortableRelativePath(root, value) {
 
 function createRunId() {
   return new Date().toISOString().replaceAll(":", "-").replace(/\.\d{3}Z$/, "Z");
+}
+
+function readWebGpuPresentationProfile() {
+  const argument = process.argv.slice(2).find((value) => value.startsWith("--presentation="));
+  const value = argument?.slice("--presentation=".length) ||
+    process.env.RIPPLE_PARITY_WEBGPU_PROFILE ||
+    "classic";
+  if (value !== "classic" && value !== "core") {
+    throw new Error(`Unsupported WebGPU parity presentation profile ${JSON.stringify(value)}; expected classic or core.`);
+  }
+  return value;
+}
+
+function assertWebGpuPresentationGeometry(payload) {
+  const classic = WEBGPU_PRESENTATION_PROFILE === "classic";
+  const expected = classic
+    ? {
+        fieldGeometryMode: "hex-prism",
+        fieldVerticesPerInstance: 72,
+        fieldTrianglesPerInstance: 24,
+        visibleSideFaceCount: 6,
+        bottomFaceIncluded: true,
+        tileHeightMode: "animated-prism"
+      }
+    : {
+        fieldGeometryMode: "hex-cap",
+        fieldVerticesPerInstance: 18,
+        fieldTrianglesPerInstance: 6,
+        visibleSideFaceCount: 0,
+        bottomFaceIncluded: false,
+        tileHeightMode: "flat-cap"
+      };
+  for (const [key, expectedValue] of Object.entries(expected)) {
+    if (payload?.[key] !== expectedValue) {
+      throw new Error(
+        `WebGPU ${WEBGPU_PRESENTATION_PROFILE} parity capture reported ${key}=${JSON.stringify(payload?.[key])}; ` +
+        `expected ${JSON.stringify(expectedValue)}.`
+      );
+    }
+  }
 }
 
 function readIntegerEnv(name, fallback, minimum, maximum) {

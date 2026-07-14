@@ -5,22 +5,24 @@ concrete follow-ups that we actually intend to revisit.
 
 ## High Priority
 
-- Close the renderer presentation audit without erasing WebGPU Core.
+- Close the remaining Classic renderer presentation audit without erasing
+  WebGPU Core.
   The fixed-tick Arena/Track/Training audit now proves matching semantic state
   and records paired captures under `parity-results/`, while the tracked matrix
   in `devlog/renderer-parity/README.md` separates intentional Core differences
-  from Classic parity suspects. Add Clean jump/Echo, Training completion,
+  from Classic parity suspects. Classic now uses true top-and-six-side prism
+  geometry, profile-specific lighting/height response, and is the forced-WebGPU
+  default; Core remains selectable in place. Add Clean jump/Echo, Training completion,
   Meltdown grazing-camera, all-skybox, and Track wake-persistence fixtures;
-  resolve the immediate player trough, particle depth, skybox/fog, Echo field
-  response, arena curtain, stage-floor/fixture, light/shadow, and output-transform
-  decisions behind a future `classic` profile. Add a named renderer-neutral
+  resolve particle depth, skybox/fog, Echo field response, arena curtain,
+  stage-floor/fixture, light/shadow, and output-transform decisions in Classic.
+  Add a named renderer-neutral
   particle RNG stream so particle placement can join the exact audit snapshot.
-  Keep `core` intact and make it selectable when Classic becomes a real option.
 
-- Repeat the accepted
-  `renderer-benchmark-v2-flat-top-column-stagger` package on at least one
-  integrated/lower-power GPU and one older or different-vendor discrete GPU.
-  The clean RTX 4070 Ti baseline is tracked under
+- Record an accepted `renderer-benchmark-v3-classic-3d-tiles` package on the
+  current machine, then repeat it on at least one integrated/lower-power GPU and
+  one older or different-vendor discrete GPU. The clean v2 RTX 4070 Ti Core
+  baseline remains tracked as historical, intentionally incompatible evidence under
   `devlog/benchmark-baselines/rtx-4070-ti-2026-07-12-73df45e/`; the old July 11
   dirty pre-column-stagger result remains superseded.
   Stage 0 keeps `auto` on WebGL and `defaultEligible=false` while those artifacts
@@ -76,8 +78,10 @@ concrete follow-ups that we actually intend to revisit.
 
 ## Done / Recent Decisions
 
-- Named the current minimalist WebGPU art direction `core`, reserved `classic`
-  for a future WebGL-inspired profile, and added a deterministic fixed-tick
+- Added the default Classic WebGPU profile with procedural 3D hex prisms,
+  animated tile thickness, real side-face lighting, query/storage/menu policy,
+  live session-preserving profile switches, and dedicated browser/parity checks.
+- Preserved the minimalist WebGPU art direction as selectable `core` and added a deterministic fixed-tick
   renderer presentation audit with state matching, repeatability checks, paired
   captures, image metrics, and amplified diffs.
 - Filled the circular arena with cubes instead of stopping the field at a square

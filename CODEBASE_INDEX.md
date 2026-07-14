@@ -30,6 +30,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Browser WebGL lifecycle smoke: `npm.cmd run verify:render:webgl`
 - Browser WebGPU capability smoke: `npm.cmd run verify:webgpu:capabilities`
 - Browser forced-WebGPU lifecycle smoke: `npm.cmd run verify:render:webgpu`
+- Browser preserved WebGPU Core profile and live Classic switch smoke:
+  `npm.cmd run verify:render:webgpu:core`
 - Browser stock-Chrome WebGPU smoke without unsafe/blocklist flags:
   `npm.cmd run verify:render:webgpu:stock`
 - Browser forced-WebGPU unavailable smoke:
@@ -44,6 +46,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `npm.cmd run verify:render:webgpu:device-lost`
 - Dormant auto-rollout policy verifier:
   `npm.cmd run verify:renderer:auto-rollout`
+- WebGPU presentation policy verifier:
+  `npm.cmd run verify:renderer:presentation-profile`
 - Browser-harness checkout provenance verifier:
   `npm.cmd run verify:smoke-harness`
 - Flat-top honeycomb geometry invariant: `npm.cmd run verify:hex-lattice`
@@ -51,6 +55,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `npm.cmd run verify:benchmark:reporting`
 - Fixed-tick WebGL/WebGPU presentation audit with paired captures and diffs:
   `npm.cmd run audit:render:parity`
+- Fixed-tick WebGL/preserved-Core presentation audit:
+  `npm.cmd run audit:render:parity:core`
 - Production WebGL/WebGPU comparative benchmark:
   `npm.cmd run benchmark:renderers`
 - Clean-tree cross-hardware acceptance package with stock Chrome checks,
@@ -67,7 +73,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `src/main.ts`
 - Conservative renderer policy, WebGL runtime wrapper, forced-WebGPU lifecycle,
   neutral contracts, and raw-WebGPU pass orchestration: `src/render/rendererMode.ts`,
-  `src/render/threeRenderRuntime.ts`, `src/render/webGpuApp.ts`,
+  `src/render/presentationProfile.ts`, `src/render/threeRenderRuntime.ts`, `src/render/webGpuApp.ts`,
   `src/render/types.ts`, and `src/render/webGpuRenderRuntime.ts`
 - Browser harness provenance and server-pair ownership:
   `scripts/ripple-smoke-harness.mjs`; explicit runs provide all four
@@ -143,7 +149,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - JSONL diagnostics parser shared by the receiver and CLI:
   `scripts/debug-log-analysis.mjs`
 - Newest-log diagnostics CLI: `scripts/analyze-debug-log.mjs`
-- Comparative benchmark runner, v2 reporting/baseline protocol, stock acceptance,
+- Comparative benchmark runner, v3 Classic-3D reporting/baseline protocol, stock acceptance,
   portable package support/orchestration, and focused verifier:
   `scripts/benchmark-renderers.mjs`, `scripts/benchmark-reporting.mjs`,
   `scripts/benchmark-stock-acceptance.mjs`, `scripts/benchmark-package.mjs`,
@@ -152,6 +158,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Fixed-tick presentation capture/reporting and non-gating image comparison:
   `scripts/audit-renderer-parity.mjs`, `scripts/render-parity-analysis.mjs`, and
   `devlog/renderer-parity/README.md`
+- Classic 3D/Core field pipelines, procedural prism geometry, and profile
+  diagnostics: `src/ripple/webGpuRippleFieldPreview.ts` and
+  `src/ripple/webGpuRippleFieldPreview.wgsl`
 - Rollout policy checks: `scripts/verify-renderer-rollout.mjs`
 - Benchmark baseline registry, accepted RTX 4070 Ti v2 evidence, and superseded
   historical evidence: `devlog/benchmark-baselines/README.md`,
@@ -251,6 +260,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
     Arena enables the circular curtain; Track and Training upload the course
     mask and packed wall segments, use clipped layout state, and disable it.
     Training adds its one-draw objective marker and deterministic Echo policy.
+    The selected presentation profile chooses either the default Classic 3D
+    hex-prism pipeline or the preserved flat Core pipeline without rebuilding
+    gameplay state.
     Readiness stays `diagnostic-core` and `defaultEligible=false` even after the
     automated remaining-gap list reaches empty.
 
@@ -298,6 +310,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Change renderer policy, neutral frame/stats contracts, or forced-WebGPU
   lifecycle/readiness: `src/render/rendererMode.ts`, `src/render/types.ts`,
   `src/render/webGpuApp.ts`, and `src/render/webGpuRenderRuntime.ts`
+- Change the WebGPU Classic/Core selector policy or procedural field geometry:
+  `src/render/presentationProfile.ts`, `src/ripple/webGpuRippleFieldPreview.ts`,
+  and `src/ripple/webGpuRippleFieldPreview.wgsl`
 - Change WebGPU course walls or the Training objective marker:
   `src/render/webGpuTrackWallPass.ts`, `src/render/webGpuTrackWallPass.wgsl`,
   `src/render/webGpuTrainingMarkerPass.ts`, and
@@ -321,11 +336,12 @@ Purpose: compact map for the standalone ripple-field visual lab.
   acceptance and fallback lifecycle work pass. Forced WebGPU must fail visibly
   instead of falling back, and its WGSL passes should keep explicit pipeline
   layouts and shared field-depth ordering.
-- WebGPU presentation profile `core` is the preserved minimalist art direction.
-  `classic` is reserved for future WebGL-inspired presentation work and must
-  remain unavailable until it has distinct visuals and audit coverage.
+- WebGPU presentation profile `classic` is the default parity candidate and must
+  keep real prism side faces, animated thickness, and dedicated browser/parity
+  coverage. `core` is the preserved minimalist flat-cap option; do not retune it
+  merely to reduce Classic/WebGL diffs.
 - Decision-grade benchmark evidence uses protocol/workload
-  `renderer-benchmark-v2-flat-top-column-stagger`. The package command requires
+  `renderer-benchmark-v3-classic-3d-tiles`. The package command requires
   a clean tree, installs from the recorded lockfile in a detached worktree at the
   recorded commit, owns strict
   preview port `4183`, requires stable Chrome without fallback, and runs stock
@@ -337,6 +353,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
   10% warning/20% failure thresholds; compatible different hardware is
   informational, and protocol/workload/config mismatches are incompatible. A
   warning is reported distinctly but blocks packaged baseline promotion.
+  The tracked v2 RTX 4070 Ti projection measured the older flat Core field and
+  is intentionally incompatible with v3 Classic evidence.
   `RIPPLE_BENCHMARK_PACKAGE_TEST=1` is a shortened tooling profile that reports
   `test-only-passed` with an ineligible baseline, not acceptance evidence.
 - Keep the CPU/GPU contract small: pulse uniforms, player position, player

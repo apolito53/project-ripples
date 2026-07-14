@@ -82,9 +82,8 @@ export type RenderTrainingMarkerSnapshot = TrainingMarkerPresentationSnapshot;
 export type RenderTrainingSnapshot = TrainingPresentationSnapshot;
 
 /**
- * Presentation profiles let renderer-native art direction coexist with a
- * closer classic treatment. The current WebGPU scene is the preserved core
- * profile; classic is reserved for future WebGL-inspired art direction.
+ * Presentation profiles keep the original flat WebGPU art direction available
+ * while the default Classic path restores dimensional WebGL-inspired tiles.
  */
 export type RenderPresentationProfile = "core" | "classic";
 

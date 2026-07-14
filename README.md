@@ -214,16 +214,24 @@ but automatic selection is held at rollout Stage 0 with a hard-zero cohort.
 hardware acceptance is gathered; explicit `webgl` and `webgpu` requests remain
 immune to the cohort policy.
 
-The current forced-WebGPU art direction is now named the `core` presentation
-profile: the minimalist, WebGPU-native field/effect treatment used throughout
-the port. It remains the only active WebGPU presentation and is explicitly
-preserved. A future `classic` profile is reserved for closer Three/WebGL art
-direction; it will not be exposed until it has a meaningful visual difference
-and dedicated coverage.
+Forced WebGPU now defaults to the `classic` presentation profile. Classic draws
+each field cell as a real procedural hex prism with a top cap and six visible
+side walls, animated tile height, wake/source displacement, and profile-specific
+lighting. A downward cap keeps the field closed during the supported underside
+camera orbit. The original flat,
+minimalist WebGPU treatment remains available as `core`.
+
+Choose the profile with the pause-menu **Field Style** selector or with
+`?presentation=classic|core`. The query wins over
+`localStorage.rippleWebGpuPresentation`. With no query, a valid stored profile
+is used; with neither, Classic is the default. Invalid query or stored values
+fail closed to Classic. Switching profiles changes the field pipeline in place without
+resetting the current mode, player position, or simulation clock. WebGL ignores
+the WebGPU presentation preference.
 
 ### Renderer Presentation Audit
 
-`npm.cmd run audit:render:parity` captures fixed-tick WebGL and WebGPU Core
+`npm.cmd run audit:render:parity` captures fixed-tick WebGL and WebGPU Classic
 fixtures for Pretty Arena, Showoff Track, and Pretty Training at 1280x720/DPR 1.
 The command builds current sources and owns strict preview port `4184`. The
 capture-only controller advances both simulations to exact ticks, freezes
@@ -234,7 +242,8 @@ wall-geometry, and Training-marker identity before producing image evidence. Set
 External-server reports are marked `external-unverified` and are not attributed
 to the current workspace commit.
 
-Ignored results land under `parity-results/<timestamp>/` as raw PNGs, side-by-
+Use `npm.cmd run audit:render:parity:core` to audit the preserved minimalist
+profile. Ignored results land under `parity-results/<profile>-<timestamp>/` as raw PNGs, side-by-
 side amplified-diff strips, `report.json`, and `summary.md`. Cross-renderer
 histogram, coarse-luma, edge-density, and RGB-delta metrics guide review but do
 not assert naive pixel equality. The tracked classification and remaining
@@ -266,14 +275,18 @@ $env:RIPPLE_BENCHMARK_BASELINE='benchmark-results\previous\baseline.json'
 npm.cmd run benchmark:renderers
 ```
 
-The v2 protocol/workload ID is
-`renderer-benchmark-v2-flat-top-column-stagger`. A baseline must match that ID
+The current v3 protocol/workload ID is
+`renderer-benchmark-v3-classic-3d-tiles`. WebGPU benchmark and stock-acceptance
+URLs explicitly request Classic, and each sample must report that presentation
+profile. A baseline must match the v3 ID
 and the fixed workload configuration before regression math runs. Compatible
 same-hardware comparisons warn at a 10% p95 regression and fail at 20% or when
 a stable Meltdown tier is lost. Compatible cross-hardware comparisons are
 classified as informational; protocol or workload mismatches are incompatible
 and include reasons. A same-hardware warning remains a warning in the comparison
 report, but it blocks packaged acceptance and baseline promotion until reviewed.
+The accepted v2 flat-Core baseline remains tracked as historical evidence but is
+intentionally incompatible with Classic 3D measurements.
 
 For decision-grade cross-hardware evidence, run:
 

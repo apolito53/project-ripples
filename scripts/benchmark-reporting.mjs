@@ -13,9 +13,9 @@ const DECISION_GRADE_CASE_IDS = [
 
 export const RENDERER_BENCHMARK_SCHEMA_VERSION = 2;
 export const RENDERER_BENCHMARK_PROTOCOL_VERSION =
-  "renderer-benchmark-v2-flat-top-column-stagger";
+  "renderer-benchmark-v3-classic-3d-tiles";
 export const RENDERER_BENCHMARK_WORKLOAD_VERSION =
-  "renderer-benchmark-v2-flat-top-column-stagger";
+  "renderer-benchmark-v3-classic-3d-tiles";
 
 export function normalizeBenchmarkSnapshot(snapshot, context) {
   assertSnapshotShape(snapshot, context.label);
@@ -495,7 +495,7 @@ export function buildBenchmarkAcceptance({
     baselineRegression: gate(
       comparison === null || comparison.classification === "informational" || comparison.status === "passed",
       comparison === null
-        ? "No prior baseline was supplied; this accepted run may become the v2 baseline."
+        ? "No prior baseline was supplied; this accepted run may become the current-protocol baseline."
         : `${comparison.classification}: ${comparison.status}.`
     )
   };
@@ -573,7 +573,7 @@ export function renderSummaryMarkdown(summary) {
       : []),
     ...(summary.artifacts?.baselineJson
       ? [summary.acceptance?.status === "passed" && summary.acceptance?.decisionGrade === true
-          ? "- `baseline.json`: accepted v2 baseline projection for later compatible comparisons"
+          ? "- `baseline.json`: accepted current-protocol baseline projection for later compatible comparisons"
           : "- `baseline.json`: ineligible current-run projection retained for audit only"]
       : []),
     ...(summary.artifacts?.manifestJson

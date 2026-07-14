@@ -51,6 +51,17 @@
   `devlog/renderer-parity/README.md` that separates exact/shared behavior,
   WebGPU-native equivalents, intentional Core differences, parity suspects,
   and the remaining visual audit fixtures.
+- Added a selectable WebGPU presentation policy. `?presentation=classic|core`
+  takes precedence over `localStorage.rippleWebGpuPresentation`, the pause menu
+  exposes the same choice, invalid values fail closed to Classic, and profile
+  changes preserve the active player position and simulation clock.
+- Added the Classic WebGPU field pipeline with procedural top caps and six
+  visible side quads plus a bottom cap per cell, animated prism height, smooth
+  radial side normals, lighting, and player pressure response. The
+  original flat-cap Core pipeline remains available unchanged.
+- Added policy checks, a dedicated Core-preservation/live-switch browser smoke,
+  geometry diagnostics, and separate Classic-default/Core renderer parity
+  audit commands.
 
 ### Changed
 
@@ -98,16 +109,19 @@
   and actual selected adapters from environment metadata, removed raw PNP IDs,
   and classified baseline comparisons as comparable, informational, or
   incompatible before applying same-machine 10%/20% regression thresholds.
+- Advanced current benchmark evidence to
+  `renderer-benchmark-v3-classic-3d-tiles`, pinned benchmark and stock WebGPU
+  URLs to Classic, and required profile metadata so the old flat-Core v2
+  baseline cannot be treated as a compatible Classic performance baseline.
 - Hardened packaged benchmark provenance by building from a detached worktree at
   the recorded commit, rechecking the clean branch/HEAD before acceptance,
   requiring full sample-window coverage and matching stock/instrumented adapters,
   validating cross-file bundle coherence, and making shortened test packages
   explicitly ineligible for baseline use.
-- Named the current minimalist WebGPU presentation profile `core` and reserved
-  `classic` for future WebGL-inspired styling. Diagnostics and benchmark
-  metadata now identify Core so accepted renderer evidence remains auditable by
-  presentation profile; Classic remains deliberately unselectable until it has
-  a real implementation and dedicated coverage.
+- Made `classic` the forced-WebGPU default presentation now that it has true 3D
+  field geometry and dedicated coverage. The earlier minimalist treatment is
+  retained as selectable `core`; diagnostics and benchmark metadata identify
+  the active profile so renderer evidence remains auditable.
 
 ## 0.5.3-2-ALPHA - 2026-07-08
 
