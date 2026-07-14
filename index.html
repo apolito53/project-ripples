@@ -15,7 +15,7 @@
         <div class="main-menu__content">
           <header class="main-menu__header">
             <h1 id="main-menu-title">Ripple Field Lab</h1>
-            <button id="main-menu-version-link" class="version-link" type="button" aria-haspopup="dialog">v0.5.4-ALPHA</button>
+            <button id="main-menu-version-link" class="version-link" type="button" aria-haspopup="dialog">v0.5.5-ALPHA</button>
           </header>
           <div class="main-menu__actions" aria-label="Select play mode">
             <button id="start-training-button" class="mode-button mode-button--training" type="button">
@@ -63,7 +63,7 @@
         <section id="scene-menu" class="scene-menu" aria-label="Pause menu" role="dialog" aria-modal="true" tabindex="-1">
           <header class="scene-menu__header">
             <h2>Paused</h2>
-            <button id="version-link" class="version-link" type="button" aria-haspopup="dialog">v0.5.4-ALPHA</button>
+            <button id="version-link" class="version-link" type="button" aria-haspopup="dialog">v0.5.5-ALPHA</button>
           </header>
 
           <div class="pause-actions" aria-label="Pause actions">
@@ -122,6 +122,20 @@
               <div class="range-with-value">
                 <input id="surface-grip-slider" type="range" min="0.25" max="2" step="0.05" value="1" />
                 <output id="surface-grip-value" class="control-value" for="surface-grip-slider">100%</output>
+              </div>
+            </label>
+            <label class="control-row">
+              <span>Left Stick</span>
+              <div class="range-with-value">
+                <input id="left-stick-sensitivity-slider" type="range" min="0.5" max="2" step="0.05" value="1" />
+                <output id="left-stick-sensitivity-value" class="control-value" for="left-stick-sensitivity-slider">100%</output>
+              </div>
+            </label>
+            <label class="control-row">
+              <span>Right Stick</span>
+              <div class="range-with-value">
+                <input id="right-stick-sensitivity-slider" type="range" min="0.5" max="2" step="0.05" value="1" />
+                <output id="right-stick-sensitivity-value" class="control-value" for="right-stick-sensitivity-slider">100%</output>
               </div>
             </label>
             <label class="control-row">

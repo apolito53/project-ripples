@@ -9,7 +9,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Vite + strict TypeScript browser app.
 - Three.js renderer, postprocessing composer, Unreal bloom pass, shader-customized
   `InstancedMesh`, additive `Points`, and dynamic lights.
-- Current alpha baseline: `v0.5.4-ALPHA`; keep release tags in alpha prerelease
+- Current alpha baseline: `v0.5.5-ALPHA`; keep release tags in alpha prerelease
   territory until the lab graduates from prototype status.
 - Dedicated dev port `5183`; preview port `4183`.
 
@@ -45,14 +45,15 @@ Purpose: compact map for the standalone ripple-field visual lab.
   carried ground momentum, jump/landing state, hidden speed-tuning defaults,
   optional track/play-area constraint, circular arena fallback clamp,
   scene-input gating, split left/right hold-to-look pointer lock,
-  camera/player yaw separation, both-button camera-forward movement, WoW-style
-  turn/strafe key semantics, ballistic airborne horizontal momentum, full
-  180-degree vertical camera orbit, quiet mouse-release unlocks, and camera
-  follow behavior:
+  camera/player yaw separation, mouse-only both-button camera-forward movement,
+  controller-only camera-relative analog movement, gently returning follow
+  camera, per-stick sensitivity, and B-button braking, WoW-style turn/strafe key semantics, ballistic
+  airborne horizontal momentum, full 180-degree
+  vertical camera orbit, quiet mouse-release unlocks, and camera follow behavior:
   `src/controls.ts`
 - Reconnect-safe standard-mapped controller polling, radial stick dead zones,
-  consumable button/navigation edges, controller selection, sparse diagnostics,
-  and guarded dual-rumble haptics: `src/gamepadInput.ts`
+  consumable button edges, held menu-navigation repeat, controller selection,
+  sparse diagnostics, and guarded dual-rumble haptics: `src/gamepadInput.ts`
 - Circular shader-displaced instanced hex field, including optional track-mode
   placement clipping, sampled GPU movement wake displacement,
   Meltdown-calibrated honeycomb orientation, lit hex caps, generated race-track
@@ -132,15 +133,20 @@ Purpose: compact map for the standalone ripple-field visual lab.
    adding little circular source stamps, and airborne jumps fade that contact
    before touchdown. Echo-zone timers add persistent collectible markers instead
    of immediate ambient waves.
-   Standard-mapped gamepads mirror that handling model: left stick drives and
-   steers, right stick free-looks, bumpers strafe or combine for camera-forward
-   movement, RT provides analog boost, A jumps, X pulses, and Menu/View own
-   pause and diagnostics. The same controller navigates startup and pause UI
-   without synthesizing keyboard events.
+   Standard-mapped gamepads use a third-person analog variant kept separate from
+   mouse/keyboard rules: the full left-stick vector moves relative to the camera,
+   pulling back travels toward camera-back, B actively brakes, right stick
+   free-looks with camera
+   priority, R3 snaps pod facing to the camera, pause-menu sensitivity sliders
+   tune left-stick response and right-stick look speed, bumpers
+   strafe independently, RT provides analog boost, A jumps, X pulses, and
+   Menu/View own pause and diagnostics. Held menu directions repeat for usable
+   slider adjustment without synthesizing keyboard events.
 6. `TrainingRun` optionally guides the player through the current control set
-   inside the course mode: camera orbit, steering, keyboard movement, boosting,
-   both-button movement, momentum braking, jumping, scripted Echo pickup, and
-   wall sliding. It observes read-only `PlayerRig` telemetry and requests
+   inside the course mode: camera orbit, steering, movement, boosting, active
+   controller braking or mouse-button movement, momentum coasting, jumping,
+   scripted Echo pickup, and wall sliding. It observes read-only `PlayerRig`
+   telemetry and requests
    existing Echo/pulse effects instead of changing movement rules.
 7. `RaceTrack` keeps the first racing-course prototype alive: a wide closed
    sweeping non-crossing loop scaled to the active arena radius,
@@ -203,8 +209,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Change Training Run objectives, objective marker placement, scripted Echo
   behavior, HUD progress chips, or training diagnostics:
   `src/trainingRun.ts`, `src/main.ts`, and `index.html`
-- Change controller mappings, dead zones, menu edge behavior, active-pad
-  selection, or haptics: `src/gamepadInput.ts`, `src/controls.ts`, and
+- Change controller mappings, dead zones, sensitivity, menu edge behavior,
+  active-pad selection, or haptics: `src/gamepadInput.ts`, `src/controls.ts`, and
   `src/main.ts`
 - Change generated skybox choices, labels, texture paths, horizon framing, or
   matching fog color: `src/skybox.ts` and `public/skyboxes/`

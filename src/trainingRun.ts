@@ -139,6 +139,8 @@ const CAMERA_YAW_GOAL = 0.2;
 const PLAYER_YAW_GOAL = 0.2;
 const BOOST_SPEED_GOAL = 12;
 const MOUSE_FORWARD_SPEED_GOAL = 2;
+const GAMEPAD_BRAKE_ARM_SPEED = 4;
+const GAMEPAD_BRAKE_STOP_SPEED = 0.45;
 const MOMENTUM_SPEED_GOAL = 7.5;
 const MOMENTUM_SLIDE_SPEED_GOAL = 2;
 
@@ -161,6 +163,7 @@ export class TrainingRun {
   private carriedMomentum = false;
   private boostMoved = false;
   private boostHeld = false;
+  private gamepadBrakeArmed = false;
   private gamepadConnected = false;
   private baseline: TrainingStepBaseline = {
     cameraYawTravel: 0,
@@ -211,6 +214,7 @@ export class TrainingRun {
     this.carriedMomentum = false;
     this.boostMoved = false;
     this.boostHeld = false;
+    this.gamepadBrakeArmed = false;
     this.gamepadConnected = false;
     this.resetKeyboardProgress();
     this.object.visible = false;
@@ -307,12 +311,19 @@ export class TrainingRun {
         }
         return;
       case "mouse-forward":
-        if (
-          (telemetry.gamepadConnected
-            ? telemetry.gamepadCameraForwardMoveActive
-            : telemetry.mouseForwardMoveActive)
-          && telemetry.speed >= MOUSE_FORWARD_SPEED_GOAL
-        ) {
+        if (telemetry.gamepadConnected) {
+          // Require a real moving brake test so pulling back while already
+          // parked cannot accidentally skip the lesson.
+          this.gamepadBrakeArmed ||= telemetry.gamepadBrakeInput
+            && telemetry.speed >= GAMEPAD_BRAKE_ARM_SPEED;
+          if (
+            this.gamepadBrakeArmed
+            && telemetry.gamepadBrakeInput
+            && telemetry.speed <= GAMEPAD_BRAKE_STOP_SPEED
+          ) {
+            this.completeCurrentStep(input.time, "gamepad-brake", telemetry, input.raceTrack);
+          }
+        } else if (telemetry.mouseForwardMoveActive && telemetry.speed >= MOUSE_FORWARD_SPEED_GOAL) {
           this.completeCurrentStep(input.time, "mouse-forward", telemetry, input.raceTrack);
         }
         return;
@@ -388,6 +399,7 @@ export class TrainingRun {
     this.carriedMomentum = false;
     this.boostMoved = false;
     this.boostHeld = false;
+    this.gamepadBrakeArmed = false;
     this.resetKeyboardProgress();
 
     const step = this.currentStep();
@@ -429,7 +441,10 @@ export class TrainingRun {
       case "steer-facing":
         return [{ label: this.gamepadConnected ? "Left stick" : "Right drag", complete: false }];
       case "mouse-forward":
-        return [{ label: this.gamepadConnected ? "LB + RB" : "Both buttons", complete: false }];
+        return [{
+          label: this.gamepadConnected ? "B" : "Both buttons",
+          complete: this.gamepadConnected ? this.gamepadBrakeArmed : false
+        }];
       case "boost":
         return [
           { label: "Move", complete: this.boostMoved },
@@ -468,7 +483,7 @@ export class TrainingRun {
       case "keyboard-movement":
         return {
           title: "Controller Movement",
-          instruction: "Use the left stick forward and back, steer both ways, then tap LB or RB to strafe."
+          instruction: "Move the camera-relative left stick forward, back, and both ways, then tap LB or RB to strafe."
         };
       case "boost":
         return {
@@ -477,8 +492,8 @@ export class TrainingRun {
         };
       case "mouse-forward":
         return {
-          title: "Camera Drive",
-          instruction: "Hold LB and RB together to align the pod and drive toward the camera heading."
+          title: "Active Brake",
+          instruction: "Build some speed, then hold B until the pod stops."
         };
       case "momentum-brake":
         return {

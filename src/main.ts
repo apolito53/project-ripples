@@ -6,6 +6,7 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { ArenaBarrier } from "./arenaBarrier";
 import {
   PlayerRig,
+  GAMEPAD_SENSITIVITY_LIMITS,
   PLAYER_SPEED_LIMITS,
   SURFACE_GRIP_LIMITS,
   type PlayAreaConstraint,
@@ -72,6 +73,10 @@ const boostSpeedSlider = requireElement<HTMLInputElement>("#boost-speed-slider")
 const boostSpeedValue = requireElement<HTMLOutputElement>("#boost-speed-value");
 const surfaceGripSlider = requireElement<HTMLInputElement>("#surface-grip-slider");
 const surfaceGripValue = requireElement<HTMLOutputElement>("#surface-grip-value");
+const leftStickSensitivitySlider = requireElement<HTMLInputElement>("#left-stick-sensitivity-slider");
+const leftStickSensitivityValue = requireElement<HTMLOutputElement>("#left-stick-sensitivity-value");
+const rightStickSensitivitySlider = requireElement<HTMLInputElement>("#right-stick-sensitivity-slider");
+const rightStickSensitivityValue = requireElement<HTMLOutputElement>("#right-stick-sensitivity-value");
 const heightSlider = requireElement<HTMLInputElement>("#height-slider");
 const radiusSlider = requireElement<HTMLInputElement>("#radius-slider");
 const depthSlider = requireElement<HTMLInputElement>("#depth-slider");
@@ -324,6 +329,7 @@ const player = new PlayerRig({
   gamepad,
   speedSettings: settings.playerSpeed,
   surfaceGrip: settings.surfaceGrip,
+  gamepadSensitivity: settings.gamepadSensitivity,
   isInputEnabled: areSceneInputsEnabled
 });
 const initialPlayerStart = createArenaSpawnPoint();
@@ -1102,6 +1108,22 @@ function wireControls(): void {
     player.setSurfaceGrip(settings.surfaceGrip);
     updateSurfaceGripValue();
   });
+  leftStickSensitivitySlider.addEventListener("input", () => {
+    settings.gamepadSensitivity = {
+      ...settings.gamepadSensitivity,
+      leftStick: Number(leftStickSensitivitySlider.value)
+    };
+    player.setGamepadSensitivity(settings.gamepadSensitivity);
+    updateGamepadSensitivityValues();
+  });
+  rightStickSensitivitySlider.addEventListener("input", () => {
+    settings.gamepadSensitivity = {
+      ...settings.gamepadSensitivity,
+      rightStick: Number(rightStickSensitivitySlider.value)
+    };
+    player.setGamepadSensitivity(settings.gamepadSensitivity);
+    updateGamepadSensitivityValues();
+  });
   heightSlider.addEventListener("input", () => {
     settings.rippleHeight = Number(heightSlider.value);
   });
@@ -1155,6 +1177,15 @@ function syncControlValues(): void {
   surfaceGripSlider.max = String(SURFACE_GRIP_LIMITS.max);
   surfaceGripSlider.step = String(SURFACE_GRIP_LIMITS.step);
   surfaceGripSlider.value = String(settings.surfaceGrip);
+  leftStickSensitivitySlider.min = String(GAMEPAD_SENSITIVITY_LIMITS.min);
+  leftStickSensitivitySlider.max = String(GAMEPAD_SENSITIVITY_LIMITS.max);
+  leftStickSensitivitySlider.step = String(GAMEPAD_SENSITIVITY_LIMITS.step);
+  leftStickSensitivitySlider.value = String(settings.gamepadSensitivity.leftStick);
+  rightStickSensitivitySlider.min = String(GAMEPAD_SENSITIVITY_LIMITS.min);
+  rightStickSensitivitySlider.max = String(GAMEPAD_SENSITIVITY_LIMITS.max);
+  rightStickSensitivitySlider.step = String(GAMEPAD_SENSITIVITY_LIMITS.step);
+  rightStickSensitivitySlider.value = String(settings.gamepadSensitivity.rightStick);
+  updateGamepadSensitivityValues();
   heightSlider.value = String(settings.rippleHeight);
   radiusSlider.value = String(settings.rippleRadius);
   depthSlider.value = String(settings.waveMedium.effectiveDepth);
@@ -1267,10 +1298,9 @@ function handleGamepadUiInput(): void {
     return;
   }
 
-  // B behaves like a conventional controller Back action inside overlays. It
-  // intentionally does nothing during active play so a face-button slip cannot
-  // pause the race.
-  if (gamepad.consumePress(GAMEPAD_BUTTON.secondary)) {
+  // B is gameplay braking while the race is live, then returns to conventional
+  // Back behavior whenever an overlay owns controller input.
+  if (appState !== "playing" && gamepad.consumePress(GAMEPAD_BUTTON.secondary)) {
     if (changelogVisible) {
       setChangelogVisible(false);
     } else if (appState === "paused") {
@@ -1567,6 +1597,7 @@ function updateTuningReadouts(): void {
   updateArenaRadiusValue();
   updatePlayerSpeedValues();
   updateSurfaceGripValue();
+  updateGamepadSensitivityValues();
 }
 
 function updateVoxelSizeValue(): void {
@@ -1616,6 +1647,13 @@ function updateSurfaceGripValue(): void {
   // Grip is shown as a simple baseline multiplier: 100% is the committed
   // default handling, lower is slicker, higher is tighter.
   surfaceGripValue.textContent = `${Math.round(settings.surfaceGrip * 100)}%`;
+}
+
+function updateGamepadSensitivityValues(): void {
+  // Present sensitivity as a response percentage around the neutral 100%
+  // baseline; it is easier to compare at a glance than raw multipliers.
+  leftStickSensitivityValue.textContent = `${Math.round(settings.gamepadSensitivity.leftStick * 100)}%`;
+  rightStickSensitivityValue.textContent = `${Math.round(settings.gamepadSensitivity.rightStick * 100)}%`;
 }
 
 function scheduleFieldRebuild(): void {

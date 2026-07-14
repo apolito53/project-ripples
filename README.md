@@ -7,7 +7,7 @@ This is intentionally separate from `voxel-sandbox-engine`. The goal is to make
 a polished visual lab first, then borrow patterns or ideas later if they deserve
 to graduate into the main voxel engine.
 
-Current version: `v0.5.4-ALPHA`.
+Current version: `v0.5.5-ALPHA`.
 
 ## Quick Start
 
@@ -57,15 +57,25 @@ mode directly.
 
 Gamepad controls use the browser's standard Xbox-style mapping:
 
-- Left stick moves forward/back and steers; `LB` / `RB` strafe, while holding
-  both bumpers aligns the pod and drives toward the camera heading.
-- Right stick freely orbits the camera. `RT` blends analog boost from base pace
-  to full boost.
-- `A` jumps, `X` creates a manual pulse, D-pad up/down zooms, and pressing the
-  right stick resets camera distance.
+- The left stick is a full camera-relative movement vector: forward, backward,
+  and lateral stick directions move through the world relative to the current
+  camera heading. The pod faces the requested travel direction.
+- Left-stick movement gently returns the follow camera behind the pod unless the
+  right stick is actively free-looking. Rotating the camera changes the stick
+  angle needed to preserve the same world-space heading.
+- Hold `B` to actively brake to a stop; pulling the left stick back is movement
+  toward camera-back, not braking.
+- `LB` / `RB` strafe independently. Right stick freely orbits the camera and has
+  camera authority while moving; click the right stick to snap pod facing to the
+  current camera heading. `RT` blends analog boost from base pace to full boost.
+- `A` jumps, `X` creates a manual pulse, and D-pad up/down zooms.
 - `Menu` pauses/resumes and `View` toggles diagnostics. In menus, the D-pad or
   left stick moves focus, `A` selects, `B` goes back, and left/right adjusts the
-  focused slider or select control.
+  focused slider or select control. Held directions repeat after a short delay,
+  so long sliders do not require one press per tick.
+- The pause menu exposes separate `Left Stick` and `Right Stick` sensitivity
+  sliders. Left sensitivity reshapes partial movement/facing response without
+  changing full-stick top speed; right sensitivity scales camera-look speed.
 - Supported controllers receive restrained haptics for menu confirmation,
   jumping, landing, and Echo collection.
 
@@ -77,7 +87,7 @@ withhold an already-connected controller until the first user gesture.
 The lab has three startup modes: `Training Run`, `Track`, and `Arena`.
 
 `Training Run` is a short guided course warmup that teaches camera orbit,
-steering, movement, boosting, camera-forward movement, momentum/braking,
+steering, movement, boosting, active controller braking, momentum/coasting,
 jumping, Echo collection, and track wall sliding with a compact HUD and one
 scripted Echo. Its instructions and progress chips switch automatically between
 keyboard/mouse and gamepad language when a controller is connected.
@@ -252,7 +262,7 @@ Project planning:
 Versioning:
 
 - While the project is still experimental, release tags use alpha prerelease
-  labels. The current baseline is `v0.5.4-ALPHA`.
+  labels. The current baseline is `v0.5.5-ALPHA`.
 
 ## Design Notes
 
@@ -293,8 +303,8 @@ Versioning:
   trails, and their run-through trigger/despawn burst detection.
 - `src/waveMedium.ts` defines the medium settings and derived propagation speed.
 - `src/labSettings.ts` maps UI meters onto the original scene-unit art scale,
-  including surface grip defaults, hex point-to-point diameter scaling, and the
-  200m-to-400m arena radius range.
+  including surface grip and gamepad sensitivity defaults, hex point-to-point
+  diameter scaling, and the 200m-to-400m arena radius range.
 - `src/particleVeil.ts` owns the player sparkle aura, additive glitter-cloud
   bursts, layered Echo poof-disc bursts, bright shader energy, and tight
   velocity-following wake tails.
@@ -303,14 +313,16 @@ Versioning:
   used by the track, circular arena fallback clamping, scene-input gating while
   menus are open, split left/right hold-to-look pointer-lock behavior,
   camera-only orbit yaw, right-drag steering yaw, WoW-style keyboard
-  turning/strafe semantics, surface-grip handling response, ballistic airborne
-  horizontal momentum, both-button camera-forward movement, full 180-degree
+  turning/strafe semantics, isolated camera-relative controller movement,
+  per-stick sensitivity, and B-button braking, surface-grip handling response,
+  ballistic airborne horizontal momentum, mouse-only both-button camera-forward movement, full 180-degree
   vertical camera orbit, quiet mouse-release unlocks, and read-only tutorial
   telemetry. The avatar visuals in `src/main.ts` use orbiting motes and
   segmented additive trails.
 - `src/gamepadInput.ts` owns reconnect-safe browser gamepad polling, radial
-  dead zones, consumable button/navigation edges, active-controller selection,
-  sparse `gamepad.*` diagnostics, and guarded dual-rumble haptics.
+  dead zones, consumable button edges, held menu-navigation repeat,
+  active-controller selection, sparse `gamepad.*` diagnostics, and guarded
+  dual-rumble haptics.
 
 The CPU decides where the player, touch-button pulses, optional race-track
 constraint, and persistent Echo zones are. Manual pulse input is cooldown-gated,

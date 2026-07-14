@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+## 0.5.5-ALPHA - 2026-07-13
+
+### Added
+
+- Added an active controller brake on `B` that decelerates the grounded pod to
+  a stop without overloading an analog movement direction.
+- Added held D-pad/left-stick repeat for menu navigation and tuning controls so
+  sliders can be adjusted continuously instead of one press per tick.
+- Added separate pause-menu sensitivity sliders for left-stick movement response
+  and right-stick camera look, both centered on a `100%` baseline.
+
+### Changed
+
+- Changed the left stick into a full camera-relative movement vector. The pod
+  faces the requested travel direction, camera-back works as reverse movement,
+  and preserving a world heading while orbiting requires compensating the stick.
+- Changed controller movement to smoothly return the follow camera behind the
+  pod while giving an actively moved right stick camera priority and leaving
+  existing mouse/keyboard movement semantics untouched.
+- Reduced the left-stick follow-camera return to 25% of its first-pass speed so
+  right-stick framing settles naturally instead of snapping back behind the pod.
+- Changed right-stick click to snap pod facing to the current free-look camera
+  heading.
+- Removed combined `LB` + `RB` camera-forward movement; bumpers now remain
+  independent strafe controls and camera-forward movement stays mouse-only.
+- Reworked controller Training Run prompts and completion checks around
+  camera-relative movement, B-button braking, and the revised bumper behavior.
+- Bumped package metadata, README, codebase index, and visible menu version text
+  to `v0.5.5-ALPHA`.
+
 ## 0.5.4-ALPHA - 2026-07-13
 
 ### Added

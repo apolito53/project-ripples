@@ -91,6 +91,10 @@ const LEFT_STICK_DEAD_ZONE = 0.14;
 const RIGHT_STICK_DEAD_ZONE = 0.12;
 const NAVIGATION_PRESS_THRESHOLD = 0.64;
 const NAVIGATION_RELEASE_THRESHOLD = 0.38;
+// Menu controls should behave like a console UI: one deliberate step, then a
+// steady repeat while held. This is especially important for long sliders.
+const NAVIGATION_REPEAT_DELAY_MS = 310;
+const NAVIGATION_REPEAT_INTERVAL_MS = 72;
 const ACTIVE_AXIS_THRESHOLD = 0.18;
 const ACTIVE_BUTTON_THRESHOLD = 0.12;
 const HAPTIC_COOLDOWN_MS = 42;
@@ -129,6 +133,12 @@ export class GamepadInput {
     down: false,
     left: false,
     right: false
+  };
+  private readonly navigationNextRepeatAt: Record<GamepadNavigationDirection, number> = {
+    up: Infinity,
+    down: Infinity,
+    left: Infinity,
+    right: Infinity
   };
   private readonly state: MutableGamepadControlState = {
     connected: false,
@@ -186,7 +196,7 @@ export class GamepadInput {
     this.copyButtons(pad);
     this.state.leftTrigger = this.getButtonValue(GAMEPAD_BUTTON.leftTrigger);
     this.state.rightTrigger = this.getButtonValue(GAMEPAD_BUTTON.rightTrigger);
-    this.updateNavigationEdges();
+    this.updateNavigationEdges(now);
 
     if (this.hasActiveInput()) {
       this.state.lastInputAt = now;
@@ -237,10 +247,12 @@ export class GamepadInput {
   }
 
   consumeNavigation(direction: GamepadNavigationDirection): boolean {
+    // Consume the raw D-pad edge as well as the repeat pulse. The raw edge is
+    // still useful to gameplay for one-shot zoom when no menu is active.
     const dpadPressed = this.consumePress(NAVIGATION_BUTTONS[direction]);
-    const stickPressed = this.navigationPressed[direction];
+    const navigationPressed = this.navigationPressed[direction];
     this.navigationPressed[direction] = false;
-    return dpadPressed || stickPressed;
+    return dpadPressed || navigationPressed;
   }
 
   playHaptic(pulse: GamepadHapticPulse): void {
@@ -318,6 +330,7 @@ export class GamepadInput {
     this.previousButtonPressed.fill(0);
     this.justPressed.fill(0);
     this.justReleased.fill(0);
+    this.resetNavigationState();
 
     if (pad) {
       debugEvent("gamepad.connected", "Controller became the active input device", {
@@ -352,27 +365,57 @@ export class GamepadInput {
     this.hasButtonBaseline = true;
   }
 
-  private updateNavigationEdges(): void {
+  private updateNavigationEdges(now: number): void {
     const x = this.state.leftStick.x;
     const y = this.state.leftStick.y;
-    this.updateNavigationDirection("up", y <= -NAVIGATION_PRESS_THRESHOLD, y > -NAVIGATION_RELEASE_THRESHOLD);
-    this.updateNavigationDirection("down", y >= NAVIGATION_PRESS_THRESHOLD, y < NAVIGATION_RELEASE_THRESHOLD);
-    this.updateNavigationDirection("left", x <= -NAVIGATION_PRESS_THRESHOLD, x > -NAVIGATION_RELEASE_THRESHOLD);
-    this.updateNavigationDirection("right", x >= NAVIGATION_PRESS_THRESHOLD, x < NAVIGATION_RELEASE_THRESHOLD);
+    this.updateNavigationDirection(
+      "up",
+      this.isPressed(GAMEPAD_BUTTON.dpadUp) || y <= -NAVIGATION_PRESS_THRESHOLD,
+      !this.isPressed(GAMEPAD_BUTTON.dpadUp) && y > -NAVIGATION_RELEASE_THRESHOLD,
+      now
+    );
+    this.updateNavigationDirection(
+      "down",
+      this.isPressed(GAMEPAD_BUTTON.dpadDown) || y >= NAVIGATION_PRESS_THRESHOLD,
+      !this.isPressed(GAMEPAD_BUTTON.dpadDown) && y < NAVIGATION_RELEASE_THRESHOLD,
+      now
+    );
+    this.updateNavigationDirection(
+      "left",
+      this.isPressed(GAMEPAD_BUTTON.dpadLeft) || x <= -NAVIGATION_PRESS_THRESHOLD,
+      !this.isPressed(GAMEPAD_BUTTON.dpadLeft) && x > -NAVIGATION_RELEASE_THRESHOLD,
+      now
+    );
+    this.updateNavigationDirection(
+      "right",
+      this.isPressed(GAMEPAD_BUTTON.dpadRight) || x >= NAVIGATION_PRESS_THRESHOLD,
+      !this.isPressed(GAMEPAD_BUTTON.dpadRight) && x < NAVIGATION_RELEASE_THRESHOLD,
+      now
+    );
   }
 
   private updateNavigationDirection(
     direction: GamepadNavigationDirection,
     pressed: boolean,
-    released: boolean
+    released: boolean,
+    now: number
   ): void {
     if (!this.navigationHeld[direction] && pressed) {
       this.navigationHeld[direction] = true;
       this.navigationPressed[direction] = true;
+      this.navigationNextRepeatAt[direction] = now + NAVIGATION_REPEAT_DELAY_MS;
       return;
     }
     if (this.navigationHeld[direction] && released) {
       this.navigationHeld[direction] = false;
+      this.navigationNextRepeatAt[direction] = Infinity;
+      return;
+    }
+    if (this.navigationHeld[direction] && now >= this.navigationNextRepeatAt[direction]) {
+      this.navigationPressed[direction] = true;
+      // Scheduling from `now` avoids a burst of catch-up ticks after a sleeping
+      // tab or debugger pause; UI repetition should stay human-paced.
+      this.navigationNextRepeatAt[direction] = now + NAVIGATION_REPEAT_INTERVAL_MS;
     }
   }
 
@@ -381,6 +424,18 @@ export class GamepadInput {
     this.navigationPressed.down = false;
     this.navigationPressed.left = false;
     this.navigationPressed.right = false;
+  }
+
+  private resetNavigationState(): void {
+    this.clearNavigationEdges();
+    this.navigationHeld.up = false;
+    this.navigationHeld.down = false;
+    this.navigationHeld.left = false;
+    this.navigationHeld.right = false;
+    this.navigationNextRepeatAt.up = Infinity;
+    this.navigationNextRepeatAt.down = Infinity;
+    this.navigationNextRepeatAt.left = Infinity;
+    this.navigationNextRepeatAt.right = Infinity;
   }
 
   private hasActiveInput(): boolean {
@@ -418,10 +473,7 @@ export class GamepadInput {
     this.buttonPressed.fill(0);
     this.previousButtonPressed.fill(0);
     this.hasButtonBaseline = false;
-    this.navigationHeld.up = false;
-    this.navigationHeld.down = false;
-    this.navigationHeld.left = false;
-    this.navigationHeld.right = false;
+    this.resetNavigationState();
   }
 }
 

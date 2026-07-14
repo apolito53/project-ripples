@@ -1,5 +1,7 @@
 import {
+  DEFAULT_GAMEPAD_SENSITIVITY,
   DEFAULT_PLAYER_SPEED_SETTINGS,
+  type GamepadSensitivitySettings,
   type PlayerSpeedSettings
 } from "./controls";
 import {
@@ -25,6 +27,7 @@ export type LabSettings = {
   skyboxId: SkyboxId;
   playerSpeed: PlayerSpeedSettings;
   surfaceGrip: number;
+  gamepadSensitivity: GamepadSensitivitySettings;
   rippleHeight: number;
   rippleRadius: number;
   voxelSizeMeters: number;
@@ -41,6 +44,7 @@ export const DEFAULT_SETTINGS: LabSettings = {
   skyboxId: DEFAULT_SKYBOX_ID,
   playerSpeed: DEFAULT_PLAYER_SPEED_SETTINGS,
   surfaceGrip: 1,
+  gamepadSensitivity: DEFAULT_GAMEPAD_SENSITIVITY,
   rippleHeight: 1.25,
   rippleRadius: 9,
   voxelSizeMeters: DEFAULT_VOXEL_SIZE_METERS,
@@ -70,6 +74,7 @@ export function cloneDefaultSettings(): LabSettings {
   return {
     ...DEFAULT_SETTINGS,
     playerSpeed: { ...DEFAULT_SETTINGS.playerSpeed },
+    gamepadSensitivity: { ...DEFAULT_SETTINGS.gamepadSensitivity },
     waveMedium: { ...DEFAULT_SETTINGS.waveMedium }
   };
 }

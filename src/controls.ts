@@ -18,12 +18,18 @@ export type PlayerRigOptions = {
   readonly gamepad?: GamepadInput | null;
   readonly speedSettings?: PlayerSpeedSettings;
   readonly surfaceGrip?: number;
+  readonly gamepadSensitivity?: GamepadSensitivitySettings;
   readonly isInputEnabled?: () => boolean;
 };
 
 export type PlayerSpeedSettings = {
   readonly baseSpeedMetersPerSecond: number;
   readonly boostSpeedMetersPerSecond: number;
+};
+
+export type GamepadSensitivitySettings = {
+  readonly leftStick: number;
+  readonly rightStick: number;
 };
 
 export type PlayAreaConstraint = {
@@ -54,7 +60,7 @@ export type PlayerControlTelemetry = {
   readonly gamepadConnected: boolean;
   readonly gamepadLookActive: boolean;
   readonly gamepadTurnInput: boolean;
-  readonly gamepadCameraForwardMoveActive: boolean;
+  readonly gamepadBrakeInput: boolean;
   readonly mouseForwardMoveActive: boolean;
   readonly cameraYawTravel: number;
   readonly playerYawTravel: number;
@@ -91,6 +97,18 @@ export const SURFACE_GRIP_LIMITS = {
   step: 0.05,
   default: 1
 } as const;
+
+export const GAMEPAD_SENSITIVITY_LIMITS = {
+  min: 0.5,
+  max: 2,
+  step: 0.05,
+  default: 1
+} as const;
+
+export const DEFAULT_GAMEPAD_SENSITIVITY: GamepadSensitivitySettings = {
+  leftStick: GAMEPAD_SENSITIVITY_LIMITS.default,
+  rightStick: GAMEPAD_SENSITIVITY_LIMITS.default
+};
 
 // These are exponential velocity response rates, not raw meters/second forces.
 // Halving them roughly doubles how long the avatar carries momentum during
@@ -132,7 +150,14 @@ const TOUCH_LOOK_RATE_X = 2.65;
 const TOUCH_LOOK_RATE_Y = 2.05;
 const GAMEPAD_LOOK_RATE_X = 2.45;
 const GAMEPAD_LOOK_RATE_Y = 1.85;
-const GAMEPAD_TURN_RATE = 2.6;
+// Camera-relative stick movement turns the pod toward its requested travel
+// vector. Facing stays responsive, while the follow camera now returns at only
+// 25% of its original 8.5 rate so right-stick framing has room to breathe.
+const GAMEPAD_MOVEMENT_FACING_RATE = 10;
+const GAMEPAD_CAMERA_RECENTER_RATE = 2.125;
+// Explicit controller braking should be much more decisive than passive drag,
+// while surface grip still decides how much stopping authority the ground has.
+const GAMEPAD_BRAKE_RESPONSE = 5.4;
 const GAMEPAD_INPUT_EPSILON = 0.035;
 const KEYBOARD_TURN_RATE = 2.35;
 const MOUSE_BUTTON_LEFT = 0;
@@ -184,6 +209,7 @@ export class PlayerRig {
   private readonly isInputEnabled: () => boolean;
   private readonly desiredCameraPosition = new THREE.Vector3();
   private readonly movementIntent = new THREE.Vector3();
+  private readonly gamepadMovementIntent = new THREE.Vector3();
   private readonly lookTarget = new THREE.Vector3();
   private readonly mobileMoveIntent = new THREE.Vector2();
   private readonly mobileLookIntent = new THREE.Vector2();
@@ -193,6 +219,7 @@ export class PlayerRig {
   private lastPulseSecond = -Infinity;
   private speedSettings = DEFAULT_PLAYER_SPEED_SETTINGS;
   private surfaceGrip: number = SURFACE_GRIP_LIMITS.default;
+  private gamepadSensitivity = DEFAULT_GAMEPAD_SENSITIVITY;
   private jumpOffset = 0;
   private verticalVelocity = 0;
   private grounded = true;
@@ -226,6 +253,7 @@ export class PlayerRig {
     this.isInputEnabled = options.isInputEnabled ?? (() => true);
     this.setSpeedSettings(options.speedSettings ?? DEFAULT_PLAYER_SPEED_SETTINGS);
     this.setSurfaceGrip(options.surfaceGrip ?? SURFACE_GRIP_LIMITS.default);
+    this.setGamepadSensitivity(options.gamepadSensitivity ?? DEFAULT_GAMEPAD_SENSITIVITY);
 
     window.addEventListener("keydown", this.handleKeyDown);
     window.addEventListener("keyup", this.handleKeyUp);
@@ -264,25 +292,29 @@ export class PlayerRig {
       this.keys.clear();
       this.mobileMoveIntent.set(0, 0);
       this.mobileLookIntent.set(0, 0);
+      this.gamepadMovementIntent.set(0, 0, 0);
       this.releaseCameraDrag();
     }
 
     if (inputEnabled) this.handleGamepadButtonActions();
     if (inputEnabled) this.applyGamepadLook(delta, gamepadState);
     if (inputEnabled) this.applyMobileLook(delta);
-    if (inputEnabled) this.applyTurnInput(delta, gamepadState);
+    if (inputEnabled) this.applyTurnInput(delta);
+    if (inputEnabled) this.updateGamepadMovementFacing(delta, gamepadState);
 
     const forward = this.getPlanarForward();
     const right = new THREE.Vector3(forward.z, 0, -forward.x);
     const intent = this.movementIntent.set(0, 0, 0);
     const hasMovementAuthority = this.grounded;
     const gamepadConnected = inputEnabled && gamepadState?.connected === true;
-    const gamepadForwardInput = gamepadConnected ? -gamepadState.leftStick.y : 0;
+    // The entire left stick is a camera-relative travel vector. B owns braking;
+    // pulling the stick backward means travel toward camera-back again.
+    const gamepadBrakeInput = gamepadConnected
+      && this.gamepad?.isPressed(GAMEPAD_BUTTON.secondary) === true;
     const gamepadStrafeLeft = gamepadConnected && this.gamepad?.isPressed(GAMEPAD_BUTTON.leftBumper) === true;
     const gamepadStrafeRight = gamepadConnected && this.gamepad?.isPressed(GAMEPAD_BUTTON.rightBumper) === true;
-    const gamepadCameraForwardMoveActive = gamepadStrafeLeft && gamepadStrafeRight;
 
-    if (this.isMouseForwardMoveActive() || gamepadCameraForwardMoveActive) {
+    if (this.isMouseForwardMoveActive()) {
       // Holding both mouse buttons is the familiar MMO autorun-ish gesture: move
       // in the direction the camera is looking, and keep player facing glued to
       // that camera heading while the gesture is active. The facing snap stays
@@ -303,24 +335,29 @@ export class PlayerRig {
     if (hasMovementAuthority && this.isMouseForwardMoveActive()) {
       intent.add(this.getCameraPlanarForward());
     }
-    if (hasMovementAuthority && gamepadCameraForwardMoveActive) {
-      intent.add(this.getCameraPlanarForward());
+    if (hasMovementAuthority && gamepadConnected) {
+      intent.add(this.gamepadMovementIntent);
     }
-    if (hasMovementAuthority && gamepadForwardInput !== 0) {
-      intent.addScaledVector(forward, gamepadForwardInput);
-    }
-    if (hasMovementAuthority && gamepadStrafeLeft && !gamepadCameraForwardMoveActive) intent.add(right);
-    if (hasMovementAuthority && gamepadStrafeRight && !gamepadCameraForwardMoveActive) intent.sub(right);
+    // Bumpers are independent strafe controls. Pressing both simply cancels the
+    // lateral request; it no longer borrows the mouse-only camera-drive gesture.
+    if (hasMovementAuthority && gamepadStrafeLeft) intent.add(right);
+    if (hasMovementAuthority && gamepadStrafeRight) intent.sub(right);
     if (hasMovementAuthority) {
       if (this.mobileMoveIntent.y !== 0) intent.addScaledVector(forward, this.mobileMoveIntent.y);
       if (this.mobileMoveIntent.x !== 0) intent.addScaledVector(right, -this.mobileMoveIntent.x);
     }
 
-    const hasIntent = intent.lengthSq() > 0;
+    const hasIntent = !gamepadBrakeInput && intent.lengthSq() > 0;
     // Preserve analog stick strength before normalizing direction. Keyboard
     // input still lands at one, while a half-tilted stick requests half speed.
     const intentStrength = hasIntent ? Math.min(1, intent.length()) : 0;
-    if (hasIntent) intent.normalize();
+    if (hasIntent) {
+      intent.normalize();
+    } else {
+      // Brake wins over any simultaneous controller movement input. Clearing
+      // the vector makes the target unambiguously stationary.
+      intent.set(0, 0, 0);
+    }
     const keyboardBoosting = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight");
     const gamepadBoostAmount = gamepadConnected ? gamepadState.rightTrigger : 0;
     const boostAmount = Math.max(keyboardBoosting ? 1 : 0, gamepadBoostAmount);
@@ -333,9 +370,11 @@ export class PlayerRig {
     const targetVelocity = intent.multiplyScalar(targetSpeed);
     const hasPlanarVelocity = this.velocity.lengthSq() > STOP_EPSILON * STOP_EPSILON;
     const isCounterSteering = hasIntent && hasPlanarVelocity && targetVelocity.dot(this.velocity) < 0;
-    const baseResponse = hasIntent
-      ? (isCounterSteering ? MOVE_COUNTER_STEER_ACCELERATION : MOVE_ACCELERATION)
-      : (inputEnabled ? MOVE_BRAKE : MENU_BRAKE);
+    const baseResponse = gamepadBrakeInput
+      ? GAMEPAD_BRAKE_RESPONSE
+      : hasIntent
+        ? (isCounterSteering ? MOVE_COUNTER_STEER_ACCELERATION : MOVE_ACCELERATION)
+        : (inputEnabled ? MOVE_BRAKE : MENU_BRAKE);
     const response = inputEnabled ? baseResponse * this.surfaceGrip : baseResponse;
 
     if (hasMovementAuthority) {
@@ -349,15 +388,15 @@ export class PlayerRig {
       }
     }
     this.telemetry = this.createTelemetrySnapshot(
-      this.keys.has("KeyW") || gamepadForwardInput > GAMEPAD_INPUT_EPSILON,
-      this.keys.has("KeyS") || gamepadForwardInput < -GAMEPAD_INPUT_EPSILON,
+      this.keys.has("KeyW") || (gamepadConnected && gamepadState.leftStick.y < -GAMEPAD_INPUT_EPSILON),
+      this.keys.has("KeyS") || (gamepadConnected && gamepadState.leftStick.y > GAMEPAD_INPUT_EPSILON),
       (!this.isRightMouseHeld && this.keys.has("KeyA")) || (gamepadConnected && gamepadState.leftStick.x < -GAMEPAD_INPUT_EPSILON),
       (!this.isRightMouseHeld && this.keys.has("KeyD")) || (gamepadConnected && gamepadState.leftStick.x > GAMEPAD_INPUT_EPSILON),
       this.keys.has("KeyQ") || (this.isRightMouseHeld && this.keys.has("KeyA")) || gamepadStrafeLeft,
       this.keys.has("KeyE") || (this.isRightMouseHeld && this.keys.has("KeyD")) || gamepadStrafeRight,
       isBoosting,
       hasIntent,
-      inputEnabled && !hasIntent && hasPlanarVelocity && this.grounded,
+      inputEnabled && hasPlanarVelocity && this.grounded && (gamepadBrakeInput || !hasIntent),
       inputEnabled
     );
     this.position.addScaledVector(this.velocity, delta);
@@ -456,6 +495,12 @@ export class PlayerRig {
     );
   }
 
+  setGamepadSensitivity(settings: GamepadSensitivitySettings): void {
+    // Sensitivity changes how strongly partial stick deflection responds, not
+    // the maximum movement or camera speed reached at full deflection.
+    this.gamepadSensitivity = normalizeGamepadSensitivitySettings(settings);
+  }
+
   setMobileMoveIntent(x: number, y: number): void {
     this.mobileMoveIntent.set(
       THREE.MathUtils.clamp(x, -1, 1),
@@ -485,7 +530,12 @@ export class PlayerRig {
     if (this.gamepad.consumePress(GAMEPAD_BUTTON.dpadUp)) this.adjustZoom(-CAMERA_ZOOM_STEP);
     if (this.gamepad.consumePress(GAMEPAD_BUTTON.dpadDown)) this.adjustZoom(CAMERA_ZOOM_STEP);
     if (this.gamepad.consumePress(GAMEPAD_BUTTON.rightStick)) {
-      this.targetCameraDistance = CAMERA_DEFAULT_DISTANCE;
+      // R3 converts the current free-look heading into player facing without
+      // moving the camera. Track the angular travel so Training Run and future
+      // telemetry still see this as a real facing change.
+      const yawDelta = shortestAngleDelta(this.playerYaw, this.cameraYaw);
+      this.playerYaw += yawDelta;
+      this.playerYawTravel += Math.abs(yawDelta);
     }
   }
 
@@ -495,8 +545,8 @@ export class PlayerRig {
     // The right stick is the controller equivalent of left-mouse free look: it
     // orbits the camera without silently changing pod facing or jump momentum.
     this.applyLookDelta(
-      -gamepadState.rightStick.x * GAMEPAD_LOOK_RATE_X * delta,
-      gamepadState.rightStick.y * GAMEPAD_LOOK_RATE_Y * delta,
+      -gamepadState.rightStick.x * GAMEPAD_LOOK_RATE_X * this.gamepadSensitivity.rightStick * delta,
+      gamepadState.rightStick.y * GAMEPAD_LOOK_RATE_Y * this.gamepadSensitivity.rightStick * delta,
       false
     );
   }
@@ -528,36 +578,63 @@ export class PlayerRig {
     );
   }
 
-  private applyTurnInput(delta: number, gamepadState: GamepadControlState | null): void {
+  private applyTurnInput(delta: number): void {
     // WoW-style keyboard movement treats A/D as turn keys until the right mouse
     // button is steering. While right-drag is held, those same keys become
-    // strafe keys in the movement-intent block below. The controller mirrors
-    // that turn axis with the left stick and keeps bumpers available for strafe.
+    // strafe keys in the movement-intent block below. This method intentionally
+    // stays keyboard-only so controller camera rules cannot leak into M+K feel.
     const keyboardTurnDirection = this.isRightMouseHeld
       ? 0
       : (this.keys.has("KeyA") ? 1 : 0) - (this.keys.has("KeyD") ? 1 : 0);
-    const gamepadTurnDirection = gamepadState?.connected
-      ? -gamepadState.leftStick.x
-      : 0;
-    const turnDirection = THREE.MathUtils.clamp(
-      keyboardTurnDirection + gamepadTurnDirection,
-      -1,
-      1
-    );
-    if (Math.abs(turnDirection) <= GAMEPAD_INPUT_EPSILON) return;
+    if (Math.abs(keyboardTurnDirection) <= GAMEPAD_INPUT_EPSILON) return;
 
-    // Turning rotates the avatar from its own current facing. Mouse free look
-    // and an actively moving right stick intentionally detach the camera; once
-    // neither is active, turning carries the camera while preserving its offset.
-    const turnRate = Math.abs(gamepadTurnDirection) > GAMEPAD_INPUT_EPSILON
-      ? GAMEPAD_TURN_RATE
-      : KEYBOARD_TURN_RATE;
-    const yawDelta = turnDirection * turnRate * delta;
+    const yawDelta = keyboardTurnDirection * KEYBOARD_TURN_RATE * delta;
     const previousPlayerYaw = this.playerYaw;
     const previousCameraYaw = this.cameraYaw;
     this.playerYaw += yawDelta;
-    const gamepadFreeLookActive = (gamepadState?.rightStick.magnitude ?? 0) > GAMEPAD_INPUT_EPSILON;
-    if (!this.isLeftMouseHeld && !gamepadFreeLookActive) this.cameraYaw += yawDelta;
+    if (!this.isLeftMouseHeld) this.cameraYaw += yawDelta;
+    this.playerYawTravel += Math.abs(this.playerYaw - previousPlayerYaw);
+    this.cameraYawTravel += Math.abs(this.cameraYaw - previousCameraYaw);
+  }
+
+  private updateGamepadMovementFacing(delta: number, gamepadState: GamepadControlState | null): void {
+    this.gamepadMovementIntent.set(0, 0, 0);
+    if (!gamepadState?.connected || gamepadState.leftStick.magnitude <= GAMEPAD_INPUT_EPSILON) return;
+
+    // Translate the 2D stick through the camera basis. Holding the same stick
+    // angle while orbiting the camera therefore changes world travel direction;
+    // the player must rotate the stick to preserve an old world-space heading.
+    const cameraForward = this.getCameraPlanarForward();
+    const stickX = gamepadState.leftStick.x;
+    const stickY = gamepadState.leftStick.y;
+    this.gamepadMovementIntent.set(
+      cameraForward.x * -stickY + cameraForward.z * -stickX,
+      0,
+      cameraForward.z * -stickY + cameraForward.x * stickX
+    );
+
+    // Curve only the analog magnitude. Direction remains the exact
+    // camera-relative stick heading, and full deflection still reaches full
+    // movement speed at every sensitivity setting.
+    const rawMagnitude = this.gamepadMovementIntent.length();
+    const responseMagnitude = Math.pow(rawMagnitude, 1 / this.gamepadSensitivity.leftStick);
+    if (rawMagnitude > 0) {
+      this.gamepadMovementIntent.multiplyScalar(responseMagnitude / rawMagnitude);
+    }
+
+    const desiredYaw = Math.atan2(this.gamepadMovementIntent.x, this.gamepadMovementIntent.z);
+    const previousPlayerYaw = this.playerYaw;
+    const previousCameraYaw = this.cameraYaw;
+    const facingAmount = 1 - Math.exp(
+      -GAMEPAD_MOVEMENT_FACING_RATE * this.gamepadSensitivity.leftStick * delta
+    );
+    this.playerYaw += shortestAngleDelta(this.playerYaw, desiredYaw) * facingAmount;
+
+    const gamepadFreeLookActive = gamepadState.rightStick.magnitude > GAMEPAD_INPUT_EPSILON;
+    if (!gamepadFreeLookActive) {
+      const recenterAmount = 1 - Math.exp(-GAMEPAD_CAMERA_RECENTER_RATE * delta);
+      this.cameraYaw += shortestAngleDelta(this.cameraYaw, this.playerYaw) * recenterAmount;
+    }
     this.playerYawTravel += Math.abs(this.playerYaw - previousPlayerYaw);
     this.cameraYawTravel += Math.abs(this.cameraYaw - previousCameraYaw);
   }
@@ -893,9 +970,8 @@ export class PlayerRig {
       gamepadConnected,
       gamepadLookActive: gamepadConnected && gamepadState.rightStick.magnitude > GAMEPAD_INPUT_EPSILON,
       gamepadTurnInput: gamepadConnected && Math.abs(gamepadState.leftStick.x) > GAMEPAD_INPUT_EPSILON,
-      gamepadCameraForwardMoveActive: gamepadConnected
-        && this.gamepad?.isPressed(GAMEPAD_BUTTON.leftBumper) === true
-        && this.gamepad.isPressed(GAMEPAD_BUTTON.rightBumper),
+      gamepadBrakeInput: gamepadConnected
+        && this.gamepad?.isPressed(GAMEPAD_BUTTON.secondary) === true,
       mouseForwardMoveActive: inputEnabled && this.isMouseForwardMoveActive(),
       cameraYawTravel: this.cameraYawTravel,
       playerYawTravel: this.playerYawTravel,
@@ -916,4 +992,26 @@ export class PlayerRig {
       lastWallContactSecond: this.lastWallContactSecond
     };
   }
+}
+
+/** Return the signed, wrapped turn from one yaw angle to another. */
+function shortestAngleDelta(from: number, to: number): number {
+  return Math.atan2(Math.sin(to - from), Math.cos(to - from));
+}
+
+function normalizeGamepadSensitivitySettings(
+  settings: GamepadSensitivitySettings
+): GamepadSensitivitySettings {
+  return {
+    leftStick: THREE.MathUtils.clamp(
+      settings.leftStick,
+      GAMEPAD_SENSITIVITY_LIMITS.min,
+      GAMEPAD_SENSITIVITY_LIMITS.max
+    ),
+    rightStick: THREE.MathUtils.clamp(
+      settings.rightStick,
+      GAMEPAD_SENSITIVITY_LIMITS.min,
+      GAMEPAD_SENSITIVITY_LIMITS.max
+    )
+  };
 }

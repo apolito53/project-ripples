@@ -81,3 +81,7 @@ concrete follow-ups that we actually intend to revisit.
 - Added first-class standard-mapped gamepad support for gameplay, camera orbit,
   analog boost, pulses, jumping, zoom, menu navigation, controller-aware
   Training prompts, sparse diagnostics, and restrained haptic feedback.
+- Refined the gamepad driving model with camera-relative analog movement,
+  right-stick camera priority and facing snap, B-button braking, independent
+  bumper strafing, held menu-control repeat, gentler camera return, and separate
+  left/right stick sensitivity controls.
