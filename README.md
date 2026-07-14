@@ -89,8 +89,9 @@ generated.
 The arena edge is rendered as a smooth glowing gradient barrier so the playable
 boundary is visible in-world without looking like a tiled wall texture.
 
-The hex field is drawn as a single shader-animated cap surface. The render path
-keeps the field focused on lit hex caps for the upcoming spherical arena pass.
+The hex field is drawn as one instanced shader pass. WebGL and the default
+WebGPU Classic profile use real raised hex tiles with closed prism geometry;
+the optional WebGPU Core profile keeps the earlier minimalist flat-cap look.
 
 Meltdown uses a calibrated honeycomb footprint for visually interlocked tiny
 hexes, while lighter quality modes keep more breathing room.
@@ -332,14 +333,17 @@ test run reports `test-only-passed`, `decisionGrade=false`, and an ineligible
 baseline projection. It is intentionally incompatible with a full acceptance
 baseline and is not cross-hardware evidence.
 
-The July 11 RTX 4070 Ti note is retained as superseded historical evidence: it
-was captured from a dirty pre-column-stagger tree and must not be used as a v2
-baseline. The accepted replacement is tracked under
-`devlog/benchmark-baselines/rtx-4070-ti-2026-07-12-73df45e/`. Its clean stable-
-Chrome package passed all 28 semantic pairs and all acceptance gates; WebGPU
-remained stable through Meltdown tier 4 while WebGL reported no stable Meltdown
-tier under the strict measured-refresh budget. `auto` nevertheless remains
-WebGL at the Stage-0 zero-percent rollout.
+The accepted current Classic baseline is tracked under
+`devlog/benchmark-baselines/rtx-4070-ti-2026-07-14-efda975/`. Its clean stable-
+Chrome package passed 56/56 samples, all 28 semantic pairs, stock Arena/Track/
+Training, and the 120-second soak. Pretty and Showoff held about 127 FPS. Under
+the strict 8 ms measured-refresh budget, WebGPU's stable Meltdown tier was 1;
+at tier 4 it still averaged about 58 FPS and 17.19 ms GPU time versus WebGL's
+23 FPS and 44.01 ms. The v2 flat-Core package under
+`devlog/benchmark-baselines/rtx-4070-ti-2026-07-12-73df45e/` remains historical
+and intentionally incompatible. The July 11 dirty pre-column-stagger note is
+superseded. `auto` nevertheless remains WebGL at the Stage-0 zero-percent
+rollout.
 
 ## Development
 

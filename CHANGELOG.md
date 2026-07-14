@@ -31,7 +31,7 @@
   Stage-0 auto-rollout verifier covering cohort boundaries, denied storage,
   browser/adapter gates, cooldown escalation, recovery, and reload-loop guards.
 - Added benchmark-reporting regression checks for asynchronous GPU sample
-  freshness, timer failures, workload parity, stable-tier continuity, strict v2
+  freshness, timer failures, workload parity, stable-tier continuity, strict
   protocol compatibility, malformed baselines, normalized metadata,
   cross-hardware classification, portable paths/checksums, baseline loss, and
   metric-direction verdicts.
@@ -42,6 +42,11 @@
   Stable Chrome completed 56/56 samples, 28/28 semantic pairs, all stock and
   packaging gates, and the two-minute continuity soak; WebGPU remained stable
   through the 1.68-million-cell Meltdown tier 4.
+- Added the first accepted v3 Classic 3D RTX 4070 Ti baseline from clean commit
+  `efda975`. Stable Chrome completed 56/56 samples, 28/28 semantic pairs,
+  Arena/Track/Training stock checks, and a 120-second soak. Pretty and Showoff
+  held about 127 FPS; the strict 8 ms Meltdown classifier reached tier 1, while
+  tier 4 still averaged about 58 FPS in WebGPU versus 23 FPS in WebGL.
 - Added a capture-only fixed-tick controller shared by WebGL and WebGPU plus
   `audit:render:parity`, which freezes matched Arena/Track/Training fixtures,
   flushes GPU work, checks semantic state and same-backend repeatability, and

@@ -162,8 +162,10 @@ Purpose: compact map for the standalone ripple-field visual lab.
   diagnostics: `src/ripple/webGpuRippleFieldPreview.ts` and
   `src/ripple/webGpuRippleFieldPreview.wgsl`
 - Rollout policy checks: `scripts/verify-renderer-rollout.mjs`
-- Benchmark baseline registry, accepted RTX 4070 Ti v2 evidence, and superseded
-  historical evidence: `devlog/benchmark-baselines/README.md`,
+- Benchmark baseline registry, accepted RTX 4070 Ti v3 Classic evidence,
+  historical v2 Core evidence, and superseded pre-column-stagger evidence:
+  `devlog/benchmark-baselines/README.md`,
+  `devlog/benchmark-baselines/rtx-4070-ti-2026-07-14-efda975/`,
   `devlog/benchmark-baselines/rtx-4070-ti-2026-07-12-73df45e/`, and
   `devlog/WEBGPU_BENCHMARK_BASELINE_2026-07-11.md`
 - Procedural field height sampler: `src/terrain.ts`
@@ -353,8 +355,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
   10% warning/20% failure thresholds; compatible different hardware is
   informational, and protocol/workload/config mismatches are incompatible. A
   warning is reported distinctly but blocks packaged baseline promotion.
-  The tracked v2 RTX 4070 Ti projection measured the older flat Core field and
-  is intentionally incompatible with v3 Classic evidence.
+  The accepted v3 RTX 4070 Ti projection at `efda975` is the current Classic
+  comparison baseline. The tracked v2 projection measured the older flat Core
+  field and is intentionally incompatible with v3 Classic evidence.
   `RIPPLE_BENCHMARK_PACKAGE_TEST=1` is a shortened tooling profile that reports
   `test-only-passed` with an ineligible baseline, not acceptance evidence.
 - Keep the CPU/GPU contract small: pulse uniforms, player position, player

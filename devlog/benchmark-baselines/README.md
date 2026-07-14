@@ -5,6 +5,14 @@ evidence.
 
 ## Accepted Baselines
 
+- `rtx-4070-ti-2026-07-14-efda975/` is the first accepted v3 Classic 3D
+  baseline. It was produced from clean commit
+  `efda975f5a1f0a9a7c95898fb537e719fb50623b` with stable Chrome on an RTX
+  4070 Ti. All 56 samples, 28 semantic pairs, stock Arena/Track/Training checks,
+  and the 120-second stock soak passed. Pretty and Showoff remained stable near
+  127 FPS; the strict 8 ms Meltdown classifier reached tier 1. At tier 4,
+  WebGPU still averaged 58 FPS and 17.19 ms GPU time versus WebGL's 23 FPS and
+  44.01 ms, but tier 4 is intentionally not classified as stable.
 - `rtx-4070-ti-2026-07-12-73df45e/` is the first accepted v2 baseline. It was
   produced from clean commit `73df45e5c61ef87a69f92c26c1847144b24838ea`
   with stable Chrome on an RTX 4070 Ti. It contains the accepted comparison
@@ -14,13 +22,9 @@ evidence.
   field and is historical evidence only after the Classic 3D profile became the
   forced-WebGPU default.
 
-Do not use that v2 projection for current Classic regression math; the protocol
-mismatch is intentional. A new accepted v3 projection will use:
-
-```powershell
-$env:RIPPLE_CHROME_CHANNEL='chrome'
-npm.cmd run benchmark:renderers:package
-```
+Use the v3 `baseline.json` for current Classic regression math. Do not use the
+v2 projection; its protocol/workload mismatch is intentional and machine-
+classified as incompatible.
 
 The required protocol/workload is
 `renderer-benchmark-v3-classic-3d-tiles`. Create evidence only with:

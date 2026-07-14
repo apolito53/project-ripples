@@ -19,10 +19,14 @@ concrete follow-ups that we actually intend to revisit.
   Add a named renderer-neutral
   particle RNG stream so particle placement can join the exact audit snapshot.
 
-- Record an accepted `renderer-benchmark-v3-classic-3d-tiles` package on the
-  current machine, then repeat it on at least one integrated/lower-power GPU and
-  one older or different-vendor discrete GPU. The clean v2 RTX 4070 Ti Core
-  baseline remains tracked as historical, intentionally incompatible evidence under
+- Repeat the accepted `renderer-benchmark-v3-classic-3d-tiles` package on at
+  least one integrated/lower-power GPU and one older or different-vendor
+  discrete GPU. The clean RTX 4070 Ti Classic baseline is tracked under
+  `devlog/benchmark-baselines/rtx-4070-ti-2026-07-14-efda975/`: all 56 samples,
+  28 semantic pairs, stock modes, and the 120-second soak passed. Pretty and
+  Showoff stayed refresh-capped; the strict Meltdown stability tier was 1, while
+  tier 4 still ran about 2.55x faster than WebGL. The clean v2 Core baseline
+  remains historical, intentionally incompatible evidence under
   `devlog/benchmark-baselines/rtx-4070-ti-2026-07-12-73df45e/`; the old July 11
   dirty pre-column-stagger result remains superseded.
   Stage 0 keeps `auto` on WebGL and `defaultEligible=false` while those artifacts
