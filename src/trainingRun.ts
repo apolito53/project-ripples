@@ -50,6 +50,11 @@ type TrainingStep = {
   readonly lateralOffsetMeters: number;
 };
 
+type TrainingStepPresentation = {
+  readonly title: string;
+  readonly instruction: string;
+};
+
 type TrainingStepBaseline = {
   readonly cameraYawTravel: number;
   readonly playerYawTravel: number;
@@ -156,6 +161,7 @@ export class TrainingRun {
   private carriedMomentum = false;
   private boostMoved = false;
   private boostHeld = false;
+  private gamepadConnected = false;
   private baseline: TrainingStepBaseline = {
     cameraYawTravel: 0,
     playerYawTravel: 0,
@@ -177,6 +183,7 @@ export class TrainingRun {
     this.complete = false;
     this.stepIndex = 0;
     this.startedAt = time;
+    this.gamepadConnected = telemetry.gamepadConnected;
     this.lastPlayerPosition.copy(playerPosition);
     this.object.visible = true;
     this.enterStep(time, telemetry, raceTrack);
@@ -204,6 +211,7 @@ export class TrainingRun {
     this.carriedMomentum = false;
     this.boostMoved = false;
     this.boostHeld = false;
+    this.gamepadConnected = false;
     this.resetKeyboardProgress();
     this.object.visible = false;
   }
@@ -211,6 +219,7 @@ export class TrainingRun {
   update(input: TrainingRunUpdate): void {
     if (!this.active || this.complete) return;
 
+    this.gamepadConnected = input.telemetry.gamepadConnected;
     this.lastPlayerPosition.copy(input.playerPosition);
     this.positionMarker(input.raceTrack, this.currentStep());
     this.updateStepProgress(input);
@@ -248,13 +257,14 @@ export class TrainingRun {
     }
 
     const step = this.currentStep();
+    const presentation = this.getStepPresentation(step);
     return {
       visible: true,
       complete: false,
       stepIndex: this.stepIndex,
       stepCount: TRAINING_STEPS.length,
-      title: step.title,
-      instruction: step.instruction,
+      title: presentation.title,
+      instruction: presentation.instruction,
       chips: this.getProgressChips(step)
     };
   }
@@ -265,12 +275,18 @@ export class TrainingRun {
 
     switch (step.id) {
       case "camera-orbit":
-        if (telemetry.cameraDragMode === "camera" && telemetry.cameraYawTravel - this.baseline.cameraYawTravel >= CAMERA_YAW_GOAL) {
+        if (
+          (telemetry.gamepadConnected ? telemetry.gamepadLookActive : telemetry.cameraDragMode === "camera")
+          && telemetry.cameraYawTravel - this.baseline.cameraYawTravel >= CAMERA_YAW_GOAL
+        ) {
           this.completeCurrentStep(input.time, "camera-orbit", telemetry, input.raceTrack);
         }
         return;
       case "steer-facing":
-        if (telemetry.cameraDragMode === "steer" && telemetry.playerYawTravel - this.baseline.playerYawTravel >= PLAYER_YAW_GOAL) {
+        if (
+          (telemetry.gamepadConnected ? telemetry.gamepadTurnInput : telemetry.cameraDragMode === "steer")
+          && telemetry.playerYawTravel - this.baseline.playerYawTravel >= PLAYER_YAW_GOAL
+        ) {
           this.completeCurrentStep(input.time, "steer-facing", telemetry, input.raceTrack);
         }
         return;
@@ -291,7 +307,12 @@ export class TrainingRun {
         }
         return;
       case "mouse-forward":
-        if (telemetry.mouseForwardMoveActive && telemetry.speed >= MOUSE_FORWARD_SPEED_GOAL) {
+        if (
+          (telemetry.gamepadConnected
+            ? telemetry.gamepadCameraForwardMoveActive
+            : telemetry.mouseForwardMoveActive)
+          && telemetry.speed >= MOUSE_FORWARD_SPEED_GOAL
+        ) {
           this.completeCurrentStep(input.time, "mouse-forward", telemetry, input.raceTrack);
         }
         return;
@@ -398,21 +419,21 @@ export class TrainingRun {
     switch (step.id) {
       case "keyboard-movement":
         return [
-          { label: "W", complete: this.keyboardProgress.forward },
-          { label: "S", complete: this.keyboardProgress.backward },
-          { label: "A/D", complete: this.keyboardProgress.turn },
-          { label: "Q/E", complete: this.keyboardProgress.strafe }
+          { label: this.gamepadConnected ? "Forward" : "W", complete: this.keyboardProgress.forward },
+          { label: this.gamepadConnected ? "Reverse" : "S", complete: this.keyboardProgress.backward },
+          { label: this.gamepadConnected ? "Steer" : "A/D", complete: this.keyboardProgress.turn },
+          { label: this.gamepadConnected ? "LB/RB" : "Q/E", complete: this.keyboardProgress.strafe }
         ];
       case "camera-orbit":
-        return [{ label: "Left drag", complete: false }];
+        return [{ label: this.gamepadConnected ? "Right stick" : "Left drag", complete: false }];
       case "steer-facing":
-        return [{ label: "Right drag", complete: false }];
+        return [{ label: this.gamepadConnected ? "Left stick" : "Right drag", complete: false }];
       case "mouse-forward":
-        return [{ label: "Both buttons", complete: false }];
+        return [{ label: this.gamepadConnected ? "LB + RB" : "Both buttons", complete: false }];
       case "boost":
         return [
           { label: "Move", complete: this.boostMoved },
-          { label: "Shift", complete: this.boostHeld }
+          { label: this.gamepadConnected ? "RT" : "Shift", complete: this.boostHeld }
         ];
       case "momentum-brake":
         return [
@@ -420,11 +441,58 @@ export class TrainingRun {
           { label: "Release", complete: false }
         ];
       case "jump":
-        return [{ label: "Space", complete: false }];
+        return [{ label: this.gamepadConnected ? "A" : "Space", complete: false }];
       case "echo-pickup":
         return [{ label: this.echoSpawned ? "Echo placed" : "Echo pending", complete: this.echoSpawned }];
       case "wall-slide":
         return [{ label: "Wall touch", complete: false }];
+    }
+  }
+
+  private getStepPresentation(step: TrainingStep): TrainingStepPresentation {
+    if (!this.gamepadConnected) {
+      return { title: step.title, instruction: step.instruction };
+    }
+
+    switch (step.id) {
+      case "camera-orbit":
+        return {
+          title: "Camera Orbit",
+          instruction: "Move the right stick to orbit the camera without turning the pod."
+        };
+      case "steer-facing":
+        return {
+          title: "Steer Facing",
+          instruction: "Move the left stick left or right to turn the pod and its follow camera."
+        };
+      case "keyboard-movement":
+        return {
+          title: "Controller Movement",
+          instruction: "Use the left stick forward and back, steer both ways, then tap LB or RB to strafe."
+        };
+      case "boost":
+        return {
+          title: "Boost",
+          instruction: "Hold RT while moving to blend from base pace into full boost."
+        };
+      case "mouse-forward":
+        return {
+          title: "Camera Drive",
+          instruction: "Hold LB and RB together to align the pod and drive toward the camera heading."
+        };
+      case "momentum-brake":
+        return {
+          title: "Carry Momentum",
+          instruction: "Build speed, release the left stick, and feel the pod slide before it settles."
+        };
+      case "jump":
+        return {
+          title: "Jump",
+          instruction: "Press A and watch the surface response when you leave the field."
+        };
+      case "echo-pickup":
+      case "wall-slide":
+        return { title: step.title, instruction: step.instruction };
     }
   }
 

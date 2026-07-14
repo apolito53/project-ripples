@@ -85,6 +85,19 @@ canvas {
   width: min(420px, 100%);
 }
 
+.gamepad-status {
+  margin: -12px 0 0;
+  color: rgba(191, 210, 224, 0.58);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0;
+}
+
+.gamepad-status--connected {
+  color: rgba(158, 255, 231, 0.82);
+  text-shadow: 0 0 16px rgba(117, 255, 215, 0.28);
+}
+
 .mode-button {
   display: grid;
   gap: 3px;

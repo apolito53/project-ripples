@@ -1,4 +1,9 @@
 import * as THREE from "three";
+import {
+  GAMEPAD_BUTTON,
+  type GamepadControlState,
+  type GamepadInput
+} from "./gamepadInput";
 
 export type PlayerRigOptions = {
   readonly canvas: HTMLCanvasElement;
@@ -10,6 +15,7 @@ export type PlayerRigOptions = {
   readonly onQuietPointerUnlock?: () => void;
   readonly onJump?: (event: PlayerJumpEvent) => void;
   readonly onLand?: (event: PlayerJumpEvent) => void;
+  readonly gamepad?: GamepadInput | null;
   readonly speedSettings?: PlayerSpeedSettings;
   readonly surfaceGrip?: number;
   readonly isInputEnabled?: () => boolean;
@@ -45,6 +51,10 @@ export type PlayerControlTelemetry = {
   readonly cameraDragMode: CameraDragMode | null;
   readonly leftMouseHeld: boolean;
   readonly rightMouseHeld: boolean;
+  readonly gamepadConnected: boolean;
+  readonly gamepadLookActive: boolean;
+  readonly gamepadTurnInput: boolean;
+  readonly gamepadCameraForwardMoveActive: boolean;
   readonly mouseForwardMoveActive: boolean;
   readonly cameraYawTravel: number;
   readonly playerYawTravel: number;
@@ -120,6 +130,10 @@ const LOOK_SENSITIVITY_X = 0.002;
 const LOOK_SENSITIVITY_Y = 0.00155;
 const TOUCH_LOOK_RATE_X = 2.65;
 const TOUCH_LOOK_RATE_Y = 2.05;
+const GAMEPAD_LOOK_RATE_X = 2.45;
+const GAMEPAD_LOOK_RATE_Y = 1.85;
+const GAMEPAD_TURN_RATE = 2.6;
+const GAMEPAD_INPUT_EPSILON = 0.035;
 const KEYBOARD_TURN_RATE = 2.35;
 const MOUSE_BUTTON_LEFT = 0;
 const MOUSE_BUTTON_RIGHT = 2;
@@ -166,6 +180,7 @@ export class PlayerRig {
   private readonly onQuietPointerUnlock: () => void;
   private readonly onJump: (event: PlayerJumpEvent) => void;
   private readonly onLand: (event: PlayerJumpEvent) => void;
+  private readonly gamepad: GamepadInput | null;
   private readonly isInputEnabled: () => boolean;
   private readonly desiredCameraPosition = new THREE.Vector3();
   private readonly movementIntent = new THREE.Vector3();
@@ -207,6 +222,7 @@ export class PlayerRig {
     this.onQuietPointerUnlock = options.onQuietPointerUnlock ?? (() => undefined);
     this.onJump = options.onJump ?? (() => undefined);
     this.onLand = options.onLand ?? (() => undefined);
+    this.gamepad = options.gamepad ?? null;
     this.isInputEnabled = options.isInputEnabled ?? (() => true);
     this.setSpeedSettings(options.speedSettings ?? DEFAULT_PLAYER_SPEED_SETTINGS);
     this.setSurfaceGrip(options.surfaceGrip ?? SURFACE_GRIP_LIMITS.default);
@@ -240,6 +256,7 @@ export class PlayerRig {
   update(delta: number, timeSeconds: number): void {
     this.timeSeconds = timeSeconds;
     const inputEnabled = this.isInputEnabled();
+    const gamepadState = this.gamepad?.getState() ?? null;
     if (!inputEnabled) {
       // UI overlays should feel modal. Clearing held inputs every frame avoids
       // the classic browser-game bug where opening a menu preserves W/A/S/D or
@@ -250,15 +267,22 @@ export class PlayerRig {
       this.releaseCameraDrag();
     }
 
+    if (inputEnabled) this.handleGamepadButtonActions();
+    if (inputEnabled) this.applyGamepadLook(delta, gamepadState);
     if (inputEnabled) this.applyMobileLook(delta);
-    if (inputEnabled) this.applyKeyboardTurn(delta);
+    if (inputEnabled) this.applyTurnInput(delta, gamepadState);
 
     const forward = this.getPlanarForward();
     const right = new THREE.Vector3(forward.z, 0, -forward.x);
     const intent = this.movementIntent.set(0, 0, 0);
     const hasMovementAuthority = this.grounded;
+    const gamepadConnected = inputEnabled && gamepadState?.connected === true;
+    const gamepadForwardInput = gamepadConnected ? -gamepadState.leftStick.y : 0;
+    const gamepadStrafeLeft = gamepadConnected && this.gamepad?.isPressed(GAMEPAD_BUTTON.leftBumper) === true;
+    const gamepadStrafeRight = gamepadConnected && this.gamepad?.isPressed(GAMEPAD_BUTTON.rightBumper) === true;
+    const gamepadCameraForwardMoveActive = gamepadStrafeLeft && gamepadStrafeRight;
 
-    if (this.isMouseForwardMoveActive()) {
+    if (this.isMouseForwardMoveActive() || gamepadCameraForwardMoveActive) {
       // Holding both mouse buttons is the familiar MMO autorun-ish gesture: move
       // in the direction the camera is looking, and keep player facing glued to
       // that camera heading while the gesture is active. The facing snap stays
@@ -279,17 +303,33 @@ export class PlayerRig {
     if (hasMovementAuthority && this.isMouseForwardMoveActive()) {
       intent.add(this.getCameraPlanarForward());
     }
+    if (hasMovementAuthority && gamepadCameraForwardMoveActive) {
+      intent.add(this.getCameraPlanarForward());
+    }
+    if (hasMovementAuthority && gamepadForwardInput !== 0) {
+      intent.addScaledVector(forward, gamepadForwardInput);
+    }
+    if (hasMovementAuthority && gamepadStrafeLeft && !gamepadCameraForwardMoveActive) intent.add(right);
+    if (hasMovementAuthority && gamepadStrafeRight && !gamepadCameraForwardMoveActive) intent.sub(right);
     if (hasMovementAuthority) {
       if (this.mobileMoveIntent.y !== 0) intent.addScaledVector(forward, this.mobileMoveIntent.y);
       if (this.mobileMoveIntent.x !== 0) intent.addScaledVector(right, -this.mobileMoveIntent.x);
     }
 
     const hasIntent = intent.lengthSq() > 0;
+    // Preserve analog stick strength before normalizing direction. Keyboard
+    // input still lands at one, while a half-tilted stick requests half speed.
+    const intentStrength = hasIntent ? Math.min(1, intent.length()) : 0;
     if (hasIntent) intent.normalize();
-    const isBoosting = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight");
-    const targetSpeed = isBoosting
-      ? this.speedSettings.boostSpeedMetersPerSecond
-      : this.speedSettings.baseSpeedMetersPerSecond;
+    const keyboardBoosting = this.keys.has("ShiftLeft") || this.keys.has("ShiftRight");
+    const gamepadBoostAmount = gamepadConnected ? gamepadState.rightTrigger : 0;
+    const boostAmount = Math.max(keyboardBoosting ? 1 : 0, gamepadBoostAmount);
+    const isBoosting = boostAmount > GAMEPAD_INPUT_EPSILON;
+    const targetSpeed = THREE.MathUtils.lerp(
+      this.speedSettings.baseSpeedMetersPerSecond,
+      this.speedSettings.boostSpeedMetersPerSecond,
+      boostAmount
+    ) * intentStrength;
     const targetVelocity = intent.multiplyScalar(targetSpeed);
     const hasPlanarVelocity = this.velocity.lengthSq() > STOP_EPSILON * STOP_EPSILON;
     const isCounterSteering = hasIntent && hasPlanarVelocity && targetVelocity.dot(this.velocity) < 0;
@@ -309,12 +349,12 @@ export class PlayerRig {
       }
     }
     this.telemetry = this.createTelemetrySnapshot(
-      this.keys.has("KeyW"),
-      this.keys.has("KeyS"),
-      !this.isRightMouseHeld && this.keys.has("KeyA"),
-      !this.isRightMouseHeld && this.keys.has("KeyD"),
-      this.keys.has("KeyQ") || (this.isRightMouseHeld && this.keys.has("KeyA")),
-      this.keys.has("KeyE") || (this.isRightMouseHeld && this.keys.has("KeyD")),
+      this.keys.has("KeyW") || gamepadForwardInput > GAMEPAD_INPUT_EPSILON,
+      this.keys.has("KeyS") || gamepadForwardInput < -GAMEPAD_INPUT_EPSILON,
+      (!this.isRightMouseHeld && this.keys.has("KeyA")) || (gamepadConnected && gamepadState.leftStick.x < -GAMEPAD_INPUT_EPSILON),
+      (!this.isRightMouseHeld && this.keys.has("KeyD")) || (gamepadConnected && gamepadState.leftStick.x > GAMEPAD_INPUT_EPSILON),
+      this.keys.has("KeyQ") || (this.isRightMouseHeld && this.keys.has("KeyA")) || gamepadStrafeLeft,
+      this.keys.has("KeyE") || (this.isRightMouseHeld && this.keys.has("KeyD")) || gamepadStrafeRight,
       isBoosting,
       hasIntent,
       inputEnabled && !hasIntent && hasPlanarVelocity && this.grounded,
@@ -435,6 +475,32 @@ export class PlayerRig {
     this.tryCreatePulse();
   }
 
+  private handleGamepadButtonActions(): void {
+    if (!this.gamepad?.getState().connected) return;
+
+    // One-shot actions consume their edge so fixed-step catch-up cannot repeat
+    // them. Menu buttons are consumed by main.ts before PlayerRig runs.
+    if (this.gamepad.consumePress(GAMEPAD_BUTTON.primary)) this.tryJump();
+    if (this.gamepad.consumePress(GAMEPAD_BUTTON.pulse)) this.tryCreatePulse();
+    if (this.gamepad.consumePress(GAMEPAD_BUTTON.dpadUp)) this.adjustZoom(-CAMERA_ZOOM_STEP);
+    if (this.gamepad.consumePress(GAMEPAD_BUTTON.dpadDown)) this.adjustZoom(CAMERA_ZOOM_STEP);
+    if (this.gamepad.consumePress(GAMEPAD_BUTTON.rightStick)) {
+      this.targetCameraDistance = CAMERA_DEFAULT_DISTANCE;
+    }
+  }
+
+  private applyGamepadLook(delta: number, gamepadState: GamepadControlState | null): void {
+    if (!gamepadState?.connected || gamepadState.rightStick.magnitude <= GAMEPAD_INPUT_EPSILON) return;
+
+    // The right stick is the controller equivalent of left-mouse free look: it
+    // orbits the camera without silently changing pod facing or jump momentum.
+    this.applyLookDelta(
+      -gamepadState.rightStick.x * GAMEPAD_LOOK_RATE_X * delta,
+      gamepadState.rightStick.y * GAMEPAD_LOOK_RATE_Y * delta,
+      false
+    );
+  }
+
   private applyMobileLook(delta: number): void {
     if (this.mobileLookIntent.lengthSq() <= 0) return;
 
@@ -462,23 +528,38 @@ export class PlayerRig {
     );
   }
 
-  private applyKeyboardTurn(delta: number): void {
+  private applyTurnInput(delta: number, gamepadState: GamepadControlState | null): void {
     // WoW-style keyboard movement treats A/D as turn keys until the right mouse
     // button is steering. While right-drag is held, those same keys become
-    // strafe keys in the movement-intent block below.
-    if (this.isRightMouseHeld) return;
+    // strafe keys in the movement-intent block below. The controller mirrors
+    // that turn axis with the left stick and keeps bumpers available for strafe.
+    const keyboardTurnDirection = this.isRightMouseHeld
+      ? 0
+      : (this.keys.has("KeyA") ? 1 : 0) - (this.keys.has("KeyD") ? 1 : 0);
+    const gamepadTurnDirection = gamepadState?.connected
+      ? -gamepadState.leftStick.x
+      : 0;
+    const turnDirection = THREE.MathUtils.clamp(
+      keyboardTurnDirection + gamepadTurnDirection,
+      -1,
+      1
+    );
+    if (Math.abs(turnDirection) <= GAMEPAD_INPUT_EPSILON) return;
 
-    const turnDirection = (this.keys.has("KeyA") ? 1 : 0) - (this.keys.has("KeyD") ? 1 : 0);
-    if (turnDirection === 0) return;
-
-    // Keyboard turning rotates the avatar from its own current facing. If the
-    // player is holding left-drag free look, the camera is intentionally
-    // detached, so A/D should not pull it around. Without left-drag, rotate the
-    // camera with the avatar so ordinary keyboard turning still feels like a
-    // follow camera instead of leaving the view behind.
-    const yawDelta = turnDirection * KEYBOARD_TURN_RATE * delta;
+    // Turning rotates the avatar from its own current facing. Mouse free look
+    // and an actively moving right stick intentionally detach the camera; once
+    // neither is active, turning carries the camera while preserving its offset.
+    const turnRate = Math.abs(gamepadTurnDirection) > GAMEPAD_INPUT_EPSILON
+      ? GAMEPAD_TURN_RATE
+      : KEYBOARD_TURN_RATE;
+    const yawDelta = turnDirection * turnRate * delta;
+    const previousPlayerYaw = this.playerYaw;
+    const previousCameraYaw = this.cameraYaw;
     this.playerYaw += yawDelta;
-    if (!this.isLeftMouseHeld) this.cameraYaw += yawDelta;
+    const gamepadFreeLookActive = (gamepadState?.rightStick.magnitude ?? 0) > GAMEPAD_INPUT_EPSILON;
+    if (!this.isLeftMouseHeld && !gamepadFreeLookActive) this.cameraYaw += yawDelta;
+    this.playerYawTravel += Math.abs(this.playerYaw - previousPlayerYaw);
+    this.cameraYawTravel += Math.abs(this.cameraYaw - previousCameraYaw);
   }
 
   private updateCamera(delta: number): void {
@@ -803,10 +884,18 @@ export class PlayerRig {
     braking: boolean,
     inputEnabled: boolean
   ): PlayerControlTelemetry {
+    const gamepadState = this.gamepad?.getState() ?? null;
+    const gamepadConnected = inputEnabled && gamepadState?.connected === true;
     return {
       cameraDragMode: inputEnabled ? this.cameraDragMode : null,
       leftMouseHeld: inputEnabled && this.isLeftMouseHeld,
       rightMouseHeld: inputEnabled && this.isRightMouseHeld,
+      gamepadConnected,
+      gamepadLookActive: gamepadConnected && gamepadState.rightStick.magnitude > GAMEPAD_INPUT_EPSILON,
+      gamepadTurnInput: gamepadConnected && Math.abs(gamepadState.leftStick.x) > GAMEPAD_INPUT_EPSILON,
+      gamepadCameraForwardMoveActive: gamepadConnected
+        && this.gamepad?.isPressed(GAMEPAD_BUTTON.leftBumper) === true
+        && this.gamepad.isPressed(GAMEPAD_BUTTON.rightBumper),
       mouseForwardMoveActive: inputEnabled && this.isMouseForwardMoveActive(),
       cameraYawTravel: this.cameraYawTravel,
       playerYawTravel: this.playerYawTravel,

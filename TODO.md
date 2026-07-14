@@ -78,3 +78,6 @@ concrete follow-ups that we actually intend to revisit.
   radius/hex-size coupling there, and reseeded Echoes after play-area rebuilds.
 - Added Training Run as a guided startup mode with a compact objective HUD,
   read-only control telemetry, scripted Echo pickup, and course-wall lesson.
+- Added first-class standard-mapped gamepad support for gameplay, camera orbit,
+  analog boost, pulses, jumping, zoom, menu navigation, controller-aware
+  Training prompts, sparse diagnostics, and restrained haptic feedback.

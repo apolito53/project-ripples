@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+## 0.5.4-ALPHA - 2026-07-13
+
+### Added
+
+- Added reconnect-safe standard-mapped gamepad polling with radial stick dead
+  zones, stable copied state, consumable button/navigation edges, active-pad
+  selection, sparse `gamepad.*` diagnostics, and guarded dual-rumble haptics.
+- Added gamepad gameplay controls: left-stick drive/steer, bumper strafing and
+  combined camera-forward movement, right-stick free look, analog RT boost, A
+  jump, X pulse, D-pad zoom, and right-stick camera reset.
+- Added controller navigation for the startup, pause, tuning, and changelog
+  surfaces, including Menu pause/resume, View diagnostics, A select, B back,
+  focus movement, slider adjustment, and select cycling.
+
+### Changed
+
+- Changed Training Run prompts and progress chips to switch automatically to
+  controller language and controller-specific completion checks when a gamepad
+  is connected.
+- Added restrained controller haptics for UI confirmation, jumping, landing,
+  and Echo collection without making vibration a gameplay dependency.
+- Bumped package metadata, README, codebase index, and visible menu version text
+  to `v0.5.4-ALPHA`.
+
 ## 0.5.3-2-ALPHA - 2026-07-08
 
 ### Changed

@@ -7,7 +7,7 @@ This is intentionally separate from `voxel-sandbox-engine`. The goal is to make
 a polished visual lab first, then borrow patterns or ideas later if they deserve
 to graduate into the main voxel engine.
 
-Current version: `v0.5.3-2-ALPHA`.
+Current version: `v0.5.4-ALPHA`.
 
 ## Quick Start
 
@@ -55,14 +55,32 @@ mode directly.
   from a clean runtime state.
 - The on-screen pulse button drops manual pulses on touch layouts.
 
+Gamepad controls use the browser's standard Xbox-style mapping:
+
+- Left stick moves forward/back and steers; `LB` / `RB` strafe, while holding
+  both bumpers aligns the pod and drives toward the camera heading.
+- Right stick freely orbits the camera. `RT` blends analog boost from base pace
+  to full boost.
+- `A` jumps, `X` creates a manual pulse, D-pad up/down zooms, and pressing the
+  right stick resets camera distance.
+- `Menu` pauses/resumes and `View` toggles diagnostics. In menus, the D-pad or
+  left stick moves focus, `A` selects, `B` goes back, and left/right adjusts the
+  focused slider or select control.
+- Supported controllers receive restrained haptics for menu confirmation,
+  jumping, landing, and Echo collection.
+
+Keep the page focused and press a controller button after loading. Browsers may
+withhold an already-connected controller until the first user gesture.
+
 ## Startup Modes
 
 The lab has three startup modes: `Training Run`, `Track`, and `Arena`.
 
-`Training Run` is a short guided course warmup that teaches left-drag camera
-orbit, right-drag steering, keyboard movement, boosting, both-button
-camera-forward movement, momentum/braking, jumping, Echo collection, and track
-wall sliding with a compact HUD and one scripted Echo.
+`Training Run` is a short guided course warmup that teaches camera orbit,
+steering, movement, boosting, camera-forward movement, momentum/braking,
+jumping, Echo collection, and track wall sliding with a compact HUD and one
+scripted Echo. Its instructions and progress chips switch automatically between
+keyboard/mouse and gamepad language when a controller is connected.
 
 Training uses the same course walls, track-only hex culling, and hidden circular
 Arena shell as Track mode, but disables random Echo spawning so the lesson is
@@ -234,7 +252,7 @@ Project planning:
 Versioning:
 
 - While the project is still experimental, release tags use alpha prerelease
-  labels. The current baseline is `v0.5.3-2-ALPHA`.
+  labels. The current baseline is `v0.5.4-ALPHA`.
 
 ## Design Notes
 
@@ -290,6 +308,9 @@ Versioning:
   vertical camera orbit, quiet mouse-release unlocks, and read-only tutorial
   telemetry. The avatar visuals in `src/main.ts` use orbiting motes and
   segmented additive trails.
+- `src/gamepadInput.ts` owns reconnect-safe browser gamepad polling, radial
+  dead zones, consumable button/navigation edges, active-controller selection,
+  sparse `gamepad.*` diagnostics, and guarded dual-rumble haptics.
 
 The CPU decides where the player, touch-button pulses, optional race-track
 constraint, and persistent Echo zones are. Manual pulse input is cooldown-gated,

@@ -1,6 +1,6 @@
 # Codebase Index
 
-Last reviewed: 2026-06-22
+Last reviewed: 2026-07-13
 
 Purpose: compact map for the standalone ripple-field visual lab.
 
@@ -9,7 +9,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Vite + strict TypeScript browser app.
 - Three.js renderer, postprocessing composer, Unreal bloom pass, shader-customized
   `InstancedMesh`, additive `Points`, and dynamic lights.
-- Current alpha baseline: `v0.5.3-2-ALPHA`; keep release tags in alpha prerelease
+- Current alpha baseline: `v0.5.4-ALPHA`; keep release tags in alpha prerelease
   territory until the lab graduates from prototype status.
 - Dedicated dev port `5183`; preview port `4183`.
 
@@ -50,6 +50,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
   180-degree vertical camera orbit, quiet mouse-release unlocks, and camera
   follow behavior:
   `src/controls.ts`
+- Reconnect-safe standard-mapped controller polling, radial stick dead zones,
+  consumable button/navigation edges, controller selection, sparse diagnostics,
+  and guarded dual-rumble haptics: `src/gamepadInput.ts`
 - Circular shader-displaced instanced hex field, including optional track-mode
   placement clipping, sampled GPU movement wake displacement,
   Meltdown-calibrated honeycomb orientation, lit hex caps, generated race-track
@@ -129,6 +132,11 @@ Purpose: compact map for the standalone ripple-field visual lab.
    adding little circular source stamps, and airborne jumps fade that contact
    before touchdown. Echo-zone timers add persistent collectible markers instead
    of immediate ambient waves.
+   Standard-mapped gamepads mirror that handling model: left stick drives and
+   steers, right stick free-looks, bumpers strafe or combine for camera-forward
+   movement, RT provides analog boost, A jumps, X pulses, and Menu/View own
+   pause and diagnostics. The same controller navigates startup and pause UI
+   without synthesizing keyboard events.
 6. `TrainingRun` optionally guides the player through the current control set
    inside the course mode: camera orbit, steering, keyboard movement, boosting,
    both-button movement, momentum braking, jumping, scripted Echo pickup, and
@@ -195,6 +203,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Change Training Run objectives, objective marker placement, scripted Echo
   behavior, HUD progress chips, or training diagnostics:
   `src/trainingRun.ts`, `src/main.ts`, and `index.html`
+- Change controller mappings, dead zones, menu edge behavior, active-pad
+  selection, or haptics: `src/gamepadInput.ts`, `src/controls.ts`, and
+  `src/main.ts`
 - Change generated skybox choices, labels, texture paths, horizon framing, or
   matching fog color: `src/skybox.ts` and `public/skyboxes/`
 - Change ripple math, hex shape, directional water-like movement response,
@@ -301,3 +312,6 @@ Purpose: compact map for the standalone ripple-field visual lab.
   tune the normal experience around it.
 - Pointer-lock behavior should be browser-tested in Chrome, not trusted from a
   build alone.
+- Browsers may leave `navigator.getGamepads()` empty until a focused-page button
+  gesture. Hardware input and haptics need one real-controller Chrome acceptance
+  pass even when typecheck and build are clean.

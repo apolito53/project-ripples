@@ -21,6 +21,7 @@ import {
   formatCompactCount,
   formatVoxelSize
 } from "./frameTelemetry";
+import { GAMEPAD_BUTTON, GamepadInput, type GamepadNavigationDirection } from "./gamepadInput";
 import { cloneDefaultSettings, getQualityPreset } from "./labSettings";
 import { ParticleVeil } from "./particleVeil";
 import { PulseLightRig } from "./pulseLights";
@@ -50,6 +51,7 @@ const startTrainingButton = requireElement<HTMLButtonElement>("#start-training-b
 const startTrackButton = requireElement<HTMLButtonElement>("#start-track-button");
 const startArenaButton = requireElement<HTMLButtonElement>("#start-arena-button");
 const mainMenuVersionLink = requireElement<HTMLButtonElement>("#main-menu-version-link");
+const gamepadStatus = requireElement<HTMLElement>("#gamepad-status");
 const hud = requireElement<HTMLElement>("#hud");
 const statsLine = requireElement<HTMLElement>("#stats-line");
 const mediumLine = requireElement<HTMLElement>("#medium-line");
@@ -258,6 +260,7 @@ let menuVisible = false;
 let changelogVisible = false;
 let perfOverlayVisible = false;
 let pointerLockWasActive = false;
+let lastGamepadStatusText = "";
 // Mouse-button release is now normal camera behavior, while Esc/unexpected
 // unlocks still mean "pause." This one-shot flag separates those two paths.
 let suppressNextPointerUnlockMenu = false;
@@ -284,6 +287,7 @@ composer.addPass(outputPass);
 
 const rippleSources = new RippleSourceStore();
 const echoZones = new EchoZoneField(scene);
+const gamepad = new GamepadInput();
 const wakeField = new WakeField(renderer, preset);
 const raceTrack = new RaceTrack(scene, preset.fieldRadius, settings.arenaRadiusMeters);
 raceTrack.setVisible(false);
@@ -309,8 +313,15 @@ const player = new PlayerRig({
   onQuietPointerUnlock: () => {
     suppressNextPointerUnlockMenu = true;
   },
-  onJump: (event) => triggerJumpRipple(event),
-  onLand: (event) => triggerLandingRipple(event),
+  onJump: (event) => {
+    triggerJumpRipple(event);
+    gamepad.playHaptic({ durationMs: 70, strongMagnitude: 0.08, weakMagnitude: 0.22 });
+  },
+  onLand: (event) => {
+    triggerLandingRipple(event);
+    gamepad.playHaptic({ durationMs: 125, strongMagnitude: 0.34, weakMagnitude: 0.18 });
+  },
+  gamepad,
   speedSettings: settings.playerSpeed,
   surfaceGrip: settings.surfaceGrip,
   isInputEnabled: areSceneInputsEnabled
@@ -564,6 +575,11 @@ function renderTrainingProgress(state: TrainingHudState): void {
 }
 
 function animate(): void {
+  // Poll once per rendered frame. Fixed-step simulation may run several times
+  // afterward, but consumable button edges still fire only once.
+  gamepad.poll();
+  handleGamepadUiInput();
+  updateGamepadStatus();
   const rawDelta = clock.getDelta();
   lastRawDeltaMs = rawDelta * 1000;
   const frameStartedAt = performance.now();
@@ -888,6 +904,7 @@ function createArenaEchoSeedPosition(angleFraction: number, radiusFraction: numb
 function collectEchoZones(time: number): void {
   const triggeredZones = echoZones.collectAt(player.position, time);
   if (triggeredZones.length > 0) {
+    gamepad.playHaptic({ durationMs: 240, strongMagnitude: 0.58, weakMagnitude: 0.72 });
     echoDebugFrameWatchUntil = Math.max(echoDebugFrameWatchUntil, time + ECHO_DETONATION_FRAME_LOG_SECONDS);
     debugEvent("echo.collect", "Collected Echo zones this frame", {
       time: roundMetric(time),
@@ -1227,6 +1244,150 @@ function updateEffectToggle(button: HTMLButtonElement, enabled: boolean, slider:
 function updateBinaryToggle(button: HTMLButtonElement, enabled: boolean): void {
   button.textContent = enabled ? "On" : "Off";
   button.setAttribute("aria-pressed", String(enabled));
+}
+
+function handleGamepadUiInput(): void {
+  const state = gamepad.getState();
+  if (!state.connected) return;
+
+  // View is the controller-side diagnostics shortcut. It works everywhere so
+  // performance tuning never requires reaching back for the keyboard.
+  if (gamepad.consumePress(GAMEPAD_BUTTON.view)) {
+    setPerfOverlayVisible(!perfOverlayVisible);
+    gamepad.playHaptic({ durationMs: 48, strongMagnitude: 0.04, weakMagnitude: 0.12 });
+  }
+
+  if (gamepad.consumePress(GAMEPAD_BUTTON.menu)) {
+    if (changelogVisible) {
+      setChangelogVisible(false);
+    } else if (appState !== "mainMenu") {
+      setMenuVisible(appState !== "paused");
+    }
+    gamepad.playHaptic({ durationMs: 54, strongMagnitude: 0.06, weakMagnitude: 0.14 });
+    return;
+  }
+
+  // B behaves like a conventional controller Back action inside overlays. It
+  // intentionally does nothing during active play so a face-button slip cannot
+  // pause the race.
+  if (gamepad.consumePress(GAMEPAD_BUTTON.secondary)) {
+    if (changelogVisible) {
+      setChangelogVisible(false);
+    } else if (appState === "paused") {
+      setMenuVisible(false);
+    }
+    return;
+  }
+
+  if (appState === "playing") return;
+  const root = getActiveGamepadMenuRoot();
+  if (!root) return;
+
+  const verticalDirection = consumeGamepadNavigationPair("up", "down");
+  if (verticalDirection !== 0) {
+    moveGamepadFocus(root, verticalDirection);
+  }
+
+  const horizontalDirection = consumeGamepadNavigationPair("left", "right");
+  if (horizontalDirection !== 0) {
+    const adjusted = adjustFocusedGamepadControl(horizontalDirection);
+    if (!adjusted && appState === "mainMenu") moveGamepadFocus(root, horizontalDirection);
+  }
+
+  if (!gamepad.consumePress(GAMEPAD_BUTTON.primary)) return;
+  const focusable = getGamepadFocusableElements(root);
+  const activeElement = document.activeElement instanceof HTMLElement
+    && focusable.includes(document.activeElement)
+    ? document.activeElement
+    : focusable[0];
+  if (!activeElement) return;
+
+  activeElement.focus({ preventScroll: true });
+  if (activeElement instanceof HTMLButtonElement) {
+    activeElement.click();
+    gamepad.playHaptic({ durationMs: 62, strongMagnitude: 0.05, weakMagnitude: 0.18 });
+  }
+}
+
+function getActiveGamepadMenuRoot(): HTMLElement | null {
+  if (changelogVisible) return changelogDialog;
+  if (appState === "mainMenu") return mainMenu;
+  if (appState === "paused") return sceneMenu;
+  return null;
+}
+
+function consumeGamepadNavigationPair(
+  negative: GamepadNavigationDirection,
+  positive: GamepadNavigationDirection
+): number {
+  const negativePressed = gamepad.consumeNavigation(negative);
+  const positivePressed = gamepad.consumeNavigation(positive);
+  return (positivePressed ? 1 : 0) - (negativePressed ? 1 : 0);
+}
+
+function moveGamepadFocus(root: HTMLElement, direction: number): void {
+  const focusable = getGamepadFocusableElements(root);
+  if (focusable.length === 0) return;
+
+  const currentIndex = document.activeElement instanceof HTMLElement
+    ? focusable.indexOf(document.activeElement)
+    : -1;
+  const nextIndex = currentIndex < 0
+    ? 0
+    : (currentIndex + Math.sign(direction) + focusable.length) % focusable.length;
+  const next = focusable[nextIndex];
+  next.focus({ preventScroll: true });
+  next.scrollIntoView({ block: "nearest" });
+}
+
+function getGamepadFocusableElements(root: HTMLElement): HTMLElement[] {
+  if (root === mainMenu) {
+    // Visual game-menu order matters more than DOM header order here. A fresh
+    // A press should start at Training, not unexpectedly open the version log.
+    return [startTrainingButton, startTrackButton, startArenaButton, mainMenuVersionLink];
+  }
+
+  return Array.from(root.querySelectorAll<HTMLElement>(
+    "button:not(:disabled), select:not(:disabled), input[type='range']:not(:disabled)"
+  )).filter((element) => !element.hidden && element.closest("[hidden]") === null);
+}
+
+function adjustFocusedGamepadControl(direction: number): boolean {
+  const activeElement = document.activeElement;
+  if (activeElement instanceof HTMLInputElement && activeElement.type === "range") {
+    const step = Number(activeElement.step) || 1;
+    const min = Number.isFinite(Number(activeElement.min)) ? Number(activeElement.min) : -Infinity;
+    const max = Number.isFinite(Number(activeElement.max)) ? Number(activeElement.max) : Infinity;
+    const nextValue = THREE.MathUtils.clamp(Number(activeElement.value) + Math.sign(direction) * step, min, max);
+    activeElement.value = String(nextValue);
+    activeElement.dispatchEvent(new Event("input", { bubbles: true }));
+    return true;
+  }
+
+  if (activeElement instanceof HTMLSelectElement) {
+    activeElement.selectedIndex = THREE.MathUtils.clamp(
+      activeElement.selectedIndex + Math.sign(direction),
+      0,
+      activeElement.options.length - 1
+    );
+    activeElement.dispatchEvent(new Event("change", { bubbles: true }));
+    return true;
+  }
+
+  return false;
+}
+
+function updateGamepadStatus(): void {
+  const state = gamepad.getState();
+  const controllerName = state.id.length > 44 ? `${state.id.slice(0, 41)}...` : state.id;
+  const nextText = state.connected
+    ? `${controllerName} ready - A select - Menu pause`
+    : "Controller: press any button to connect";
+  if (nextText === lastGamepadStatusText) return;
+
+  lastGamepadStatusText = nextText;
+  gamepadStatus.textContent = nextText;
+  gamepadStatus.classList.toggle("gamepad-status--connected", state.connected);
 }
 
 function setPerfOverlayVisible(visible: boolean): void {
