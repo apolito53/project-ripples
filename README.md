@@ -195,6 +195,10 @@ Omitted renderer selection and `?renderer=auto` remain on Three/WebGL. Use
 WebGPU runtime; if the browser cannot initialize WebGPU, the app shows a visible
 failure state and does not silently fall back.
 
+During Stage 0, only the URL query may force WebGPU. A legacy
+`localStorage.rippleRendererMode = "webgpu"` preference is treated as `auto`, so
+an old persisted choice cannot bypass the dormant rollout policy.
+
 Both backends use the current menu, playing, and paused lifecycle; bounded
 fixed-step simulation; current base/boost controls; hover-pod behavior; mode
 resets; hidden diagnostics; Track clipping; Echo reseeding; and Training HUD/
@@ -278,6 +282,13 @@ $env:RIPPLE_CHROME_CHANNEL='chrome'
 npm.cmd run benchmark:renderers:package
 ```
 
+Browser checks start and own the default `5183`/`5184` pair when those ports are
+free, and may reuse them when both servers identify the current checkout. To
+target another already-running pair, set all four `RIPPLE_APP_URL` and
+`RIPPLE_LOG_*_URL` variables together. Reusing an unverifiable default-port pair
+requires the explicit `RIPPLE_ALLOW_EXISTING_SERVERS=1` acknowledgement; this
+prevents a verifier from silently testing another worktree.
+
 The package command refuses a dirty Git tree, checks out the recorded commit in
 a temporary detached source worktree, runs `npm ci` from that commit's lockfile,
 builds those exact production assets, and owns the strict preview on
@@ -334,7 +345,9 @@ npm.cmd run verify:render:webgpu:unavailable
 npm.cmd run verify:render:webgpu:soak
 npm.cmd run verify:render:webgpu:readiness
 npm.cmd run verify:render:webgpu:default-soak
+npm.cmd run verify:render:webgpu:device-lost
 npm.cmd run verify:renderer:auto-rollout
+npm.cmd run verify:smoke-harness
 npm.cmd run verify:hex-lattice
 npm.cmd run verify:benchmark:reporting
 npm.cmd run audit:render:parity

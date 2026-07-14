@@ -49,7 +49,8 @@ import {
   createVisualCaptureEchoState,
   createVisualCaptureSourceState,
   createRenderVisualCaptureController,
-  hashVisualCaptureNumbers
+  hashVisualCaptureNumbers,
+  type RenderVisualCaptureController
 } from "./renderVisualCapture";
 import {
   RENDER_SCENE_LOCAL_LIGHT_LIMIT,
@@ -138,6 +139,12 @@ type PlayModeId = "arena" | "track" | "training";
 
 type WebGpuDom = ReturnType<typeof getDom>;
 
+declare global {
+  interface Window {
+    __rippleDebugForceWebGpuDeviceLoss?: () => void;
+  }
+}
+
 export type WebGpuCourseGameplay = PlayAreaConstraint & TrainingCourse & {
   setArena(fieldRadius: number, arenaRadiusMeters: number, reason?: string): void;
   containsPoint(x: number, z: number, marginSceneUnits?: number): boolean;
@@ -159,6 +166,34 @@ export async function startWebGpuApp(
   createCourseGameplay: WebGpuCourseGameplayFactory
 ): Promise<void> {
   const dom = getDom();
+  const runtimeHolder: { current: WebGpuRenderRuntime | null } = { current: null };
+  const cleanupHolder: { current: (() => void) | null } = { current: null };
+  try {
+    await startWebGpuAppInternal(
+      rendererModeSelection,
+      createCourseGameplay,
+      dom,
+      (runtime) => { runtimeHolder.current = runtime; },
+      (cleanup) => { cleanupHolder.current = cleanup; }
+    );
+  } catch (error) {
+    if (cleanupHolder.current) cleanupHolder.current();
+    else {
+      delete window.__rippleDebugForceWebGpuDeviceLoss;
+      runtimeHolder.current?.destroy();
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    reportWebGpuFatalFailure(dom, rendererModeSelection, message, "startup");
+  }
+}
+
+async function startWebGpuAppInternal(
+  rendererModeSelection: RendererModeSelection,
+  createCourseGameplay: WebGpuCourseGameplayFactory,
+  dom: WebGpuDom,
+  registerRuntime: (runtime: WebGpuRenderRuntime) => void,
+  registerCleanup: (cleanup: () => void) => void
+): Promise<void> {
   const settings = cloneDefaultSettings();
   applyRenderBenchmarkSettings(settings);
   let preset = getQualityPreset(settings);
@@ -186,7 +221,44 @@ export async function startWebGpuApp(
   let changelogVisible = false;
   let pointerLockWasActive = false;
   let suppressNextPointerUnlockMenu = false;
+  const uiAbortController = new AbortController();
+  let playerReference: PlayerRig | null = null;
+  let visualCaptureReference: RenderVisualCaptureController | null = null;
+  let initialReadinessFrameId = 0;
+  let runtimeReference: WebGpuRenderRuntime | null = null;
+  let runtimeFatalFailureShown = false;
   let runtime: WebGpuRenderRuntime;
+
+  const cleanupAfterTerminalFailure = (): void => {
+    uiAbortController.abort();
+    playerReference?.dispose();
+    playerReference = null;
+    visualCaptureReference?.destroy();
+    visualCaptureReference = null;
+    if (initialReadinessFrameId !== 0) {
+      cancelAnimationFrame(initialReadinessFrameId);
+      initialReadinessFrameId = 0;
+    }
+    if (document.pointerLockElement === runtimeReference?.canvas) document.exitPointerLock();
+    runtimeReference?.setAnimationLoop(null);
+    runtimeReference?.destroy();
+    runtimeReference = null;
+    delete window.__rippleDebugForceWebGpuDeviceLoss;
+  };
+
+  const handleDeviceLost = (info: GPUDeviceLostInfo): void => {
+    if (runtimeFatalFailureShown) return;
+    runtimeFatalFailureShown = true;
+    cleanupAfterTerminalFailure();
+    const reason = info.reason === "unknown" ? "unknown reason" : info.reason;
+    const detail = info.message ? `: ${info.message}` : "";
+    reportWebGpuFatalFailure(
+      dom,
+      rendererModeSelection,
+      `WebGPU device lost (${reason})${detail}`,
+      "device-lost"
+    );
+  };
 
   try {
     runtime = await WebGpuRenderRuntime.create({
@@ -194,8 +266,17 @@ export async function startWebGpuApp(
       log: debugEvent,
       fallbackReason: "",
       initialQualityPreset: preset,
-      initialSkyboxId: settings.skyboxId
+      initialSkyboxId: settings.skyboxId,
+      onDeviceLost: handleDeviceLost
     });
+    runtimeReference = runtime;
+    registerRuntime(runtime);
+    registerCleanup(cleanupAfterTerminalFailure);
+    window.__rippleDebugForceWebGpuDeviceLoss = () => runtime.forceDeviceLossForVerification();
+    if (runtimeFatalFailureShown || runtime.capabilities.deviceLost) {
+      cleanupAfterTerminalFailure();
+      return;
+    }
     setRenderBenchmarkMetadata({
       presentationProfile: WEBGPU_PRESENTATION_PROFILE,
       userAgent: navigator.userAgent,
@@ -203,21 +284,10 @@ export async function startWebGpuApp(
       deviceMemoryGiB: (navigator as Navigator & { readonly deviceMemory?: number }).deviceMemory ?? null
     });
   } catch (error) {
+    if (runtimeReference) cleanupAfterTerminalFailure();
+    if (runtimeFatalFailureShown) return;
     const message = error instanceof Error ? error.message : String(error);
-    debugEvent("webgpu.unavailable", "Forced WebGPU renderer unavailable", {
-      requestedMode: rendererModeSelection.requestedMode,
-      selectionSource: rendererModeSelection.source,
-      requestedPresentationProfile: WEBGPU_PRESENTATION_PROFILE,
-      message
-    }, "error");
-    debugEvent("webgpu.fallback", "Forced WebGPU renderer failed without fallback", {
-      ok: false,
-      activeBackend: "none",
-      requestedPresentationProfile: WEBGPU_PRESENTATION_PROFILE,
-      fallbackReason: "Forced WebGPU does not fall back to WebGL.",
-      message
-    }, "error");
-    showWebGpuFatalError(dom, message);
+    reportWebGpuFatalFailure(dom, rendererModeSelection, message, "startup");
     return;
   }
 
@@ -246,6 +316,7 @@ export async function startWebGpuApp(
     surfaceGrip: settings.surfaceGrip,
     isInputEnabled: () => appState === "playing" && activePlayMode !== null && !changelogVisible
   });
+  playerReference = player;
 
   wireUi();
   syncControlValues();
@@ -257,6 +328,7 @@ export async function startWebGpuApp(
     describe: describeWebGpuVisualCapture,
     waitForGpuIdle: () => runtime.waitForGpuIdle()
   });
+  visualCaptureReference = visualCapture;
 
   const requestedMode = readRequestedPlayMode();
   if (requestedMode) {
@@ -349,13 +421,38 @@ export async function startWebGpuApp(
     runtime.applyFieldLayout(fieldLayout, reason);
   }
 
-  function restartActiveModeAfterRebuild(reason: string): void {
-    if (!activePlayMode) {
-      rebuildFieldLayout(reason);
-      return;
+  function rebuildActiveModeAfterSettingsChange(reason: string): void {
+    const rebuildStartedAt = performance.now();
+    rebuildFieldLayout(reason);
+    let echoZonesReseeded = false;
+
+    if (activePlayMode === "training") {
+      echoState.clear();
+      trainingRun.reset(reason);
+      trainingRun.start(simulationTimeSeconds, player.position, player.getTelemetry(), raceTrack);
+      nextEchoZoneAt = Infinity;
+      echoZonesReseeded = true;
+    } else if (activePlayMode) {
+      echoState.clear();
+      seedEchoZones(simulationTimeSeconds);
+      echoZonesReseeded = true;
     }
-    applyPlayMode(activePlayMode, reason);
+
+    updateTrainingHud();
     updateAppChrome();
+    debugEvent("field.rebuild", "Rebuilt WebGPU field without resetting the active run", {
+      backend: "webgpu",
+      reason,
+      mode: activePlayMode ?? "none",
+      durationMs: roundMetric(performance.now() - rebuildStartedAt),
+      sessionPreserved: true,
+      simulationTimeSeconds: roundMetric(simulationTimeSeconds),
+      playerPosition: vectorPayload(player.position),
+      echoZonesReseeded,
+      quality: preset.id,
+      hexCount: fieldLayout.instanceCount,
+      buildStats: fieldLayout.buildStats
+    }, "info");
   }
 
   function getActiveFieldPlacementClipper(): FieldPlacementClipper | null {
@@ -896,6 +993,8 @@ export async function startWebGpuApp(
       presentationProfile: input.scenePresentation.profile,
       playMode: input.playMode,
       cameraMode: input.camera.projection.cameraMode,
+      simulationTimeSeconds: roundMetric(simulationTimeSeconds),
+      playerPosition: vectorPayload(player.position),
       frameMs: roundMetric(frameMs),
       updateMs: roundMetric(lastFrameUpdateMs),
       snapshotMs: roundMetric(lastFrameSnapshotMs),
@@ -1098,7 +1197,7 @@ export async function startWebGpuApp(
     particleState = new ParticleVeilState(preset.particleBudget);
     raceTrack.setArena(preset.fieldRadius, settings.arenaRadiusMeters, "quality");
     runtime.applyQualityPreset(preset, getWebGpuBloomStrength(settings), "quality");
-    restartActiveModeAfterRebuild("quality");
+    rebuildActiveModeAfterSettingsChange("quality");
     syncControlValues();
     logSettingsChange("quality", settings.qualityId);
   }
@@ -1110,7 +1209,7 @@ export async function startWebGpuApp(
     preset = getQualityPreset(settings);
     raceTrack.setArena(preset.fieldRadius, settings.arenaRadiusMeters, "field-scale");
     runtime.applyQualityPreset(preset, getWebGpuBloomStrength(settings), "field-scale");
-    restartActiveModeAfterRebuild("field-scale");
+    rebuildActiveModeAfterSettingsChange("field-scale");
     syncControlValues();
     logSettingsChange(changedControl === "voxel-size" ? "voxelSizeMeters" : "arenaRadiusMeters",
       changedControl === "voxel-size" ? settings.voxelSizeMeters : settings.arenaRadiusMeters,
@@ -1153,76 +1252,77 @@ export async function startWebGpuApp(
   }
 
   function wireUi(): void {
-    dom.startTrainingButton.addEventListener("click", () => startGame("training"));
-    dom.startTrackButton.addEventListener("click", () => startGame("track"));
-    dom.startArenaButton.addEventListener("click", () => startGame("arena"));
-    dom.menuToggle.addEventListener("click", () => setMenuVisible(appState !== "paused"));
-    dom.resumeButton.addEventListener("click", () => setMenuVisible(false));
-    dom.exitToMainMenuButton.addEventListener("click", () => showMainMenu());
-    dom.versionLink.addEventListener("click", () => setChangelogVisible(true));
-    dom.mainMenuVersionLink.addEventListener("click", () => setChangelogVisible(true));
-    dom.changelogClose.addEventListener("click", () => setChangelogVisible(false));
+    const listenerOptions = { signal: uiAbortController.signal };
+    dom.startTrainingButton.addEventListener("click", () => startGame("training"), listenerOptions);
+    dom.startTrackButton.addEventListener("click", () => startGame("track"), listenerOptions);
+    dom.startArenaButton.addEventListener("click", () => startGame("arena"), listenerOptions);
+    dom.menuToggle.addEventListener("click", () => setMenuVisible(appState !== "paused"), listenerOptions);
+    dom.resumeButton.addEventListener("click", () => setMenuVisible(false), listenerOptions);
+    dom.exitToMainMenuButton.addEventListener("click", () => showMainMenu(), listenerOptions);
+    dom.versionLink.addEventListener("click", () => setChangelogVisible(true), listenerOptions);
+    dom.mainMenuVersionLink.addEventListener("click", () => setChangelogVisible(true), listenerOptions);
+    dom.changelogClose.addEventListener("click", () => setChangelogVisible(false), listenerOptions);
     dom.changelogBackdrop.addEventListener("pointerdown", (event) => {
       if (event.target === dom.changelogBackdrop) setChangelogVisible(false);
-    });
-    dom.qualitySelect.addEventListener("change", () => applyQualityChange(dom.qualitySelect.value));
+    }, listenerOptions);
+    dom.qualitySelect.addEventListener("change", () => applyQualityChange(dom.qualitySelect.value), listenerOptions);
     dom.skyboxSelect.addEventListener("change", () => {
       if (!isSkyboxId(dom.skyboxSelect.value)) return;
       settings.skyboxId = dom.skyboxSelect.value;
       logSettingsChange("skybox", settings.skyboxId);
-    });
+    }, listenerOptions);
     dom.voxelSizeSlider.addEventListener("input", () => {
       settings.voxelSizeMeters = THREE.MathUtils.clamp(Number(dom.voxelSizeSlider.value), VOXEL_SIZE_MIN_METERS, VOXEL_SIZE_MAX_METERS);
       applyFieldScaleChange("voxel-size");
-    });
+    }, listenerOptions);
     dom.arenaRadiusSlider.addEventListener("input", () => {
       settings.arenaRadiusMeters = THREE.MathUtils.clamp(Number(dom.arenaRadiusSlider.value), ARENA_RADIUS_MIN_METERS, ARENA_RADIUS_MAX_METERS);
       applyFieldScaleChange("arena-radius");
-    });
-    dom.baseSpeedSlider.addEventListener("input", () => updatePlayerSpeeds("base"));
-    dom.boostSpeedSlider.addEventListener("input", () => updatePlayerSpeeds("boost"));
+    }, listenerOptions);
+    dom.baseSpeedSlider.addEventListener("input", () => updatePlayerSpeeds("base"), listenerOptions);
+    dom.boostSpeedSlider.addEventListener("input", () => updatePlayerSpeeds("boost"), listenerOptions);
     dom.surfaceGripSlider.addEventListener("input", () => {
       settings.surfaceGrip = THREE.MathUtils.clamp(Number(dom.surfaceGripSlider.value), SURFACE_GRIP_LIMITS.min, SURFACE_GRIP_LIMITS.max);
       player.setSurfaceGrip(settings.surfaceGrip);
       syncControlValues();
       logSettingsChange("surfaceGrip", settings.surfaceGrip);
-    });
+    }, listenerOptions);
     dom.heightSlider.addEventListener("input", () => {
       settings.rippleHeight = Number(dom.heightSlider.value);
       logSettingsChange("rippleHeight", settings.rippleHeight);
-    });
+    }, listenerOptions);
     dom.radiusSlider.addEventListener("input", () => {
       settings.rippleRadius = Number(dom.radiusSlider.value);
       logSettingsChange("rippleRadius", settings.rippleRadius);
-    });
+    }, listenerOptions);
     dom.depthSlider.addEventListener("input", () => {
       settings.waveMedium.effectiveDepth = Number(dom.depthSlider.value);
       syncControlValues();
       logSettingsChange("waveDepth", settings.waveMedium.effectiveDepth);
-    });
+    }, listenerOptions);
     dom.particleSlider.addEventListener("input", () => {
       settings.particleDensity = THREE.MathUtils.clamp(Number(dom.particleSlider.value), 0, 1);
       logSettingsChange("particleDensity", settings.particleDensity);
-    });
+    }, listenerOptions);
     dom.particleToggle.addEventListener("click", () => {
       settings.particlesEnabled = !settings.particlesEnabled;
       if (!settings.particlesEnabled) particleState.clear();
       syncControlValues();
       logSettingsChange("particlesEnabled", settings.particlesEnabled);
-    });
+    }, listenerOptions);
     dom.bloomSlider.addEventListener("input", () => {
       settings.bloomStrength = THREE.MathUtils.clamp(Number(dom.bloomSlider.value), 0, 0.38);
       logSettingsChange("bloomStrength", settings.bloomStrength);
-    });
+    }, listenerOptions);
     dom.bloomToggle.addEventListener("click", () => {
       settings.bloomEnabled = !settings.bloomEnabled;
       syncControlValues();
       logSettingsChange("bloomEnabled", settings.bloomEnabled);
-    });
+    }, listenerOptions);
     dom.perfOverlayToggle.addEventListener("click", () => {
       perfOverlayVisible = !perfOverlayVisible;
       updateAppChrome();
-    });
+    }, listenerOptions);
     dom.pulseButton.addEventListener("pointerdown", (event) => {
       event.preventDefault();
       const inputEnabled = appState === "playing" && activePlayMode !== null && !changelogVisible;
@@ -1234,7 +1334,7 @@ export async function startWebGpuApp(
         triggered: inputEnabled,
         quality: settings.qualityId
       }, inputEnabled ? "info" : "debug");
-    });
+    }, listenerOptions);
     window.addEventListener("keydown", (event) => {
       if (event.code === "F2") {
         event.preventDefault();
@@ -1248,7 +1348,7 @@ export async function startWebGpuApp(
       } else if (appState !== "mainMenu") {
         setMenuVisible(appState !== "paused");
       }
-    });
+    }, listenerOptions);
     document.addEventListener("pointerlockchange", () => {
       const locked = document.pointerLockElement === runtime.canvas;
       if (locked) {
@@ -1260,11 +1360,11 @@ export async function startWebGpuApp(
       }
       pointerLockWasActive = false;
       suppressNextPointerUnlockMenu = false;
-    });
-    window.addEventListener("resize", resize);
-    window.visualViewport?.addEventListener("resize", resize);
-    window.visualViewport?.addEventListener("scroll", resize);
-    wireTouchSticks();
+    }, listenerOptions);
+    window.addEventListener("resize", resize, listenerOptions);
+    window.visualViewport?.addEventListener("resize", resize, listenerOptions);
+    window.visualViewport?.addEventListener("scroll", resize, listenerOptions);
+    wireTouchSticks(listenerOptions);
   }
 
   function updatePlayerSpeeds(changed: "base" | "boost"): void {
@@ -1280,7 +1380,7 @@ export async function startWebGpuApp(
       changed === "base" ? settings.playerSpeed.baseSpeedMetersPerSecond : settings.playerSpeed.boostSpeedMetersPerSecond);
   }
 
-  function wireTouchSticks(): void {
+  function wireTouchSticks(listenerOptions: AddEventListenerOptions): void {
     for (const stick of document.querySelectorAll<HTMLElement>("[data-stick]")) {
       const kind = stick.dataset.stick;
       const knob = stick.querySelector<HTMLElement>(".touch-stick__knob");
@@ -1298,10 +1398,10 @@ export async function startWebGpuApp(
         pointerId = event.pointerId;
         stick.setPointerCapture(pointerId);
         update(event);
-      });
+      }, listenerOptions);
       stick.addEventListener("pointermove", (event) => {
         if (event.pointerId === pointerId) update(event);
-      });
+      }, listenerOptions);
       const release = (event: PointerEvent) => {
         if (event.pointerId !== pointerId) return;
         pointerId = null;
@@ -1309,8 +1409,8 @@ export async function startWebGpuApp(
         if (kind === "move") player.setMobileMoveIntent(0, 0);
         else player.setMobileLookIntent(0, 0);
       };
-      stick.addEventListener("pointerup", release);
-      stick.addEventListener("pointercancel", release);
+      stick.addEventListener("pointerup", release, listenerOptions);
+      stick.addEventListener("pointercancel", release, listenerOptions);
     }
   }
 
@@ -1323,6 +1423,8 @@ export async function startWebGpuApp(
     debugEvent("webgpu.settings.change", "Forced WebGPU setting changed", {
       ...readinessPayload(),
       stateMode: "playable",
+      simulationTimeSeconds: roundMetric(simulationTimeSeconds),
+      playerPosition: vectorPayload(player.position),
       setting,
       value,
       quality: settings.qualityId,
@@ -1366,7 +1468,9 @@ export async function startWebGpuApp(
   }
 
   // Emit init payloads only after the first submitted frame populated pass metrics.
-  requestAnimationFrame(() => {
+  initialReadinessFrameId = requestAnimationFrame(() => {
+    initialReadinessFrameId = 0;
+    if (runtimeFatalFailureShown) return;
     const initialInput = createRenderInput(0);
     emitInitialReadiness(initialInput);
   });
@@ -1649,14 +1753,49 @@ function updateEffectToggle(button: HTMLButtonElement, enabled: boolean, slider:
   slider.disabled = !enabled;
 }
 
-function showWebGpuFatalError(dom: WebGpuDom, message: string): void {
+function reportWebGpuFatalFailure(
+  dom: WebGpuDom,
+  rendererModeSelection: RendererModeSelection,
+  message: string,
+  failureKind: "startup" | "device-lost"
+): void {
+  const diagnosticChannel = failureKind === "device-lost" ? "webgpu.runtimeFatal" : "webgpu.unavailable";
+  debugEvent(diagnosticChannel, "Forced WebGPU renderer reached a terminal failure", {
+    failureKind,
+    requestedMode: rendererModeSelection.requestedMode,
+    selectionSource: rendererModeSelection.source,
+    requestedPresentationProfile: WEBGPU_PRESENTATION_PROFILE,
+    message
+  }, "error");
+  debugEvent("webgpu.fallback", "Forced WebGPU renderer failed without fallback", {
+    ok: false,
+    activeBackend: "none",
+    failureKind,
+    requestedPresentationProfile: WEBGPU_PRESENTATION_PROFILE,
+    fallbackReason: "Forced WebGPU does not fall back to WebGL.",
+    message
+  }, "error");
+  showWebGpuFatalError(dom, message, failureKind);
+}
+
+function showWebGpuFatalError(
+  dom: WebGpuDom,
+  message: string,
+  failureKind: "startup" | "device-lost"
+): void {
   dom.mainMenu.hidden = true;
   dom.hud.hidden = false;
+  dom.menuToggle.hidden = true;
+  dom.sceneMenuBackdrop.hidden = true;
+  dom.trainingHud.hidden = true;
   dom.mobileControls.hidden = true;
+  dom.pulseButton.hidden = true;
   dom.qualityBadge.textContent = "WebGPU";
   dom.statsLine.hidden = false;
   dom.mediumLine.hidden = false;
-  dom.statsLine.textContent = "Forced WebGPU renderer unavailable";
+  dom.statsLine.textContent = failureKind === "device-lost"
+    ? "Forced WebGPU renderer stopped after device loss"
+    : "Forced WebGPU renderer unavailable";
   dom.mediumLine.textContent = "No WebGL fallback was used for this forced renderer mode.";
 
   const panel = document.createElement("section");
@@ -1670,7 +1809,7 @@ function showWebGpuFatalError(dom: WebGpuDom, message: string): void {
   panel.style.background = "rgba(2, 4, 9, 0.96)";
   panel.style.color = "white";
   const heading = document.createElement("h1");
-  heading.textContent = "WebGPU unavailable";
+  heading.textContent = failureKind === "device-lost" ? "WebGPU device lost" : "WebGPU unavailable";
   const detail = document.createElement("p");
   detail.textContent = message;
   const policy = document.createElement("p");

@@ -17,8 +17,10 @@
     "verify:render:webgpu:soak": "node scripts/verify-render.mjs webgpu-soak",
     "verify:render:webgpu:readiness": "node scripts/verify-render.mjs webgpu-readiness",
     "verify:render:webgpu:default-soak": "node scripts/verify-render.mjs webgpu-default-soak",
+    "verify:render:webgpu:device-lost": "node scripts/verify-render.mjs webgpu-device-lost",
     "verify:render:webgpu:unavailable": "node scripts/verify-render.mjs webgpu-unavailable",
     "verify:renderer:auto-rollout": "node scripts/verify-renderer-rollout.mjs",
+    "verify:smoke-harness": "node scripts/verify-smoke-harness.mjs",
     "verify:hex-lattice": "node scripts/verify-hex-lattice.mjs",
     "verify:benchmark:reporting": "node scripts/verify-benchmark-reporting.mjs",
     "audit:render:parity": "npm run build && node scripts/audit-renderer-parity.mjs",
@@ -28,7 +30,7 @@
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4183 --strictPort",
     "typecheck": "tsc --noEmit",
-    "validate": "npm run typecheck && npm run build && npm run verify:hex-lattice && npm run smoke"
+    "validate": "npm run typecheck && npm run build && npm run verify:hex-lattice && npm run verify:smoke-harness && npm run smoke"
   },
   "dependencies": {
     "three": "^0.175.0"

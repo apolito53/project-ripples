@@ -40,8 +40,12 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `npm.cmd run verify:render:webgpu:readiness`
 - Browser forced-WebGPU two-minute default soak:
   `npm.cmd run verify:render:webgpu:default-soak`
+- Browser forced-WebGPU terminal device-loss path:
+  `npm.cmd run verify:render:webgpu:device-lost`
 - Dormant auto-rollout policy verifier:
   `npm.cmd run verify:renderer:auto-rollout`
+- Browser-harness checkout provenance verifier:
+  `npm.cmd run verify:smoke-harness`
 - Flat-top honeycomb geometry invariant: `npm.cmd run verify:hex-lattice`
 - Benchmark statistics/parity regression verifier:
   `npm.cmd run verify:benchmark:reporting`
@@ -65,6 +69,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
   neutral contracts, and raw-WebGPU pass orchestration: `src/render/rendererMode.ts`,
   `src/render/threeRenderRuntime.ts`, `src/render/webGpuApp.ts`,
   `src/render/types.ts`, and `src/render/webGpuRenderRuntime.ts`
+- Browser harness provenance and server-pair ownership:
+  `scripts/ripple-smoke-harness.mjs`; explicit runs provide all four
+  `RIPPLE_APP_URL`/`RIPPLE_LOG_*_URL` values together.
 - Stage-0 cohort/cooldown policy, benchmark recorder, and nonblocking GPU timers:
   `src/render/rendererRollout.ts`, `src/render/renderBenchmark.ts`, and
   `src/render/gpuFrameTimer.ts`

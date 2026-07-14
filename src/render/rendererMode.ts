@@ -26,10 +26,13 @@ export function resolveRendererMode(
   const resolvedStorage = storage === undefined ? getDefaultStorage() : storage;
   const storedMode = normalizeRendererMode(readStoredRendererMode(resolvedStorage));
   if (storedMode) {
+    // Stage 0 only permits an explicit query to force WebGPU. A preference
+    // written by an older build must not silently bypass the dormant rollout.
+    const effectiveMode = storedMode === "webgpu" ? "auto" : storedMode;
     return {
-      requestedMode: storedMode,
+      requestedMode: effectiveMode,
       source: "localStorage",
-      fallbackReason: getCurrentFallbackReason(storedMode)
+      fallbackReason: getCurrentFallbackReason(effectiveMode)
     };
   }
 

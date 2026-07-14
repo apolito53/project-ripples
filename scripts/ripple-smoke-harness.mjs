@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { dirname, resolve } from "node:path";
 
 const DEFAULT_APP_URL = "http://127.0.0.1:5183/";
 const DEFAULT_LOG_HEALTH_URL = "http://127.0.0.1:5184/health";
@@ -6,17 +7,32 @@ const DEFAULT_LOG_EVENTS_URL = "http://127.0.0.1:5184/events";
 const DEFAULT_LOG_POST_URL = "http://127.0.0.1:5184/__ripple_debug_log";
 
 export function createHarnessConfig() {
-  const appUrl = process.env.RIPPLE_APP_URL || DEFAULT_APP_URL;
-  const logHealthUrl = process.env.RIPPLE_LOG_HEALTH_URL || DEFAULT_LOG_HEALTH_URL;
-  const logEventsUrl = process.env.RIPPLE_LOG_EVENTS_URL || DEFAULT_LOG_EVENTS_URL;
-  const logPostUrl = process.env.RIPPLE_LOG_POST_URL || DEFAULT_LOG_POST_URL;
+  const targetOverrides = [
+    process.env.RIPPLE_APP_URL,
+    process.env.RIPPLE_LOG_HEALTH_URL,
+    process.env.RIPPLE_LOG_EVENTS_URL,
+    process.env.RIPPLE_LOG_POST_URL
+  ];
+  const overrideCount = targetOverrides.filter(Boolean).length;
+  if (overrideCount > 0 && overrideCount < targetOverrides.length) {
+    throw new Error(
+      "Set all four RIPPLE_APP_URL/RIPPLE_LOG_* URLs together so browser checks cannot mix server pairs."
+    );
+  }
+
+  const targetsExplicit = overrideCount === targetOverrides.length;
+  const appUrl = targetOverrides[0] || DEFAULT_APP_URL;
+  const logHealthUrl = targetOverrides[1] || DEFAULT_LOG_HEALTH_URL;
+  const logEventsUrl = targetOverrides[2] || DEFAULT_LOG_EVENTS_URL;
+  const logPostUrl = targetOverrides[3] || DEFAULT_LOG_POST_URL;
 
   return {
     appUrl,
     logHealthUrl,
     logEventsUrl,
     logPostUrl,
-    logServerQueryValue: resolveLogServerQueryValue(logPostUrl, logHealthUrl)
+    logServerQueryValue: resolveLogServerQueryValue(logPostUrl, logHealthUrl),
+    targetsExplicit
   };
 }
 
@@ -28,6 +44,15 @@ export async function ensureServersReady(config = createHarnessConfig()) {
   if (appAlreadyRunning || logsAlreadyRunning) {
     if (!appAlreadyRunning || !logsAlreadyRunning) {
       throw new Error("Partial server state: app and log server must both be running or both be free.");
+    }
+    const existingPairAccepted = config.targetsExplicit ||
+      process.env.RIPPLE_ALLOW_EXISTING_SERVERS === "1" ||
+      await existingServersBelongToCurrentCheckout(config);
+    if (!existingPairAccepted) {
+      throw new Error(
+        "Default ports already host an app/log pair from another or unverifiable checkout. " +
+        "Set explicit RIPPLE_* URLs or RIPPLE_ALLOW_EXISTING_SERVERS=1 to acknowledge it."
+      );
     }
   } else {
     startServers(children);
@@ -117,6 +142,36 @@ export async function postJson(url, body) {
   if (!response.ok) {
     throw new Error(`POST failed for ${url}: ${response.status} ${response.statusText}`);
   }
+}
+
+async function existingServersBelongToCurrentCheckout(config) {
+  try {
+    const packagePath = resolve(process.cwd(), "package.json").replace(/\\/g, "/");
+    const packageUrl = new URL(`/@fs/${packagePath}`, config.appUrl);
+    const [packageResponse, healthResponse] = await Promise.all([
+      fetch(packageUrl),
+      fetch(config.logHealthUrl)
+    ]);
+    if (!packageResponse.ok || !healthResponse.ok) return false;
+
+    const [packageMetadata, health] = await Promise.all([
+      packageResponse.json(),
+      healthResponse.json()
+    ]);
+    return packageMetadata?.name === "ripple-field-lab" &&
+      typeof health?.logsDirectory === "string" &&
+      pathsEqual(dirname(health.logsDirectory), process.cwd());
+  } catch {
+    return false;
+  }
+}
+
+function pathsEqual(left, right) {
+  const normalize = (value) => {
+    const absolute = resolve(value);
+    return process.platform === "win32" ? absolute.toLowerCase() : absolute;
+  };
+  return normalize(left) === normalize(right);
 }
 
 export function assertIncludes(text, expected, reason) {

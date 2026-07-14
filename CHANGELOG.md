@@ -16,7 +16,8 @@
   center glow. Both passes use explicit layouts and read the shared field depth.
 - Added Playwright coverage for WebGL and forced-WebGPU Arena, Track, Training,
   menu transitions, Training step-one drag completion, conservative default/
-  auto policy, forced-unavailable failure, soak, readiness, and default soak.
+  auto policy, forced-unavailable/device-loss failures, soak, readiness, and
+  default soak.
 - Added a production comparative renderer benchmark with deterministic Arena,
   Track, and Meltdown-ramp workloads, balanced/thermally rotated order, nonblocking
   WebGL/WebGPU GPU timers, semantic parity gates, stable stress tiers, hardware/
@@ -55,6 +56,13 @@
 
 - Kept omitted and `auto` renderer requests on WebGL; explicit WebGPU requests
   now fail visibly without silently falling back when WebGPU is unavailable.
+- Hardened the integration landing path: legacy persisted WebGPU preferences no
+  longer bypass Stage 0, field/quality rebuilds preserve the active player's
+  position and simulation clock, and runtime device loss stops the loop with a
+  visible terminal failure instead of leaving a frozen canvas.
+- Made browser verification confirm checkout identity before reusing its default
+  app/log pair, centralized forbidden WebGPU lifecycle diagnostics, and
+  exercised Arena, Track, and Training through one same-page menu lifecycle.
 - Adapted the forced-WebGPU runtime to the current `mainMenu`/`playing`/`paused`
   lifecycle, fixed-step timing, base/boost controls, hover-pod presentation,
   mode resets, Track clipping, Echo reseeding, hidden diagnostics, and Training

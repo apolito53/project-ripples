@@ -187,6 +187,27 @@ test("renderer mode resolution survives a denied localStorage getter", () => {
   }
 });
 
+test("Stage 0 suppresses a persisted WebGPU preference but honors explicit queries", () => {
+  const storedWebGpu = createMemoryStorage({ rippleRendererMode: "webgpu" });
+  const automatic = rendererMode.resolveRendererMode({ search: "" }, storedWebGpu);
+  assert.equal(automatic.requestedMode, "auto");
+  assert.equal(automatic.source, "localStorage");
+
+  const explicitWebGpu = rendererMode.resolveRendererMode(
+    { search: "?renderer=webgpu" },
+    createMemoryStorage({ rippleRendererMode: "webgl" })
+  );
+  assert.equal(explicitWebGpu.requestedMode, "webgpu");
+  assert.equal(explicitWebGpu.source, "query");
+
+  const storedWebGl = rendererMode.resolveRendererMode(
+    { search: "" },
+    createMemoryStorage({ rippleRendererMode: "webgl" })
+  );
+  assert.equal(storedWebGl.requestedMode, "webgl");
+  assert.equal(storedWebGl.source, "localStorage");
+});
+
 test("each auto gate reports its own blocker without reason precedence", () => {
   const outsideCohort = findInstallIdForBucket((bucket) => bucket >= 5_000);
   const cases = [

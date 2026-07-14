@@ -85,6 +85,7 @@ export type WebGpuRenderRuntimeOptions = {
   readonly fallbackReason: string;
   readonly initialQualityPreset: QualityPreset;
   readonly initialSkyboxId: SkyboxId;
+  readonly onDeviceLost?: (info: GPUDeviceLostInfo) => void;
 };
 
 export class WebGpuRenderRuntime implements RenderRuntime {
@@ -95,6 +96,7 @@ export class WebGpuRenderRuntime implements RenderRuntime {
   private configuration: WebGpuCanvasConfiguration | null = null;
   private gpuCpuSubmitMs = 0;
   private deviceLost = false;
+  private destroyed = false;
   private submittedFirstFrame = false;
   private readonly gpuFrameTimer: WebGpuFrameTimer;
 
@@ -124,8 +126,10 @@ export class WebGpuRenderRuntime implements RenderRuntime {
       context.timestampQueryEnabled
     );
 
-    context.device.lost.then(() => {
+    context.device.lost.then((info) => {
+      if (this.destroyed) return;
       this.deviceLost = true;
+      options.onDeviceLost?.(info);
     });
   }
 
@@ -292,6 +296,11 @@ export class WebGpuRenderRuntime implements RenderRuntime {
   /** Wait for deterministic capture callers without blocking ordinary frames. */
   async waitForGpuIdle(): Promise<void> {
     await this.context.device.queue.onSubmittedWorkDone();
+  }
+
+  /** Exercise the terminal device-loss path from browser verification. */
+  forceDeviceLossForVerification(): void {
+    this.context.device.destroy();
   }
 
   renderFrame(input: RenderFrameInput): void {
@@ -730,6 +739,8 @@ export class WebGpuRenderRuntime implements RenderRuntime {
   }
 
   destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
     this.setAnimationLoop(null);
     this.gpuFrameTimer.dispose();
     this.bloom.dispose();

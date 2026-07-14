@@ -16,6 +16,7 @@ const SCENARIOS = new Set([
   "webgpu-soak",
   "webgpu-readiness",
   "webgpu-default-soak",
+  "webgpu-device-lost",
   "webgpu-unavailable"
 ]);
 const PRE_3D_FIELD_TRIANGLE_COUNT = 53706;
@@ -39,6 +40,15 @@ const WEBGPU_MOTE_AVATAR_ASSET_ID = "mote-core-orbit";
 const WEBGPU_PRESENTATION_PROFILE = "core";
 const WEBGL_PRESENTATION_PROFILE = "webgl-reference";
 const WEBGPU_REQUIRED_REMAINING_GAPS = [];
+const WEBGPU_SUCCESS_FORBIDDEN_CHANNELS = Object.freeze([
+  "webgpu.uncapturedError",
+  "webgpu.deviceLost",
+  "webgpu.runtimeFatal",
+  "webgpu.fallback",
+  "webgpu.unavailable",
+  "wake.init",
+  "skybox.load"
+]);
 const scenario = process.argv[2] ?? "";
 
 if (!SCENARIOS.has(scenario)) {
@@ -97,6 +107,8 @@ try {
     await verifyWebGpuReadiness(page, pageProblems);
   } else if (scenario === "webgpu-default-soak") {
     await verifyWebGpuDefaultSoak(page, pageProblems);
+  } else if (scenario === "webgpu-device-lost") {
+    await verifyWebGpuDeviceLost(page, pageProblems);
   } else {
     await verifyWebGpuUnavailable(page, pageProblems);
   }
@@ -164,6 +176,7 @@ async function verifyStockWebGpuRender(page, pageProblems) {
 
   const events = await readRunEvents(smokeRun);
   assertNoDiagnosticErrors(events);
+  assertNoChannels(events, WEBGPU_SUCCESS_FORBIDDEN_CHANNELS, "stock Chrome WebGPU render");
   pageProblems.assertNoErrors("stock Chrome WebGPU smoke");
   console.log(`[ripple-field-lab:verify:webgpu:stock] stock Chrome WebGPU scene OK at ${url}`);
 }
@@ -325,10 +338,41 @@ async function verifyTrainingRender(page, pageProblems, backendId) {
       payload.deviceLost === false;
   }, 10000);
 
+  if (backendId === "webgpu") {
+    await focusSceneCanvas(page);
+    await page.keyboard.down("w");
+    let trainingSession;
+    try {
+      const movementStarted = await captureMovingWebGpuSession(page, smokeRun, "training");
+      await delay(2000);
+      trainingSession = await captureMovingWebGpuSession(
+        page,
+        smokeRun,
+        "training",
+        movementStarted.entry.index
+      );
+    } finally {
+      await page.keyboard.up("w");
+    }
+    await setControlValue(page, "#quality-select", "showoff", "change");
+    await waitForRunEvent(page, smokeRun, "webgpu.settings.change", (record) =>
+      record.entry.index > trainingSession.entry.index &&
+      record.entry.payload.setting === "quality" &&
+      record.entry.payload.quality === "showoff"
+    );
+    await assertSessionPreservingRebuild(
+      page,
+      smokeRun,
+      trainingSession,
+      "quality",
+      "Training quality change"
+    );
+  }
+
   const events = await readRunEvents(smokeRun);
   assertNoDiagnosticErrors(events);
   if (backendId === "webgpu") {
-    assertNoChannels(events, ["webgpu.uncapturedError", "wake.init", "skybox.load"], "forced WebGPU Training render");
+    assertNoChannels(events, WEBGPU_SUCCESS_FORBIDDEN_CHANNELS, "forced WebGPU Training render");
   }
   pageProblems.assertNoErrors(`${backendId} Training smoke`);
   console.log(`[ripple-field-lab:verify:${backendId}] Training step one and marker/wall parity OK at ${url}`);
@@ -351,32 +395,51 @@ async function performTrainingLeftDrag(page, backendId) {
 async function verifyMenuTransitions(page, pageProblems, backendId) {
   const smokeRun = createSmokeRun(`${backendId}-menu`);
   const url = buildAppUrl(config, { renderer: backendId, smokeRun });
+  const modes = [
+    { id: "arena", button: "#start-arena-button" },
+    { id: "track", button: "#start-track-button" },
+    { id: "training", button: "#start-training-button" }
+  ];
 
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await page.locator("#main-menu:not([hidden])").waitFor({ timeout: 15000 });
   await waitForRunEvent(page, smokeRun, "renderer.mode", (record) =>
     record.entry.payload.activeBackend === backendId && record.entry.payload.playMode === "none"
   );
-  await page.locator("#start-arena-button").click();
-  await waitForRunEvent(page, smokeRun, "mode.select", (record) =>
-    record.entry.payload.mode === "arena" && record.entry.payload.reason === "menu"
-  );
-  await assertNonBlankCanvas(page, `${backendId} menu-start Arena canvas`, backendId);
-  await page.locator("#menu-toggle").click();
-  await page.locator("#scene-menu-backdrop:not([hidden])").waitFor({ timeout: 5000 });
-  await page.locator("#exit-to-main-menu-button").click();
-  await waitForRunEvent(page, smokeRun, "mode.menu");
-  await page.locator("#main-menu:not([hidden])").waitFor({ timeout: 5000 });
-  const mode = await waitForRunEvent(page, smokeRun, "renderer.mode", (record) =>
-    record.entry.payload.activeBackend === backendId && record.entry.payload.playMode === "none"
-  );
-  if (mode.entry.payload.arenaBarrierEnabled !== true) {
-    throw new Error(`${backendId} main-menu renderer state did not restore Arena policy.`);
+
+  for (const mode of modes) {
+    await page.locator(mode.button).click();
+    await waitForRunEvent(page, smokeRun, "mode.select", (record) =>
+      record.entry.payload.mode === mode.id && record.entry.payload.reason === "menu"
+    );
+    await waitForRunEvent(page, smokeRun, "renderer.frameSample", (record) =>
+      record.entry.payload.backendId === backendId &&
+      record.entry.payload.playMode === mode.id &&
+      record.entry.payload.deviceLost === false
+    );
+    await assertNonBlankCanvas(page, `${backendId} menu-start ${mode.id} canvas`, backendId);
+    await page.locator("#menu-toggle").click();
+    await page.locator("#scene-menu-backdrop:not([hidden])").waitFor({ timeout: 5000 });
+    const exitBaselineIndex = await getLatestRunEntryIndex(page, smokeRun);
+    await page.locator("#exit-to-main-menu-button").click();
+    await page.locator("#main-menu:not([hidden])").waitFor({ timeout: 5000 });
+    const menuState = await waitForRunEvent(page, smokeRun, "renderer.mode", (record) =>
+      record.entry.index > exitBaselineIndex &&
+      record.entry.payload.activeBackend === backendId &&
+      record.entry.payload.playMode === "none"
+    );
+    if (menuState.entry.payload.arenaBarrierEnabled !== true) {
+      throw new Error(`${backendId} main-menu renderer state did not restore Arena policy after ${mode.id}.`);
+    }
   }
 
-  assertNoDiagnosticErrors(await readRunEvents(smokeRun));
+  const events = await readRunEvents(smokeRun);
+  assertNoDiagnosticErrors(events);
+  if (backendId === "webgpu") {
+    assertNoChannels(events, WEBGPU_SUCCESS_FORBIDDEN_CHANNELS, "forced WebGPU menu lifecycle");
+  }
   pageProblems.assertNoErrors(`${backendId} menu transition smoke`);
-  console.log(`[ripple-field-lab:verify:${backendId}] main menu -> Arena -> pause -> main menu OK at ${url}`);
+  console.log(`[ripple-field-lab:verify:${backendId}] same-page Arena/Track/Training menu lifecycle OK at ${url}`);
 }
 
 async function verifyWebGpuCapabilities(page, pageProblems) {
@@ -882,7 +945,7 @@ async function verifyWebGpuRender(page, pageProblems) {
 
   const events = await readRunEvents(smokeRun);
   assertNoDiagnosticErrors(events);
-  assertNoChannels(events, ["webgpu.uncapturedError", "wake.init", "skybox.load"], "forced WebGPU render");
+  assertNoChannels(events, WEBGPU_SUCCESS_FORBIDDEN_CHANNELS, "forced WebGPU render");
   pageProblems.assertNoErrors("WebGPU render smoke");
 
   await verifyWebGpuTrackRender(page, pageProblems);
@@ -988,12 +1051,67 @@ async function verifyWebGpuTrackRender(page, pageProblems) {
   const second = await captureCanvasPng(page);
   assertAnimatedPng(first.png, second, "WebGPU Track diagnostic canvas");
 
+  await focusSceneCanvas(page);
+  await page.keyboard.down("w");
+  let trackSession;
+  try {
+    const movementStarted = await captureMovingWebGpuSession(page, smokeRun, "track");
+    await delay(2000);
+    trackSession = await captureMovingWebGpuSession(page, smokeRun, "track", movementStarted.entry.index);
+  } finally {
+    await page.keyboard.up("w");
+  }
+  await setControlValue(page, "#quality-select", "showoff", "change");
+  await waitForRunEvent(page, smokeRun, "webgpu.settings.change", (record) =>
+    record.entry.index > trackSession.entry.index &&
+    record.entry.payload.setting === "quality" &&
+    record.entry.payload.quality === "showoff"
+  );
+  await assertSessionPreservingRebuild(page, smokeRun, trackSession, "quality", "Track quality change");
+
   const events = await readRunEvents(smokeRun);
   assertNoDiagnosticErrors(events);
-  assertNoChannels(events, ["webgpu.uncapturedError", "wake.init", "skybox.load"], "forced WebGPU Track render");
+  assertNoChannels(events, WEBGPU_SUCCESS_FORBIDDEN_CHANNELS, "forced WebGPU Track render");
   pageProblems.assertNoErrors("WebGPU Track render smoke");
 
   console.log(`[ripple-field-lab:verify:webgpu] visible WebGPU Track snapshot OK at ${url}`);
+}
+
+async function captureMovingWebGpuSession(page, smokeRun, playMode, afterEntryIndex = -1) {
+  return waitForRunEvent(page, smokeRun, "webgpu.sceneState.frame", (record) => {
+    const payload = record.entry.payload;
+    return record.entry.index > afterEntryIndex &&
+      payload.playMode === playMode &&
+      payload.playerSpeed > 0 &&
+      typeof payload.simulationTimeSeconds === "number" &&
+      payload.simulationTimeSeconds > 0 &&
+      payload.playerPosition &&
+      payload.deviceLost === false;
+  });
+}
+
+async function assertSessionPreservingRebuild(page, smokeRun, baseline, reason, label) {
+  const rebuild = await waitForRunEvent(page, smokeRun, "field.rebuild", (record) =>
+    record.entry.index > baseline.entry.index &&
+    record.entry.payload?.backend === "webgpu" &&
+    record.entry.payload?.reason === reason
+  );
+  const before = baseline.entry.payload;
+  const after = rebuild.entry.payload;
+  const positionDelta = Math.hypot(
+    (after.playerPosition?.x ?? 0) - (before.playerPosition?.x ?? 0),
+    (after.playerPosition?.y ?? 0) - (before.playerPosition?.y ?? 0),
+    (after.playerPosition?.z ?? 0) - (before.playerPosition?.z ?? 0)
+  );
+  if (
+    after.sessionPreserved !== true ||
+    typeof after.simulationTimeSeconds !== "number" ||
+    after.simulationTimeSeconds + 0.05 < before.simulationTimeSeconds ||
+    positionDelta > 12
+  ) {
+    throw new Error(`${label} reset the active WebGPU run:\n${formatRecords([baseline, rebuild])}`);
+  }
+  return rebuild;
 }
 
 async function exerciseWebGpuSettings(page, smokeRun) {
@@ -1104,6 +1222,7 @@ async function exerciseWebGpuSettings(page, smokeRun) {
       Boolean(payload.textureTier);
   }, 25000);
 
+  const qualitySession = await captureMovingWebGpuSession(page, smokeRun, "arena");
   await setControlValue(page, "#quality-select", "showoff", "change");
   await waitForRunEvent(page, smokeRun, "webgpu.settings.change", (record) => {
     const payload = record.entry.payload;
@@ -1126,7 +1245,9 @@ async function exerciseWebGpuSettings(page, smokeRun) {
       payload.wakeEnergyEstimate <= WEBGPU_SOAK_MAX_WAKE_ENERGY_ESTIMATE &&
       payload.deviceLost === false;
   }, 20000);
+  await assertSessionPreservingRebuild(page, smokeRun, qualitySession, "quality", "Quality change");
 
+  const voxelSession = await captureMovingWebGpuSession(page, smokeRun, "arena");
   await setControlValue(page, "#voxel-size-slider", "1.2", "input");
   await waitForRunEvent(page, smokeRun, "webgpu.settings.change", (record) => {
     const payload = record.entry.payload;
@@ -1152,7 +1273,9 @@ async function exerciseWebGpuSettings(page, smokeRun) {
       payload.quality === "showoff" &&
       payload.textureSize > 1;
   }, 20000);
+  await assertSessionPreservingRebuild(page, smokeRun, voxelSession, "field-scale", "Hex-size change");
 
+  const arenaSession = await captureMovingWebGpuSession(page, smokeRun, "arena");
   await setControlValue(page, "#arena-radius-slider", "180", "input");
   await waitForRunEvent(page, smokeRun, "webgpu.settings.change", (record) => {
     const payload = record.entry.payload;
@@ -1251,6 +1374,7 @@ async function exerciseWebGpuSettings(page, smokeRun) {
       payload.waveSpeed > 0 &&
       payload.deviceLost === false;
   }, 20000);
+  await assertSessionPreservingRebuild(page, smokeRun, arenaSession, "field-scale", "Arena-radius change");
 }
 
 async function exerciseViewportAndFocusChurn(page, smokeRun) {
@@ -1407,7 +1531,7 @@ async function verifyWebGpuSoak(page, pageProblems) {
 
   const events = await readRunEvents(smokeRun);
   assertNoDiagnosticErrors(events);
-  assertNoChannels(events, ["webgpu.uncapturedError", "wake.init", "skybox.load"], "forced WebGPU soak");
+  assertNoChannels(events, WEBGPU_SUCCESS_FORBIDDEN_CHANNELS, "forced WebGPU soak");
   assertWebGpuSoakEvents(events);
   pageProblems.assertNoErrors("WebGPU soak smoke");
 
@@ -1536,7 +1660,7 @@ async function verifyWebGpuReadiness(page, pageProblems) {
 
   const events = await readRunEvents(smokeRun);
   assertNoDiagnosticErrors(events);
-  assertNoChannels(events, ["webgpu.uncapturedError", "wake.init", "skybox.load"], "forced WebGPU readiness");
+  assertNoChannels(events, WEBGPU_SUCCESS_FORBIDDEN_CHANNELS, "forced WebGPU readiness");
   assertWebGpuReadinessEvents(events);
   pageProblems.assertNoErrors("WebGPU readiness smoke");
 
@@ -1645,7 +1769,7 @@ async function verifyWebGpuDefaultSoak(page, pageProblems) {
 
   const events = await readRunEvents(smokeRun);
   assertNoDiagnosticErrors(events);
-  assertNoChannels(events, ["webgpu.uncapturedError", "wake.init", "skybox.load"], "forced WebGPU default readiness soak");
+  assertNoChannels(events, WEBGPU_SUCCESS_FORBIDDEN_CHANNELS, "forced WebGPU default readiness soak");
   assertWebGpuReadinessEvents(events);
   assertWebGpuDefaultSoakEvents(events);
   pageProblems.assertNoErrors("WebGPU default readiness soak");
@@ -1767,9 +1891,7 @@ async function verifyWebGpuDemoHarness(page, pageProblems) {
   const events = await readRunEvents(smokeRun);
   assertNoDiagnosticErrors(events);
   assertNoChannels(events, [
-    "webgpu.uncapturedError",
-    "wake.init",
-    "skybox.load",
+    ...WEBGPU_SUCCESS_FORBIDDEN_CHANNELS,
     "echo.state.init",
     "echo.state.spawn",
     "echo.state.collect",
@@ -1795,7 +1917,14 @@ async function verifyWebGpuUnavailable(page, pageProblems) {
   );
 
   const events = await readRunEvents(smokeRun);
-  assertNoChannels(events, ["renderer.mode", "wake.init", "skybox.load"], "forced WebGPU unavailable");
+  assertNoChannels(events, [
+    "renderer.mode",
+    "webgpu.deviceLost",
+    "webgpu.runtimeFatal",
+    "webgpu.uncapturedError",
+    "wake.init",
+    "skybox.load"
+  ], "forced WebGPU unavailable");
   pageProblems.assertNoPageErrors("WebGPU unavailable smoke");
 
   console.log(`[ripple-field-lab:verify:webgpu:unavailable] forced WebGPU failure path OK at ${url}`);
@@ -1871,6 +2000,12 @@ async function readRunEvents(smokeRun) {
       ...record,
       entry: record.entry ?? { channel: "unknown", level: "info", payload: {} }
     }));
+}
+
+async function getLatestRunEntryIndex(page, smokeRun) {
+  await flushDebugLog(page);
+  const records = await readRunEvents(smokeRun);
+  return records.reduce((latest, record) => Math.max(latest, record.entry.index ?? -1), -1);
 }
 
 async function flushDebugLog(page) {
@@ -1965,6 +2100,71 @@ function hasDiagnosticCoreReadiness(payload) {
     WEBGPU_REQUIRED_REMAINING_GAPS.every((gap) => remainingGaps.includes(gap));
 }
 
+async function verifyWebGpuDeviceLost(page, pageProblems) {
+  const smokeRun = createSmokeRun("webgpu-device-lost");
+  const url = buildAppUrl(config, {
+    renderer: "webgpu",
+    mode: "arena",
+    visualCapture: "1",
+    smokeRun
+  });
+
+  await page.goto(url, { waitUntil: "domcontentloaded" });
+  await waitForRunEvent(page, smokeRun, "webgpu.firstFrame");
+  await page.waitForFunction(() => typeof window.__rippleVisualCapture === "object");
+  await page.evaluate(() => {
+    if (typeof window.__rippleDebugForceWebGpuDeviceLoss !== "function") {
+      throw new Error("WebGPU device-loss verification hook is unavailable.");
+    }
+    window.__rippleDebugForceWebGpuDeviceLoss();
+  });
+
+  await page.getByRole("heading", { name: "WebGPU device lost" }).waitFor({ timeout: 15000 });
+  await waitForRunEvent(page, smokeRun, "webgpu.deviceLost", (record) =>
+    record.entry.payload.reason === "destroyed"
+  );
+  await waitForRunEvent(page, smokeRun, "webgpu.runtimeFatal", (record) =>
+    record.entry.payload.failureKind === "device-lost"
+  );
+  await waitForRunEvent(page, smokeRun, "webgpu.fallback", (record) =>
+    record.entry.payload.activeBackend === "none" &&
+    record.entry.payload.failureKind === "device-lost"
+  );
+
+  if (await page.locator("canvas").count() !== 0) {
+    throw new Error("WebGPU device-loss path left the failed canvas attached.");
+  }
+
+  await page.setViewportSize({ width: 960, height: 540 });
+  await page.evaluate(() => document.dispatchEvent(new Event("pointerlockchange")));
+  await delay(250);
+  await page.getByRole("heading", { name: "WebGPU device lost" }).waitFor({ timeout: 5000 });
+  if (await page.locator("canvas").count() !== 0) {
+    throw new Error("Post-loss browser events reattached or revived the failed WebGPU canvas.");
+  }
+  if (await page.evaluate(() => window.__rippleVisualCapture !== undefined)) {
+    throw new Error("WebGPU device-loss path left the visual-capture controller installed.");
+  }
+
+  const events = await readRunEvents(smokeRun);
+  assertNoDiagnosticErrors(events, ["webgpu.runtimeFatal", "webgpu.fallback"]);
+  assertNoChannels(events, [
+    "webgpu.unavailable",
+    "webgpu.uncapturedError",
+    "wake.init",
+    "skybox.load"
+  ], "forced WebGPU device-loss failure");
+  if (events.filter((record) => record.entry.channel === "webgpu.runtimeFatal").length !== 1) {
+    throw new Error("WebGPU device-loss path did not emit exactly one terminal runtime failure.");
+  }
+  pageProblems.assertNoErrors("WebGPU device-loss smoke", [
+    "[ripple:webgpu.runtimeFatal]",
+    "[ripple:webgpu.fallback]"
+  ]);
+
+  console.log(`[ripple-field-lab:verify:webgpu:device-lost] terminal device-loss path OK at ${url}`);
+}
+
 function hasDefaultReadinessPayload(payload) {
   return payload?.defaultReadinessSurface === "forced-webgpu-core" &&
     hasDiagnosticCoreReadiness(payload) &&
@@ -2037,10 +2237,13 @@ function collectPageProblems(page) {
   });
 
   return {
-    assertNoErrors(label) {
+    assertNoErrors(label, allowedConsoleErrorPrefixes = []) {
       this.assertNoPageErrors(label);
-      if (consoleErrors.length > 0) {
-        throw new Error(`${label} emitted console errors:\n${consoleErrors.join("\n")}`);
+      const unexpectedConsoleErrors = consoleErrors.filter((message) =>
+        !allowedConsoleErrorPrefixes.some((prefix) => message.startsWith(prefix))
+      );
+      if (unexpectedConsoleErrors.length > 0) {
+        throw new Error(`${label} emitted console errors:\n${unexpectedConsoleErrors.join("\n")}`);
       }
     },
     assertNoPageErrors(label) {
