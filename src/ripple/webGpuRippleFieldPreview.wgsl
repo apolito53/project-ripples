@@ -8,6 +8,7 @@ struct FieldParams {
   shape: vec4f,
   echo: vec4f,
   track: vec4f,
+  palette: vec4f,
 };
 
 struct FieldCell {
@@ -97,6 +98,39 @@ const ECHO_BURST_LIMIT: u32 = 8u;
 const ECHO_BURST_OFFSET: u32 = 8u;
 const LOCAL_LIGHT_LIMIT: u32 = 16u;
 const SHADOW_CASTER_LIMIT: u32 = 16u;
+
+fn referencePaletteTint(baseTint: vec3f, heightWhiteness: f32, glow: f32, crestGlow: f32) -> vec3f {
+  let rippleTint = mix(baseTint, vec3f(0.18, 0.82, 0.74), clamp(glow * 0.46, 0.0, 0.7));
+  let shadedLowTint = rippleTint * (0.58 + heightWhiteness * 0.34);
+  var tint = mix(
+    shadedLowTint,
+    vec3f(0.94, 0.985, 1.0),
+    clamp(heightWhiteness * (0.34 + glow * 0.32), 0.0, 0.76)
+  );
+  return mix(tint, vec3f(0.76, 1.0, 0.92), crestGlow * 0.3);
+}
+
+// This is the original WebGPU field palette from the diagnostic Core scene.
+// It is intentionally color-only: selecting it must not restore the older
+// amplified wave transfer or fixed-horizon pulse behavior.
+fn legacyNeonPaletteTint(
+  baseTint: vec3f,
+  heightWhiteness: f32,
+  heightEnergy: f32,
+  velocityEnergy: f32,
+  crestEnergy: f32,
+  shimmer: f32
+) -> vec3f {
+  var tint = baseTint * (0.48 + heightWhiteness * 0.34 + shimmer * 0.05);
+  tint = tint + max(heightEnergy, 0.0) * vec3f(0.04, 0.42, 0.5);
+  tint = tint + max(-heightEnergy, 0.0) * vec3f(0.34, 0.09, 0.44);
+  tint = tint + velocityEnergy * vec3f(0.03, 0.2, 0.11);
+  return tint + crestEnergy * vec3f(0.62, 0.52, 0.2);
+}
+
+fn selectFieldPalette(referenceTint: vec3f, legacyTint: vec3f) -> vec3f {
+  return mix(referenceTint, legacyTint, clamp(field.palette.x, 0.0, 1.0));
+}
 
 fn loadWake(cellPosition: vec2f) -> vec4f {
   let dimensions = vec2i(textureDimensions(wakeTexture));
@@ -442,11 +476,18 @@ fn buildCoreFieldVertex(instanceIndex: u32, local: vec2f) -> VertexOutput {
   output.trackSignal = trackSignal;
   output.worldNormal = vec3f(0.0, 1.0, 0.0);
   output.faceData = vec2f(0.0);
-  output.color = cell.tint.rgb * (0.48 + terrainWhiteness * 0.34 + shimmer * 0.05);
-  output.color = output.color + max(heightEnergy, 0.0) * vec3f(0.04, 0.42, 0.5);
-  output.color = output.color + max(-heightEnergy, 0.0) * vec3f(0.34, 0.09, 0.44);
-  output.color = output.color + velocityEnergy * vec3f(0.03, 0.2, 0.11);
-  output.color = output.color + crestEnergy * vec3f(0.62, 0.52, 0.2);
+  let referenceGlow = clamp(max(heightEnergy, 0.0) * 0.56 + crestEnergy * 0.48, 0.0, 0.62);
+  let referenceTint = referencePaletteTint(cell.tint.rgb, terrainWhiteness, referenceGlow, crestEnergy) *
+    (0.62 + referenceGlow * 0.05 + terrainWhiteness * 0.07 + crestEnergy * 0.2);
+  let legacyTint = legacyNeonPaletteTint(
+    cell.tint.rgb,
+    terrainWhiteness,
+    heightEnergy,
+    velocityEnergy,
+    crestEnergy,
+    shimmer
+  );
+  output.color = selectFieldPalette(referenceTint, legacyTint);
   output.color = output.color + echoSignal.x * vec3f(0.18, 0.36, 0.3);
   output.color = output.color + echoSignal.y * vec3f(0.42, 0.28, 0.1);
   let trackBody = mix(1.0, trackSignal.r, trackSignal.w);
@@ -548,14 +589,18 @@ fn buildClassicFieldVertex(
   let bottomRim = 0.08 + keyLight * 0.08 + shimmer * 0.02;
   let rim = topRim * topFace + sideRim * sideFace + bottomRim * bottomFace;
   let crestLight = crestGlow * (0.28 + shimmer * 0.12);
-  let rippleTint = mix(cell.tint.rgb, vec3f(0.18, 0.82, 0.74), clamp(glow * 0.46, 0.0, 0.7));
-  let shadedLowTint = rippleTint * (0.58 + terrainWhiteness * 0.34);
-  var classicTint = mix(
-    shadedLowTint,
-    vec3f(0.94, 0.985, 1.0),
-    clamp(terrainWhiteness * (0.34 + glow * 0.32), 0.0, 0.76)
+  let classicTint = referencePaletteTint(cell.tint.rgb, terrainWhiteness, glow, crestGlow);
+  let legacyHeightEnergy = clamp(wake.x * 10.0 + sourceWave * 0.88, -1.0, 1.0);
+  let legacyVelocityEnergy = clamp(abs(wake.y) * 10.0, 0.0, 1.0);
+  let legacyCrestEnergy = clamp(max(wake.z, 0.0) * 2.2 + max(sourceWave, 0.0) * 0.64, 0.0, 1.0);
+  let legacyTint = legacyNeonPaletteTint(
+    cell.tint.rgb,
+    terrainWhiteness,
+    legacyHeightEnergy,
+    legacyVelocityEnergy,
+    legacyCrestEnergy,
+    shimmer
   );
-  classicTint = mix(classicTint, vec3f(0.76, 1.0, 0.92), crestGlow * 0.3);
 
   var output: VertexOutput;
   output.position = field.viewProjection * vec4f(worldPosition, 1.0);
@@ -568,7 +613,8 @@ fn buildClassicFieldVertex(
   output.trackSignal = trackSignal;
   output.worldNormal = worldNormal;
   output.faceData = faceData;
-  output.color = classicTint * (0.62 + glow * 0.05 + terrainWhiteness * 0.07 + crestGlow * 0.2);
+  let referenceColor = classicTint * (0.62 + glow * 0.05 + terrainWhiteness * 0.07 + crestGlow * 0.2);
+  output.color = selectFieldPalette(referenceColor, legacyTint);
   output.color = output.color + echoSignal.x * vec3f(0.18, 0.36, 0.3);
   output.color = output.color + echoSignal.y * vec3f(0.42, 0.28, 0.1);
   let trackBody = mix(1.0, trackSignal.r, trackSignal.w);

@@ -692,6 +692,8 @@ function compareFixtureStates(reference, candidate) {
     "playMode",
     "tick",
     "qualityId",
+    "fieldPalette",
+    "resolvedFieldPalette",
     "fieldInstances",
     "activeSources",
     "activeEchoes",

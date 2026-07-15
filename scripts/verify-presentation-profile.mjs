@@ -4,34 +4,38 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
-const sourceUrl = new URL("../src/render/presentationProfile.ts", import.meta.url);
-const sourcePath = fileURLToPath(sourceUrl);
-const source = readFileSync(sourcePath, "utf8");
-const transpiled = ts.transpileModule(source, {
-  compilerOptions: {
-    target: ts.ScriptTarget.ES2022,
-    module: ts.ModuleKind.ES2022,
-    isolatedModules: true
-  },
-  fileName: sourcePath,
-  reportDiagnostics: true
-});
-
-const syntaxErrors = (transpiled.diagnostics ?? [])
-  .filter((diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error);
-if (syntaxErrors.length > 0) {
-  const host = {
-    getCanonicalFileName: (fileName) => fileName,
-    getCurrentDirectory: () => process.cwd(),
-    getNewLine: () => "\n"
-  };
-  throw new Error(ts.formatDiagnostics(syntaxErrors, host));
-}
-
-const moduleUrl = `data:text/javascript;base64,${Buffer.from(transpiled.outputText).toString("base64")}`;
-const profilePolicy = await import(moduleUrl);
+const profilePolicy = await importTypeScriptModule("../src/render/presentationProfile.ts");
+const fieldPalettePolicy = await importTypeScriptModule("../src/fieldPalette.ts");
 const tests = [];
-const PRESERVED_CORE_SHADER_SHA256 = "fca78d8ffd9fc4428c953dd6d66b1e42be52bfeb26f343a8587127bfff4fea83";
+const PRESERVED_CORE_SHADER_SHA256 = "78e6fa3d341dde49353a43a8b667b84188f4a564b73e14a074a0a02e80ec967d";
+
+async function importTypeScriptModule(relativePath) {
+  const sourceUrl = new URL(relativePath, import.meta.url);
+  const sourcePath = fileURLToPath(sourceUrl);
+  const source = readFileSync(sourcePath, "utf8");
+  const transpiled = ts.transpileModule(source, {
+    compilerOptions: {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.ES2022,
+      isolatedModules: true
+    },
+    fileName: sourcePath,
+    reportDiagnostics: true
+  });
+  const syntaxErrors = (transpiled.diagnostics ?? [])
+    .filter((diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error);
+  if (syntaxErrors.length > 0) {
+    const host = {
+      getCanonicalFileName: (fileName) => fileName,
+      getCurrentDirectory: () => process.cwd(),
+      getNewLine: () => "\n"
+    };
+    throw new Error(ts.formatDiagnostics(syntaxErrors, host));
+  }
+
+  const moduleUrl = `data:text/javascript;base64,${Buffer.from(transpiled.outputText).toString("base64")}`;
+  return import(moduleUrl);
+}
 
 function test(name, verify) {
   tests.push({ name, verify });
@@ -131,6 +135,18 @@ test("the runtime guard accepts only the two supported profiles", () => {
   assert.equal(profilePolicy.isRenderPresentationProfile("core"), true);
   assert.equal(profilePolicy.isRenderPresentationProfile("flat"), false);
   assert.equal(profilePolicy.isRenderPresentationProfile(""), false);
+});
+
+test("field palette defaults follow the active presentation profile", () => {
+  assert.equal(fieldPalettePolicy.resolveFieldPaletteId("profile", "reference"), "reference");
+  assert.equal(fieldPalettePolicy.resolveFieldPaletteId("profile", "legacy-neon"), "legacy-neon");
+  assert.equal(fieldPalettePolicy.resolveFieldPaletteId("reference", "legacy-neon"), "reference");
+  assert.equal(fieldPalettePolicy.resolveFieldPaletteId("legacy-neon", "reference"), "legacy-neon");
+  assert.equal(fieldPalettePolicy.resolveFieldPaletteForProfile("profile", "webgl-reference"), "reference");
+  assert.equal(fieldPalettePolicy.resolveFieldPaletteForProfile("profile", "classic"), "reference");
+  assert.equal(fieldPalettePolicy.resolveFieldPaletteForProfile("profile", "core"), "legacy-neon");
+  assert.equal(fieldPalettePolicy.getFieldPaletteShaderIndex("reference"), 0);
+  assert.equal(fieldPalettePolicy.getFieldPaletteShaderIndex("legacy-neon"), 1);
 });
 
 test("the preserved Core vertex and fragment shader contract stays unchanged", () => {

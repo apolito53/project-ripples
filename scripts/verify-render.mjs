@@ -130,6 +130,8 @@ async function verifyWebGlRender(page, pageProblems) {
   await waitForRunEvent(page, smokeRun, "renderer.mode", (record) =>
     record.entry.payload.activeBackend === "webgl" &&
     record.entry.payload.presentationProfile === WEBGL_PRESENTATION_PROFILE &&
+    record.entry.payload.fieldPalette === "profile" &&
+    record.entry.payload.resolvedFieldPalette === "reference" &&
     record.entry.payload.playMode === "arena" &&
     record.entry.payload.raceTrackEnabled === false &&
     record.entry.payload.trackMaskUploaded === false &&
@@ -143,6 +145,8 @@ async function verifyWebGlRender(page, pageProblems) {
     const payload = record.entry.payload;
     return payload.backendId === "webgl" &&
       payload.presentationProfile === WEBGL_PRESENTATION_PROFILE &&
+      payload.fieldPalette === "profile" &&
+      payload.resolvedFieldPalette === "reference" &&
       payload.playMode === "arena" &&
       payload.raceTrackEnabled === false &&
       payload.arenaBarrierEnabled === true;
@@ -426,6 +430,11 @@ async function verifyMenuTransitions(page, pageProblems, backendId) {
     await assertNonBlankCanvas(page, `${backendId} menu-start ${mode.id} canvas`, backendId);
     await page.locator("#menu-toggle").click();
     await page.locator("#scene-menu-backdrop:not([hidden])").waitFor({ timeout: 5000 });
+    if (mode.id === "arena") {
+      await verifyPauseMenuTabsAndPalette(page, smokeRun, backendId);
+      await page.locator("#menu-toggle").click();
+      await page.locator("#scene-menu-backdrop:not([hidden])").waitFor({ timeout: 5000 });
+    }
     const exitBaselineIndex = await getLatestRunEntryIndex(page, smokeRun);
     await page.locator("#exit-to-main-menu-button").click();
     await page.locator("#main-menu:not([hidden])").waitFor({ timeout: 5000 });
@@ -446,6 +455,45 @@ async function verifyMenuTransitions(page, pageProblems, backendId) {
   }
   pageProblems.assertNoErrors(`${backendId} menu transition smoke`);
   console.log(`[ripple-field-lab:verify:${backendId}] same-page Arena/Track/Training menu lifecycle OK at ${url}`);
+}
+
+async function verifyPauseMenuTabsAndPalette(page, smokeRun, backendId) {
+  await page.locator("#settings-tab-graphics[aria-selected='true']").waitFor({ timeout: 5000 });
+  await page.locator("#settings-panel-graphics:not([hidden])").waitFor({ timeout: 5000 });
+
+  await page.locator("#settings-tab-field").click();
+  await page.locator("#settings-tab-field[aria-selected='true']").waitFor({ timeout: 5000 });
+  await page.locator("#settings-panel-field:not([hidden])").waitFor({ timeout: 5000 });
+
+  await page.locator("#settings-tab-field").press("ArrowRight");
+  await page.locator("#settings-tab-movement[aria-selected='true']").waitFor({ timeout: 5000 });
+  await page.locator("#settings-panel-movement:not([hidden])").waitFor({ timeout: 5000 });
+
+  await page.locator("#settings-tab-effects").click();
+  await page.locator("#settings-panel-effects:not([hidden])").waitFor({ timeout: 5000 });
+  await page.locator("#settings-tab-graphics").click();
+
+  const changeBaselineIndex = await getLatestRunEntryIndex(page, smokeRun);
+  await page.locator("#field-palette-select").selectOption("legacy-neon");
+  const settingsChannel = backendId === "webgpu" ? "webgpu.settings.change" : "settings.change";
+  await waitForRunEvent(page, smokeRun, settingsChannel, (record) => {
+    const payload = record.entry.payload;
+    return record.entry.index > changeBaselineIndex &&
+      payload.setting === "fieldPalette" &&
+      payload.fieldPalette === "legacy-neon" &&
+      payload.resolvedFieldPalette === "legacy-neon";
+  });
+
+  await page.locator("#resume-button").click();
+  await page.locator("#scene-menu-backdrop").waitFor({ state: "hidden", timeout: 5000 });
+  await waitForRunEvent(page, smokeRun, "renderer.frameSample", (record) => {
+    const payload = record.entry.payload;
+    return record.entry.index > changeBaselineIndex &&
+      payload.backendId === backendId &&
+      payload.fieldPalette === "legacy-neon" &&
+      payload.resolvedFieldPalette === "legacy-neon" &&
+      payload.deviceLost === false;
+  });
 }
 
 async function verifyWebGpuCapabilities(page, pageProblems) {
@@ -517,6 +565,8 @@ async function verifyWebGpuRender(page, pageProblems) {
     return payload.scenePresentationMode === "webgpu-core-scene" &&
       hasDiagnosticCoreReadiness(payload) &&
       hasClassicFieldGeometry(payload) &&
+      payload.fieldPalette === "profile" &&
+      payload.resolvedFieldPalette === "reference" &&
       payload.stateMode === "playable" &&
       payload.playMode === "arena" &&
       payload.raceTrackEnabled === false &&
@@ -562,6 +612,8 @@ async function verifyWebGpuRender(page, pageProblems) {
     const payload = record.entry.payload;
     return payload.scenePresentationMode === "webgpu-core-scene" &&
       hasClassicFieldGeometry(payload) &&
+      payload.fieldPalette === "profile" &&
+      payload.resolvedFieldPalette === "reference" &&
       payload.playMode === "arena" &&
       payload.raceTrackEnabled === false &&
       payload.arenaBarrierEnabled === true &&
@@ -1002,6 +1054,8 @@ async function verifyWebGpuCoreProfile(page, pageProblems) {
       payload.stateMode === "playable" &&
       payload.playMode === "arena" &&
       hasCoreFieldGeometry(payload) &&
+      payload.fieldPalette === "profile" &&
+      payload.resolvedFieldPalette === "legacy-neon" &&
       typeof payload.simulationTimeSeconds === "number" &&
       payload.playerPosition &&
       payload.deviceLost === false;
@@ -1038,6 +1092,8 @@ async function verifyWebGpuCoreProfile(page, pageProblems) {
     return record.entry.index > profileChange.entry.index &&
       hasDiagnosticCoreReadiness(payload) &&
       hasClassicFieldGeometry(payload) &&
+      payload.fieldPalette === "profile" &&
+      payload.resolvedFieldPalette === "reference" &&
       payload.playMode === "arena" &&
       payload.simulationTimeSeconds >= coreFrame.entry.payload.simulationTimeSeconds &&
       payload.deviceLost === false;

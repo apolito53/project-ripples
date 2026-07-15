@@ -68,6 +68,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - HTML shell, startup mode menu, Training HUD, pause menu, changelog dialog,
   performance overlay, and tuning controls: `index.html`
 - Visual styling and overlay layout: `src/styles.css`
+- Renderer-neutral field-palette policy and accessible pause-menu tab wiring:
+  `src/fieldPalette.ts` and `src/pauseMenuTabs.ts`
 - App bootstrap, startup `Training`/`Arena`/`Track` mode selection, session
   reset flow, Three.js scene, render loop, quality wiring, and postprocessing:
   `src/main.ts`
@@ -254,8 +256,11 @@ Purpose: compact map for the standalone ripple-field visual lab.
     stats, pixel ratio, bloom state, and quality. Both debug surfaces start
     hidden by default.
 14. Esc or the hamburger button opens the centered pause menu after a mode has
-    started. The pause menu owns tuning controls, Resume, Exit To Main Menu, and
-    a version changelog button.
+    started. Its Graphics, Field, Movement, and Effects tabs own the tuning
+    controls, while Resume, Exit To Main Menu, and the version changelog remain
+    persistent menu actions. The field-palette setting is shared by both
+    renderers; Style Default resolves to Reference for WebGL/Classic and Legacy
+    Neon for Core without changing wave dynamics.
     Hidden base/boost speed rows remain wired for future tuning, but are not
     currently exposed in the visible menu.
 15. The scene renders through bloom when bloom strength is above zero.
@@ -308,7 +313,11 @@ Purpose: compact map for the standalone ripple-field visual lab.
   boundary: `src/controls.ts`, `src/raceTrack.ts`, `src/labSettings.ts`, and
   `src/main.ts`
 - Change pause-menu layout, changelog behavior, or tuning labels:
-  `index.html`, `src/styles.css`, and `src/main.ts`
+  `index.html`, `src/styles.css`, `src/pauseMenuTabs.ts`, and `src/main.ts`
+- Change field-palette choices, profile-aware defaults, or palette diagnostics:
+  `src/fieldPalette.ts`, `src/rippleField.ts`,
+  `src/ripple/webGpuRippleFieldPreview.ts`, and
+  `src/ripple/webGpuRippleFieldPreview.wgsl`
 - Change the live performance overlay, HUD formatting, frame-hitch payloads, or
   the `F2` toggle:
   `index.html`, `src/styles.css`, `src/frameTelemetry.ts`, and `src/main.ts`

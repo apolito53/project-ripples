@@ -136,9 +136,12 @@ texture for continuous surface response.
 
 ## Runtime Tuning
 
-The Esc/hamburger pause menu changes quality, skybox theme, hex size, arena
-radius, surface grip, ripple height/radius, Depth / Speed, particle density,
-bloom strength, and the diagnostics readouts while the scene is running.
+The Esc/hamburger pause menu groups live controls into **Graphics**, **Field**,
+**Movement**, and **Effects** tabs. It changes quality, skybox theme, field
+style/palette, hex size, arena radius, surface grip, ripple height/radius,
+Depth / Speed, particle density, bloom strength, and diagnostics while the
+scene is running. The tab strip supports click/tap plus Left/Right, Home, and
+End keyboard navigation.
 
 Hex size treats the current cell scale as `1m`, ranges from `25cm` to `2m`, and
 measures the regular hexagon's widest point-to-point diameter. Changing it
@@ -231,6 +234,13 @@ is used; with neither, Classic is the default. Invalid query or stored values
 fail closed to Classic. Switching profiles changes the field pipeline in place without
 resetting the current mode, player position, or simulation clock. WebGL ignores
 the WebGPU presentation preference.
+
+The adjacent **Field Palette** selector is renderer-neutral. **Style Default**
+keeps WebGL and WebGPU Classic on the current reference colors while preserving
+Core's original blue/cyan/purple/gold neon treatment. **Reference** and
+**Legacy Neon** can be forced explicitly on either renderer profile. Legacy
+Neon restores only the older color response; it continues using the corrected
+source fade, wake transfer, and pulse lifecycle.
 
 ### Renderer Presentation Audit
 

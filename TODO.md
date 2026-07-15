@@ -82,6 +82,10 @@ concrete follow-ups that we actually intend to revisit.
 
 ## Done / Recent Decisions
 
+- Added shared pause-menu category tabs and a renderer-neutral field-palette
+  selector. Style Default follows each presentation profile, while Legacy Neon
+  deliberately restores color without restoring the retired WebGPU pulse
+  lifecycle.
 - Added the default Classic WebGPU profile with procedural 3D hex prisms,
   animated tile thickness, real side-face lighting, query/storage/menu policy,
   live session-preserving profile switches, and dedicated browser/parity checks.

@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { getFieldPaletteShaderIndex, resolveFieldPaletteForProfile } from "./fieldPalette";
 import type { LabSettings } from "./labSettings";
 import type { QualityPreset } from "./qualityPresets";
 import { MAX_SHADER_RIPPLE_SOURCES, RIPPLE_LIFETIME_SECONDS, type RippleRenderSourceSnapshot } from "./rippleSources";
@@ -31,6 +32,7 @@ type RippleShaderUniforms = {
   readonly uMediumDamping: Uniform<number>;
   readonly uMediumDispersion: Uniform<number>;
   readonly uBloomMood: Uniform<number>;
+  readonly uFieldPalette: Uniform<number>;
   readonly uWakeTexture: Uniform<THREE.Texture>;
   readonly uWakeFieldRadius: Uniform<number>;
   readonly uWakeStrength: Uniform<number>;
@@ -248,6 +250,7 @@ export class RippleField {
       shader.uniforms.uMediumDamping = { value: 0.16 };
       shader.uniforms.uMediumDispersion = { value: 0.22 };
       shader.uniforms.uBloomMood = { value: 1 };
+      shader.uniforms.uFieldPalette = { value: 0 };
       shader.uniforms.uWakeTexture = { value: this.noOpWakeTexture };
       shader.uniforms.uWakeFieldRadius = { value: 92 };
       shader.uniforms.uWakeStrength = { value: 0 };
@@ -276,6 +279,7 @@ export class RippleField {
           uniform float uMediumDamping;
           uniform float uMediumDispersion;
           uniform float uBloomMood;
+          uniform float uFieldPalette;
           ${wakeTextureUniform}
           uniform float uWakeFieldRadius;
           uniform float uWakeStrength;
@@ -412,12 +416,24 @@ export class RippleField {
           // toward white as they rise, while troughs stay darker and colder.
           vec3 rippleTint = mix(instanceTint, vec3(0.18, 0.82, 0.74), clamp(glow * 0.46, 0.0, 0.7));
           vec3 shadedLowTint = rippleTint * (0.58 + heightWhiteness * 0.34);
-          vRippleTint = mix(
+          vec3 referenceTint = mix(
             shadedLowTint,
             vec3(0.94, 0.985, 1.0),
             clamp(heightWhiteness * (0.34 + glow * 0.32), 0.0, 0.76)
           );
-          vRippleTint = mix(vRippleTint, vec3(0.76, 1.0, 0.92), crestGlow * 0.3);`
+          referenceTint = mix(referenceTint, vec3(0.76, 1.0, 0.92), crestGlow * 0.3);
+
+          // Legacy Neon restores the original WebGPU color response without
+          // restoring its older amplified displacement or pulse lifetime.
+          float legacyHeightEnergy = clamp(wakeTextureWave * 10.0 + sourceWave * 0.88, -1.0, 1.0);
+          float legacyVelocityEnergy = clamp(abs(wakeSample.g * uWakeStrength) * 10.0, 0.0, 1.0);
+          float legacyCrestEnergy = clamp(max(wakeTextureGlow, 0.0) * 2.2 + max(sourceWave, 0.0) * 0.64, 0.0, 1.0);
+          vec3 legacyTint = instanceTint * (0.48 + heightWhiteness * 0.34 + shimmer * 0.05);
+          legacyTint += max(legacyHeightEnergy, 0.0) * vec3(0.04, 0.42, 0.5);
+          legacyTint += max(-legacyHeightEnergy, 0.0) * vec3(0.34, 0.09, 0.44);
+          legacyTint += legacyVelocityEnergy * vec3(0.03, 0.2, 0.11);
+          legacyTint += legacyCrestEnergy * vec3(0.62, 0.52, 0.2);
+          vRippleTint = mix(referenceTint, legacyTint, clamp(uFieldPalette, 0.0, 1.0));`
         );
 
       rippleShader.fragmentShader = shader.fragmentShader
@@ -539,6 +555,9 @@ export class RippleField {
     shader.uniforms.uMediumDamping.value = settings.waveMedium.damping;
     shader.uniforms.uMediumDispersion.value = settings.waveMedium.dispersion;
     shader.uniforms.uBloomMood.value = settings.bloomEnabled ? Math.max(settings.bloomStrength, preset.bloomStrength) : 0;
+    shader.uniforms.uFieldPalette.value = getFieldPaletteShaderIndex(
+      resolveFieldPaletteForProfile(settings.fieldPaletteId, "webgl-reference")
+    );
     shader.uniforms.uWakeTexture.value = wakeTexture;
     shader.uniforms.uWakeFieldRadius.value = preset.fieldRadius;
     shader.uniforms.uWakeStrength.value = wakeMetrics.mode === "noop" ? 0 : 1;

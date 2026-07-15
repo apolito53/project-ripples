@@ -11,6 +11,7 @@ import {
 } from "./controls";
 import { debugEvent, debugMeasure, roundMetric, vectorPayload, type RippleDebugPayload } from "./debugLog";
 import { EchoZoneField, type TriggeredEchoZone } from "./echoZones";
+import { isFieldPaletteId, resolveFieldPaletteForProfile } from "./fieldPalette";
 import { applyFieldInstanceBudget, type FieldScaleChangedControl } from "./fieldScaleGuardrails";
 import {
   createGlobalFrameHitchEvent,
@@ -19,6 +20,7 @@ import {
 } from "./frameTelemetry";
 import { cloneDefaultSettings, getQualityPreset } from "./labSettings";
 import { ParticleVeil } from "./particleVeil";
+import { wirePauseMenuTabs } from "./pauseMenuTabs";
 import { PulseLightRig } from "./pulseLights";
 import {
   ARENA_RADIUS_MAX_METERS,
@@ -87,6 +89,7 @@ const trainingInstruction = requireElement<HTMLElement>("#training-instruction")
 const trainingProgress = requireElement<HTMLElement>("#training-progress");
 const qualitySelect = requireElement<HTMLSelectElement>("#quality-select");
 const skyboxSelect = requireElement<HTMLSelectElement>("#skybox-select");
+const fieldPaletteSelect = requireElement<HTMLSelectElement>("#field-palette-select");
 const voxelSizeSlider = requireElement<HTMLInputElement>("#voxel-size-slider");
 const voxelSizeValue = requireElement<HTMLOutputElement>("#voxel-size-value");
 const arenaRadiusSlider = requireElement<HTMLInputElement>("#arena-radius-slider");
@@ -442,6 +445,7 @@ const arenaBarrier = new ArenaBarrier(scene);
 skybox.setSkybox(settings.skyboxId);
 syncControlValues();
 wireControls();
+wirePauseMenuTabs();
 updateTuningReadouts();
 applyQualityPreset(preset, true);
 resize();
@@ -894,6 +898,8 @@ function describeWebGlVisualCapture(tick: number): Readonly<Record<string, unkno
   return {
     backendId: "webgl",
     presentationProfile: "webgl-reference",
+    fieldPalette: settings.fieldPaletteId,
+    resolvedFieldPalette: resolveFieldPaletteForProfile(settings.fieldPaletteId, "webgl-reference"),
     playMode: activePlayMode ?? "none",
     tick,
     simulationTimeSeconds,
@@ -1325,6 +1331,16 @@ function wireControls(): void {
     skybox.setSkybox(settings.skyboxId);
     updateSceneFog(preset);
   });
+  fieldPaletteSelect.addEventListener("change", () => {
+    if (!isFieldPaletteId(fieldPaletteSelect.value)) return;
+    settings.fieldPaletteId = fieldPaletteSelect.value;
+    debugEvent("settings.change", "Field palette changed", {
+      backendId: "webgl",
+      setting: "fieldPalette",
+      fieldPalette: settings.fieldPaletteId,
+      resolvedFieldPalette: resolveFieldPaletteForProfile(settings.fieldPaletteId, "webgl-reference")
+    });
+  });
 
   voxelSizeSlider.addEventListener("input", () => {
     settings.voxelSizeMeters = Number(voxelSizeSlider.value);
@@ -1389,6 +1405,7 @@ function syncControlValues(): void {
   syncSkyboxOptions();
   qualitySelect.value = settings.qualityId;
   skyboxSelect.value = settings.skyboxId;
+  fieldPaletteSelect.value = settings.fieldPaletteId;
   voxelSizeSlider.min = String(VOXEL_SIZE_MIN_METERS);
   voxelSizeSlider.max = String(VOXEL_SIZE_MAX_METERS);
   voxelSizeSlider.step = "0.05";
@@ -2958,6 +2975,8 @@ function reportWebGlRendererMode(): void {
     selectionSource: rendererModeSelection.source,
     activeBackend: "webgl",
     presentationProfile: "webgl-reference",
+    fieldPalette: settings.fieldPaletteId,
+    resolvedFieldPalette: resolveFieldPaletteForProfile(settings.fieldPaletteId, "webgl-reference"),
     rolloutStage: RENDERER_ROLLOUT_STAGE,
     rolloutDecisionCode: rendererRolloutDecision.decisionCode,
     rolloutPercent: rendererRolloutDecision.rolloutPercent ?? RENDERER_ROLLOUT_PERCENT,
@@ -2991,6 +3010,8 @@ function emitWebGlRendererFrameSample(time: number): void {
   debugEvent("renderer.frameSample", "Renderer frame sample", {
     backendId: stats.backendId,
     presentationProfile: "webgl-reference",
+    fieldPalette: settings.fieldPaletteId,
+    resolvedFieldPalette: resolveFieldPaletteForProfile(settings.fieldPaletteId, "webgl-reference"),
     rolloutStage: RENDERER_ROLLOUT_STAGE,
     rolloutDecisionCode: rendererRolloutDecision.decisionCode,
     defaultEligible: false,

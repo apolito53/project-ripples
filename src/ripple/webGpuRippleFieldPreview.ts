@@ -6,6 +6,11 @@ import {
   createRippleFieldLayout,
   type RippleFieldLayout
 } from "../rippleFieldLayout";
+import {
+  getFieldPaletteShaderIndex,
+  resolveFieldPaletteForProfile,
+  type ResolvedFieldPaletteId
+} from "../fieldPalette";
 import { MAX_SHADER_RIPPLE_SOURCES, RIPPLE_LIFETIME_SECONDS, type RippleRenderSourceSnapshot } from "../rippleSources";
 import type { QualityPreset } from "../qualityPresets";
 import type { RenderFrameInput, RenderPresentationProfile } from "../render/types";
@@ -16,7 +21,7 @@ import rippleFieldPreviewSource from "./webGpuRippleFieldPreview.wgsl?raw";
 
 const FIELD_PREVIEW_FRAME_LOG_INTERVAL_SECONDS = 0.5;
 const FIELD_CAMERA_MATRIX_FLOATS = 16;
-const FIELD_UNIFORM_FLOATS = FIELD_CAMERA_MATRIX_FLOATS + 32;
+const FIELD_UNIFORM_FLOATS = FIELD_CAMERA_MATRIX_FLOATS + 36;
 const FIELD_CELL_FLOATS = 8;
 const SOURCE_FLOATS = 8;
 const ECHO_FLOATS = 8;
@@ -50,6 +55,7 @@ export type WebGpuRippleFieldPreviewMetrics = {
   readonly depthFormat: GPUTextureFormat;
   readonly qualityId: string;
   readonly presentationProfile: RenderPresentationProfile;
+  readonly fieldPalette: ResolvedFieldPaletteId;
   readonly waveDynamicsMode: "classic-parity" | "core-stylized";
   readonly fieldGeometryMode: "hex-cap" | "hex-prism";
   readonly fieldVerticesPerInstance: number;
@@ -130,6 +136,7 @@ export class WebGpuRippleFieldPreview {
   private presentationHeight = 1;
   private cameraMode = "diagnostic-orbit";
   private presentationProfile: RenderPresentationProfile;
+  private fieldPalette: ResolvedFieldPaletteId;
   private lastGeometryLogProfile: RenderPresentationProfile | null = null;
 
   private constructor(
@@ -146,6 +153,7 @@ export class WebGpuRippleFieldPreview {
     this.corePipeline = corePipeline;
     this.classicPipeline = classicPipeline;
     this.presentationProfile = initialPresentationProfile;
+    this.fieldPalette = resolveFieldPaletteForProfile("profile", initialPresentationProfile);
     this.uniformBuffer = device.createBuffer({
       label: "Ripple WebGPU field preview uniforms",
       size: FIELD_UNIFORM_FLOATS * Float32Array.BYTES_PER_ELEMENT,
@@ -188,6 +196,7 @@ export class WebGpuRippleFieldPreview {
       trackMaskFormat: "rgba8unorm",
       supportedPresentationProfiles: "classic,core",
       presentationProfile: this.presentationProfile,
+      fieldPalette: this.fieldPalette,
       waveDynamicsMode: getWaveDynamicsMode(this.presentationProfile),
       ...getFieldGeometryMetrics(this.presentationProfile),
       drawCalls: FIELD_DRAW_CALLS,
@@ -343,10 +352,10 @@ export class WebGpuRippleFieldPreview {
     const renderedSourceCount = this.writeSourceBuffer(input.renderInput.pulseSources);
     const echoCounts = this.writeEchoBuffer(input.renderInput.echoVisualState);
     this.updateTrackMask(input.renderInput);
-    this.writeUniforms(input.renderInput, input.wakeMetrics, renderedSourceCount, echoCounts);
-    const depthView = this.getDepthTextureView(input.renderInput);
     this.cameraMode = input.renderInput.camera.projection.cameraMode;
     this.presentationProfile = input.renderInput.scenePresentation.profile;
+    this.writeUniforms(input.renderInput, input.wakeMetrics, renderedSourceCount, echoCounts);
+    const depthView = this.getDepthTextureView(input.renderInput);
     this.maybeLogGeometry();
 
     const bindGroup = this.device.createBindGroup({
@@ -404,6 +413,7 @@ export class WebGpuRippleFieldPreview {
       depthFormat: FIELD_DEPTH_FORMAT,
       qualityId: this.layout.qualityId,
       presentationProfile: this.presentationProfile,
+      fieldPalette: this.fieldPalette,
       waveDynamicsMode: getWaveDynamicsMode(this.presentationProfile),
       ...getFieldGeometryMetrics(this.presentationProfile),
       instanceCount: this.layout.instanceCount,
@@ -523,6 +533,11 @@ export class WebGpuRippleFieldPreview {
     this.uniforms[uniformOffset + 29] = input.raceTrack.fieldRadius;
     this.uniforms[uniformOffset + 30] = input.raceTrack.mask.width;
     this.uniforms[uniformOffset + 31] = input.raceTrack.mask.height;
+    this.fieldPalette = resolveFieldPaletteForProfile(input.settings.fieldPaletteId, this.presentationProfile);
+    this.uniforms[uniformOffset + 32] = getFieldPaletteShaderIndex(this.fieldPalette);
+    this.uniforms[uniformOffset + 33] = 0;
+    this.uniforms[uniformOffset + 34] = 0;
+    this.uniforms[uniformOffset + 35] = 0;
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniforms);
   }
 
@@ -699,6 +714,7 @@ export class WebGpuRippleFieldPreview {
       passMs: roundMetric(this.passMs),
       quality: this.layout.qualityId,
       presentationProfile: this.presentationProfile,
+      fieldPalette: this.fieldPalette,
       waveDynamicsMode: getWaveDynamicsMode(this.presentationProfile),
       ...getFieldGeometryMetrics(this.presentationProfile),
       instanceCount: this.layout.instanceCount,

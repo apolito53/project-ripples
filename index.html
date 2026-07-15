@@ -68,95 +68,121 @@
             <button id="exit-to-main-menu-button" class="secondary-menu-button" type="button">Exit To Main Menu</button>
           </div>
 
+          <div class="scene-control-tabs" role="tablist" aria-label="Settings categories" data-settings-tablist>
+            <button id="settings-tab-graphics" class="scene-control-tab" type="button" role="tab" aria-selected="true" aria-controls="settings-panel-graphics" data-settings-tab="graphics">Graphics</button>
+            <button id="settings-tab-field" class="scene-control-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-field" data-settings-tab="field" tabindex="-1">Field</button>
+            <button id="settings-tab-movement" class="scene-control-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-movement" data-settings-tab="movement" tabindex="-1">Movement</button>
+            <button id="settings-tab-effects" class="scene-control-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-panel-effects" data-settings-tab="effects" tabindex="-1">Effects</button>
+          </div>
+
           <section id="panel" class="scene-controls" aria-label="Tuning controls">
-            <label class="control-row">
-              <span>Quality</span>
-              <select id="quality-select">
-                <option value="clean">Clean</option>
-                <option value="pretty" selected>Pretty</option>
-                <option value="showoff">Showoff</option>
-                <option value="meltdown">Meltdown</option>
-              </select>
-            </label>
-            <label class="control-row">
-              <span>Skybox</span>
-              <select id="skybox-select"></select>
-            </label>
-            <label id="presentation-profile-row" class="control-row" hidden>
-              <span>Field Style</span>
-              <select id="presentation-profile-select">
-                <option value="classic">Classic 3D</option>
-                <option value="core">Core Minimal</option>
-              </select>
-            </label>
-            <label class="control-row">
-              <span>Diagnostics</span>
-              <button id="perf-overlay-toggle" class="effect-toggle effect-toggle--wide" type="button" aria-pressed="false">Off</button>
-            </label>
-            <label class="control-row">
-              <span>Hex Size</span>
-              <div class="range-with-value">
-                <input id="voxel-size-slider" type="range" min="0.25" max="2" step="0.05" value="1" />
-                <output id="voxel-size-value" class="control-value" for="voxel-size-slider">1.00 m</output>
-              </div>
-            </label>
-            <label class="control-row">
-              <span>Arena Radius</span>
-              <div class="range-with-value">
-                <input id="arena-radius-slider" type="range" min="100" max="400" step="5" value="200" />
-                <output id="arena-radius-value" class="control-value" for="arena-radius-slider">200 m</output>
-              </div>
-            </label>
-            <label class="control-row" hidden>
-              <span>Base Speed</span>
-              <div class="range-with-value">
-                <input id="base-speed-slider" type="range" min="1" max="30" step="0.5" value="10" />
-                <output id="base-speed-value" class="control-value" for="base-speed-slider">10.0 m/s</output>
-              </div>
-            </label>
-            <label class="control-row" hidden>
-              <span>Boost Speed</span>
-              <div class="range-with-value">
-                <input id="boost-speed-slider" type="range" min="20" max="50" step="0.5" value="37" />
-                <output id="boost-speed-value" class="control-value" for="boost-speed-slider">37.0 m/s</output>
-              </div>
-            </label>
-            <label class="control-row">
-              <span>Surface Grip</span>
-              <div class="range-with-value">
-                <input id="surface-grip-slider" type="range" min="0.25" max="2" step="0.05" value="1" />
-                <output id="surface-grip-value" class="control-value" for="surface-grip-slider">100%</output>
-              </div>
-            </label>
-            <label class="control-row">
-              <span>Ripple Height</span>
-              <input id="height-slider" type="range" min="0.2" max="3.2" step="0.05" value="1.25" />
-            </label>
-            <label class="control-row">
-              <span>Ripple Radius</span>
-              <input id="radius-slider" type="range" min="4" max="18" step="0.5" value="9" />
-            </label>
-            <label class="control-row">
-              <span>Depth / Speed</span>
-              <div class="range-with-value">
-                <input id="depth-slider" type="range" min="1" max="20" step="0.25" value="8.25" />
-                <output id="depth-speed-value" class="control-value" for="depth-slider">9.0 m/s</output>
-              </div>
-            </label>
-            <label class="control-row">
-              <span>Particles</span>
-              <div class="slider-with-toggle">
-                <input id="particle-slider" type="range" min="0" max="1" step="0.01" value="0.62" />
-                <button id="particle-toggle" class="effect-toggle" type="button" aria-pressed="true">On</button>
-              </div>
-            </label>
-            <label class="control-row">
-              <span>Bloom</span>
-              <div class="slider-with-toggle">
-                <input id="bloom-slider" type="range" min="0" max="0.38" step="0.01" value="0.14" />
-                <button id="bloom-toggle" class="effect-toggle" type="button" aria-pressed="true">On</button>
-              </div>
-            </label>
+            <div id="settings-panel-graphics" class="scene-control-panel" role="tabpanel" aria-labelledby="settings-tab-graphics" data-settings-panel="graphics">
+              <label class="control-row">
+                <span>Quality</span>
+                <select id="quality-select">
+                  <option value="clean">Clean</option>
+                  <option value="pretty" selected>Pretty</option>
+                  <option value="showoff">Showoff</option>
+                  <option value="meltdown">Meltdown</option>
+                </select>
+              </label>
+              <label class="control-row">
+                <span>Skybox</span>
+                <select id="skybox-select"></select>
+              </label>
+              <label id="presentation-profile-row" class="control-row" hidden>
+                <span>Field Style</span>
+                <select id="presentation-profile-select">
+                  <option value="classic">Classic 3D</option>
+                  <option value="core">Core Minimal</option>
+                </select>
+              </label>
+              <label class="control-row">
+                <span>Field Palette</span>
+                <select id="field-palette-select">
+                  <option value="profile">Style Default</option>
+                  <option value="reference">Reference</option>
+                  <option value="legacy-neon">Legacy Neon</option>
+                </select>
+              </label>
+              <label class="control-row">
+                <span>Diagnostics</span>
+                <button id="perf-overlay-toggle" class="effect-toggle effect-toggle--wide" type="button" aria-pressed="false">Off</button>
+              </label>
+            </div>
+
+            <div id="settings-panel-field" class="scene-control-panel" role="tabpanel" aria-labelledby="settings-tab-field" data-settings-panel="field" hidden>
+              <label class="control-row">
+                <span>Hex Size</span>
+                <div class="range-with-value">
+                  <input id="voxel-size-slider" type="range" min="0.25" max="2" step="0.05" value="1" />
+                  <output id="voxel-size-value" class="control-value" for="voxel-size-slider">1.00 m</output>
+                </div>
+              </label>
+              <label class="control-row">
+                <span>Arena Radius</span>
+                <div class="range-with-value">
+                  <input id="arena-radius-slider" type="range" min="100" max="400" step="5" value="200" />
+                  <output id="arena-radius-value" class="control-value" for="arena-radius-slider">200 m</output>
+                </div>
+              </label>
+              <label class="control-row">
+                <span>Ripple Height</span>
+                <input id="height-slider" type="range" min="0.2" max="3.2" step="0.05" value="1.25" />
+              </label>
+              <label class="control-row">
+                <span>Ripple Radius</span>
+                <input id="radius-slider" type="range" min="4" max="18" step="0.5" value="9" />
+              </label>
+              <label class="control-row">
+                <span>Depth / Speed</span>
+                <div class="range-with-value">
+                  <input id="depth-slider" type="range" min="1" max="20" step="0.25" value="8.25" />
+                  <output id="depth-speed-value" class="control-value" for="depth-slider">9.0 m/s</output>
+                </div>
+              </label>
+            </div>
+
+            <div id="settings-panel-movement" class="scene-control-panel" role="tabpanel" aria-labelledby="settings-tab-movement" data-settings-panel="movement" hidden>
+              <label class="control-row" hidden>
+                <span>Base Speed</span>
+                <div class="range-with-value">
+                  <input id="base-speed-slider" type="range" min="1" max="30" step="0.5" value="10" />
+                  <output id="base-speed-value" class="control-value" for="base-speed-slider">10.0 m/s</output>
+                </div>
+              </label>
+              <label class="control-row" hidden>
+                <span>Boost Speed</span>
+                <div class="range-with-value">
+                  <input id="boost-speed-slider" type="range" min="20" max="50" step="0.5" value="37" />
+                  <output id="boost-speed-value" class="control-value" for="boost-speed-slider">37.0 m/s</output>
+                </div>
+              </label>
+              <label class="control-row">
+                <span>Surface Grip</span>
+                <div class="range-with-value">
+                  <input id="surface-grip-slider" type="range" min="0.25" max="2" step="0.05" value="1" />
+                  <output id="surface-grip-value" class="control-value" for="surface-grip-slider">100%</output>
+                </div>
+              </label>
+            </div>
+
+            <div id="settings-panel-effects" class="scene-control-panel" role="tabpanel" aria-labelledby="settings-tab-effects" data-settings-panel="effects" hidden>
+              <label class="control-row">
+                <span>Particles</span>
+                <div class="slider-with-toggle">
+                  <input id="particle-slider" type="range" min="0" max="1" step="0.01" value="0.62" />
+                  <button id="particle-toggle" class="effect-toggle" type="button" aria-pressed="true">On</button>
+                </div>
+              </label>
+              <label class="control-row">
+                <span>Bloom</span>
+                <div class="slider-with-toggle">
+                  <input id="bloom-slider" type="range" min="0" max="0.38" step="0.01" value="0.14" />
+                  <button id="bloom-toggle" class="effect-toggle" type="button" aria-pressed="true">On</button>
+                </div>
+              </label>
+            </div>
           </section>
         </section>
       </div>

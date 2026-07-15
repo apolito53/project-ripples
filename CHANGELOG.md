@@ -4,6 +4,10 @@
 
 ### Added
 
+- Added a renderer-neutral Field Palette selector with **Style Default**,
+  **Reference**, and **Legacy Neon** choices. Style Default preserves the
+  reference palette for WebGL/Classic and the original neon palette for Core;
+  explicit Legacy Neon restores color only, not the retired pulse dynamics.
 - Added the selectively integrated raw-WebGPU renderer runtime behind
   `?renderer=webgpu`, including the compute wake, hex field, skybox, hover-pod,
   particle, Echo, pulse-light, local-light, shadow-map, bloom, and Arena curtain
@@ -73,6 +77,9 @@
 
 ### Changed
 
+- Reorganized the pause menu controls into accessible Graphics, Field,
+  Movement, and Effects tabs with click/tap and keyboard navigation, while
+  keeping Resume, Exit, and changelog actions continuously available.
 - Kept omitted and `auto` renderer requests on WebGL; explicit WebGPU requests
   now fail visibly without silently falling back when WebGPU is unavailable.
 - Hardened the integration landing path: legacy persisted WebGPU preferences no

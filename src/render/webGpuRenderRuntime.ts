@@ -423,6 +423,8 @@ export class WebGpuRenderRuntime implements RenderRuntime {
         integrationSurface: "core-render-snapshot",
         scenePresentationMode: input.scenePresentation.mode,
         presentationProfile: input.scenePresentation.profile,
+        fieldPalette: input.settings.fieldPaletteId,
+        resolvedFieldPalette: fieldMetrics.fieldPalette,
         waveDynamicsMode: fieldMetrics.waveDynamicsMode,
         fieldGeometryMode: fieldMetrics.fieldGeometryMode,
         fieldVerticesPerInstance: fieldMetrics.fieldVerticesPerInstance,

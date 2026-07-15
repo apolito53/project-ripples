@@ -13,10 +13,12 @@ import {
   type EchoVisualStateSnapshot,
   type TriggeredEchoZone
 } from "../echoState";
+import { isFieldPaletteId, resolveFieldPaletteForProfile } from "../fieldPalette";
 import { applyFieldInstanceBudget, type FieldScaleChangedControl } from "../fieldScaleGuardrails";
 import { formatCompactCount, formatVoxelSize } from "../frameTelemetry";
 import { cloneDefaultSettings, getQualityPreset, type LabSettings } from "../labSettings";
 import { ParticleVeilState } from "../particleState";
+import { wirePauseMenuTabs } from "../pauseMenuTabs";
 import {
   ARENA_RADIUS_MAX_METERS,
   ARENA_RADIUS_MIN_METERS,
@@ -355,6 +357,7 @@ async function startWebGpuAppInternal(
   playerReference = player;
 
   wireUi();
+  wirePauseMenuTabs();
   dom.presentationProfileRow.hidden = false;
   syncControlValues();
   resize();
@@ -759,6 +762,8 @@ async function startWebGpuAppInternal(
     return {
       backendId: "webgpu",
       presentationProfile: input.scenePresentation.profile,
+      fieldPalette: input.settings.fieldPaletteId,
+      resolvedFieldPalette: fieldMetrics.fieldPalette,
       playMode: input.playMode,
       tick,
       simulationTimeSeconds,
@@ -967,6 +972,8 @@ async function startWebGpuAppInternal(
       selectionSource: rendererModeSelection.source,
       activeBackend: "webgpu",
       presentationProfile,
+      fieldPalette: settings.fieldPaletteId,
+      resolvedFieldPalette: fieldMetrics.fieldPalette,
       waveDynamicsMode: fieldMetrics.waveDynamicsMode,
       fieldGeometryMode: fieldMetrics.fieldGeometryMode,
       fieldVerticesPerInstance: fieldMetrics.fieldVerticesPerInstance,
@@ -1048,6 +1055,8 @@ async function startWebGpuAppInternal(
       integrationSurface: "core-render-snapshot",
       scenePresentationMode: input.scenePresentation.mode,
       presentationProfile: input.scenePresentation.profile,
+      fieldPalette: input.settings.fieldPaletteId,
+      resolvedFieldPalette: fieldMetrics.fieldPalette,
       waveDynamicsMode: fieldMetrics.waveDynamicsMode,
       fieldGeometryMode: fieldMetrics.fieldGeometryMode,
       fieldVerticesPerInstance: fieldMetrics.fieldVerticesPerInstance,
@@ -1297,6 +1306,7 @@ async function startWebGpuAppInternal(
     dom.qualitySelect.value = settings.qualityId;
     dom.skyboxSelect.value = settings.skyboxId;
     dom.presentationProfileSelect.value = presentationProfile;
+    dom.fieldPaletteSelect.value = settings.fieldPaletteId;
     dom.voxelSizeSlider.value = String(settings.voxelSizeMeters);
     dom.voxelSizeValue.textContent = formatVoxelSize(settings.voxelSizeMeters);
     dom.arenaRadiusSlider.value = String(settings.arenaRadiusMeters);
@@ -1340,6 +1350,11 @@ async function startWebGpuAppInternal(
       if (!isSkyboxId(dom.skyboxSelect.value)) return;
       settings.skyboxId = dom.skyboxSelect.value;
       logSettingsChange("skybox", settings.skyboxId);
+    }, listenerOptions);
+    dom.fieldPaletteSelect.addEventListener("change", () => {
+      if (!isFieldPaletteId(dom.fieldPaletteSelect.value)) return;
+      settings.fieldPaletteId = dom.fieldPaletteSelect.value;
+      logSettingsChange("fieldPalette", settings.fieldPaletteId);
     }, listenerOptions);
     dom.voxelSizeSlider.addEventListener("input", () => {
       settings.voxelSizeMeters = THREE.MathUtils.clamp(Number(dom.voxelSizeSlider.value), VOXEL_SIZE_MIN_METERS, VOXEL_SIZE_MAX_METERS);
@@ -1528,6 +1543,8 @@ async function startWebGpuAppInternal(
       value,
       quality: settings.qualityId,
       skybox: settings.skyboxId,
+      fieldPalette: settings.fieldPaletteId,
+      resolvedFieldPalette: resolveFieldPaletteForProfile(settings.fieldPaletteId, presentationProfile),
       voxelSizeMeters: roundMetric(settings.voxelSizeMeters),
       arenaRadiusMeters: roundMetric(settings.arenaRadiusMeters),
       baseSpeed: roundMetric(settings.playerSpeed.baseSpeedMetersPerSecond),
@@ -1583,6 +1600,7 @@ function createRenderSettingsSnapshot(settings: LabSettings): RenderFrameInput["
     surfaceGrip: settings.surfaceGrip,
     voxelSizeMeters: settings.voxelSizeMeters,
     arenaRadiusMeters: settings.arenaRadiusMeters,
+    fieldPaletteId: settings.fieldPaletteId,
     waveMedium: { ...settings.waveMedium },
     particleDensity: settings.particleDensity,
     particlesEnabled: settings.particlesEnabled,
@@ -1973,6 +1991,7 @@ function getDom() {
     skyboxSelect: requireElement<HTMLSelectElement>("#skybox-select"),
     presentationProfileRow: requireElement<HTMLElement>("#presentation-profile-row"),
     presentationProfileSelect: requireElement<HTMLSelectElement>("#presentation-profile-select"),
+    fieldPaletteSelect: requireElement<HTMLSelectElement>("#field-palette-select"),
     perfOverlayToggle: requireElement<HTMLButtonElement>("#perf-overlay-toggle"),
     voxelSizeSlider: requireElement<HTMLInputElement>("#voxel-size-slider"),
     voxelSizeValue: requireElement<HTMLOutputElement>("#voxel-size-value"),

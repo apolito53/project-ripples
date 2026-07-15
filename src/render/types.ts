@@ -53,6 +53,7 @@ export type RenderSettingsSnapshot = Pick<
   | "surfaceGrip"
   | "voxelSizeMeters"
   | "arenaRadiusMeters"
+  | "fieldPaletteId"
   | "particleDensity"
   | "particlesEnabled"
   | "bloomStrength"

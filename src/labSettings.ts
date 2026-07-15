@@ -18,11 +18,13 @@ import {
   cloneDefaultWaveMedium,
   type WaveMediumSettings
 } from "./waveMedium";
+import { DEFAULT_FIELD_PALETTE_ID, type FieldPaletteId } from "./fieldPalette";
 import { DEFAULT_SKYBOX_ID, type SkyboxId } from "./skybox";
 
 export type LabSettings = {
   qualityId: QualityId;
   skyboxId: SkyboxId;
+  fieldPaletteId: FieldPaletteId;
   playerSpeed: PlayerSpeedSettings;
   surfaceGrip: number;
   rippleHeight: number;
@@ -39,6 +41,7 @@ export type LabSettings = {
 export const DEFAULT_SETTINGS: LabSettings = {
   qualityId: "pretty",
   skyboxId: DEFAULT_SKYBOX_ID,
+  fieldPaletteId: DEFAULT_FIELD_PALETTE_ID,
   playerSpeed: DEFAULT_PLAYER_SPEED_SETTINGS,
   surfaceGrip: 1,
   rippleHeight: 1.25,
