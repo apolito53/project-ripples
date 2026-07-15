@@ -39,8 +39,9 @@ The first command audits Classic; the second preserves Core evidence. They write
 ignored evidence under `parity-results/<profile>-<timestamp>/`: raw captures,
 WebGL/WebGPU/amplified-diff strips, `report.json`, and `summary.md`. Each page
 uses the benchmark seed plus a capture-only fixed-step controller. Arena and
-Track freeze at tick 180; Training freezes at tick 60; pulse fixtures advance
-another 36 ticks. Frozen same-backend captures must repeat within 0.1% changed
+Track freeze at tick 180; Training freezes at tick 60. Arena and Track then
+follow one pulse at 36, 225, 390, and 480 ticks (0.6s, 3.75s, 6.5s, and 8.0s),
+including a source-presence/expiry check. Frozen same-backend captures must repeat within 0.1% changed
 pixels and 0.5 mean RGB. By default the command builds current sources and owns
 strict preview port `4184`; use `RIPPLE_PARITY_APP_URL` only for an intentional
 external-server audit.
@@ -61,8 +62,8 @@ cross-backend snapshot.
 | --- | --- | --- | --- |
 | Gameplay, camera, mode, field placement, Track mask, Training state | Shared/exact | Keep shared neutral ownership | No change unless a fixed-tick state mismatch appears |
 | Ripple field geometry/material | Classic 3D geometry restored; material remains review-required | Preserve cap-focused graphic treatment | Tune prism thickness, side-face material response, and field horizon without flattening geometry |
-| Immediate player trough/rim/body wake | Classic approximation implemented | Keep the cleaner Core response | Review pressure/rim shape against WebGL without reviving arena-wide wash |
-| Persistent wake solver | Suspect | Keep bounded settling that prevented arena wash | Reconcile WebGPU global settling and WebGL final clamps without reviving wash |
+| Immediate player trough/rim/body wake | Classic transfer aligned | Keep the cleaner Core response | Review residual raster/material differences without retuning shared coefficients |
+| Persistent wake solver | Shared coefficients aligned | Keep Core's stylized display response | Continue Track boost/coast/stop soak coverage without adding backend-only settling |
 | Avatar | Intentional Core difference | Preserve WebGPU hover-pod/mote treatment and saved mote asset | Compare dimensional silhouette, fins, thrusters, trails, and fixtures |
 | Active Echoes and collection | WebGPU-native equivalent | Preserve dense tiny-sun orbs as the Core read | Compare Three shells/columns, event mist, and field-response duplication |
 | Particles | Shared state, suspect presentation | Keep soft-quad path | Audit WebGL depth-test-off against WebGPU field-depth reads |
@@ -71,15 +72,15 @@ cross-backend snapshot.
 | Arena curtain | Suspect | Preserve only deliberate motion | Remove or profile-gate angular drift absent from the WebGL curtain |
 | Stage floor and visible key/rim fixtures | Missing | Core may intentionally omit them | Decide whether Classic needs the reflective receiver and visible plasma fixtures |
 | Local lights and shadows | Approximate/suspect | Preserve bounded light/shadow budgets | Match quality light-count semantics, Clean shadow disable, and receiver behavior |
-| Pulse glow proxy | Intentional Core difference | Preserve as a Core effect | Disable or retune when Classic uses WebGL-like real-light emphasis |
+| Pulse glow proxy | Intentional Core difference | Preserve as a Core effect with per-source lifetime | Disabled in Classic; real source-faded local lights carry the WebGL-like emphasis |
 | Bloom/output transform | Intentional Core difference | Preserve bounded custom bloom and anti-wash limits | Compare ACES exposure, threshold, blur footprint, vignette, tint, and gamma |
 
 ## Audit Fixtures
 
 Implemented:
 
-- Pretty Arena settled and manual-pulse states.
-- Showoff Track motion settled and manual-pulse states.
+- Pretty Arena settled plus early/middle/late/post-expiry manual-pulse states.
+- Showoff Track motion settled plus early/middle/late/post-expiry manual-pulse states.
 - Pretty Training at the first visible objective marker.
 
 Still required before claiming strict presentation closure:

@@ -29,7 +29,12 @@ import {
   createRippleFieldLayout,
   type FieldPlacementClipper
 } from "../rippleFieldLayout";
-import { RippleSourceStore, type RippleRenderSourceSnapshot, type RippleSourceOptions } from "../rippleSources";
+import {
+  RippleSourceStore,
+  sampleRippleSourceLifecycle,
+  type RippleRenderSourceSnapshot,
+  type RippleSourceOptions
+} from "../rippleSources";
 import { getSkyboxOption, isSkyboxId, SKYBOX_OPTIONS } from "../skybox";
 import { sampleFieldHeight } from "../terrain";
 import { TrainingRun, type TrainingCourse, type TrainingHudState } from "../trainingRun";
@@ -111,6 +116,12 @@ const WEBGPU_REMAINING_GAPS: string[] = [];
 const RENDERER_FRAME_SAMPLE_SECONDS = 0.5;
 const DEFAULT_READINESS_FRAME_SECONDS = 2;
 const DEFAULT_READINESS_SUMMARY_SECONDS = 90;
+const PULSE_LIGHT_COLORS: readonly RenderVector3Snapshot[] = [
+  { x: 0.49, y: 1, z: 0.85 },
+  { x: 0.49, y: 0.58, z: 1 },
+  { x: 1, y: 0.83, z: 0.42 },
+  { x: 1, y: 0.49, z: 0.91 }
+];
 
 const MANUAL_PULSE_OPTIONS: RippleSourceOptions = {
   kind: "pulse",
@@ -905,8 +916,20 @@ async function startWebGpuAppInternal(
       player: playerSnapshot,
       scenePresentation: createScenePresentationSnapshot(settings, preset, presentationProfile),
       avatarPresentation,
-      sceneLighting: createSceneLightingSnapshot(settings, playerSnapshot, pulseSources, echoVisualState),
-      sceneShadows: createSceneShadowSnapshot(playerSnapshot, pulseSources, echoVisualState),
+      sceneLighting: createSceneLightingSnapshot(
+        settings,
+        playerSnapshot,
+        pulseSources,
+        echoVisualState,
+        simulationTimeSeconds
+      ),
+      sceneShadows: createSceneShadowSnapshot(
+        settings,
+        playerSnapshot,
+        pulseSources,
+        echoVisualState,
+        simulationTimeSeconds
+      ),
       settings: createRenderSettingsSnapshot(settings),
       qualityPreset: { ...preset },
       pulseSources,
@@ -944,6 +967,7 @@ async function startWebGpuAppInternal(
       selectionSource: rendererModeSelection.source,
       activeBackend: "webgpu",
       presentationProfile,
+      waveDynamicsMode: fieldMetrics.waveDynamicsMode,
       fieldGeometryMode: fieldMetrics.fieldGeometryMode,
       fieldVerticesPerInstance: fieldMetrics.fieldVerticesPerInstance,
       fieldTrianglesPerInstance: fieldMetrics.fieldTrianglesPerInstance,
@@ -1024,6 +1048,7 @@ async function startWebGpuAppInternal(
       integrationSurface: "core-render-snapshot",
       scenePresentationMode: input.scenePresentation.mode,
       presentationProfile: input.scenePresentation.profile,
+      waveDynamicsMode: fieldMetrics.waveDynamicsMode,
       fieldGeometryMode: fieldMetrics.fieldGeometryMode,
       fieldVerticesPerInstance: fieldMetrics.fieldVerticesPerInstance,
       fieldTrianglesPerInstance: fieldMetrics.fieldTrianglesPerInstance,
@@ -1082,6 +1107,7 @@ async function startWebGpuAppInternal(
       activeEchoBursts: input.echoVisualState.activeVisualBursts,
       echoVisualRenderedEchoes: echoMetrics.renderedEchoes,
       echoVisualRenderedCollectionEvents: echoMetrics.renderedCollectionEvents,
+      pulseGlowMode: runtime.getPulseGlowMetrics().presentationMode,
       pulseGlowCount: runtime.getPulseGlowMetrics().renderedGlows,
       activeParticles: particleMetrics.activeParticles,
       renderedParticles: particleMetrics.renderedParticles,
@@ -1618,7 +1644,8 @@ function createSceneLightingSnapshot(
   settings: LabSettings,
   player: { readonly position: RenderVector3Snapshot; readonly speed: number; readonly groundContact: number },
   pulseSources: RippleRenderSourceSnapshot,
-  echoState: EchoVisualStateSnapshot
+  echoState: EchoVisualStateSnapshot,
+  time: number
 ): RenderSceneLightingSnapshot {
   const localLights: RenderSceneLocalLightSnapshot[] = [{
     kind: "avatar",
@@ -1629,14 +1656,26 @@ function createSceneLightingSnapshot(
     importance: 120
   }];
 
-  for (const source of pulseSources.sources) {
+  const pulseLightIntensityScale = 0.28 + getWebGpuBloomStrength(settings) * 0.42;
+  const basePropagationSpeed = getBasePropagationSpeedMetersPerSecond(settings.waveMedium);
+  for (let index = 0; index < pulseSources.sources.length; index += 1) {
+    const source = pulseSources.sources[index];
+    const lifecycle = sampleRippleSourceLifecycle(source, time);
+    if (lifecycle.fade <= 0.001) continue;
+    const speedMultiplier = Number.isFinite(source.speedMultiplier) ? source.speedMultiplier : 1;
+    const intensity = pulseLightIntensityScale * source.strength * lifecycle.fade *
+      (0.75 + lifecycle.pulse * 1.15);
     localLights.push({
       kind: "pulse",
-      position: { x: source.positionX, y: sampleFieldHeight(source.positionX, source.positionZ) + 1.1, z: source.positionZ },
-      color: { x: 0.22, y: 0.88, z: 1 },
-      intensity: 0.42 * source.strength,
-      radius: 8 + source.strength * 6,
-      importance: 70 + source.strength * 20
+      position: {
+        x: source.positionX,
+        y: sampleFieldHeight(source.positionX, source.positionZ) + 2.4 + lifecycle.pulse * 0.8,
+        z: source.positionZ
+      },
+      color: PULSE_LIGHT_COLORS[index % PULSE_LIGHT_COLORS.length],
+      intensity,
+      radius: 5.8 + lifecycle.ageSeconds * basePropagationSpeed * speedMultiplier * 0.42,
+      importance: 45 + lifecycle.fade * 25 + intensity * 30
     });
   }
   for (const echo of echoState.echoes) {
@@ -1661,7 +1700,7 @@ function createSceneLightingSnapshot(
   }
   localLights.sort((a, b) => b.importance - a.importance);
   const rendered = localLights.slice(0, RENDER_SCENE_LOCAL_LIGHT_LIMIT);
-  const waveSpeed = getBasePropagationSpeedMetersPerSecond(settings.waveMedium);
+  const waveSpeed = basePropagationSpeed;
   return {
     ambientColor: { x: 0.12, y: 0.2, z: 0.32 },
     ambientIntensity: 0.34,
@@ -1678,9 +1717,11 @@ function createSceneLightingSnapshot(
 }
 
 function createSceneShadowSnapshot(
+  settings: LabSettings,
   player: { readonly position: RenderVector3Snapshot; readonly groundContact: number },
   pulseSources: RippleRenderSourceSnapshot,
-  echoState: EchoVisualStateSnapshot
+  echoState: EchoVisualStateSnapshot,
+  time: number
 ): RenderSceneShadowSnapshot {
   const casters: RenderSceneShadowCasterSnapshot[] = [{
     kind: "avatar",
@@ -1704,16 +1745,26 @@ function createSceneShadowSnapshot(
       importance: 80
     });
   }
+  const basePropagationSpeed = getBasePropagationSpeedMetersPerSecond(settings.waveMedium);
   for (const source of pulseSources.sources.slice(0, 3)) {
+    const lifecycle = sampleRippleSourceLifecycle(source, time);
+    if (lifecycle.fade <= 0.02) continue;
+    const speedMultiplier = Number.isFinite(source.speedMultiplier) ? source.speedMultiplier : 1;
+    const radius = THREE.MathUtils.clamp(
+      1.5 + lifecycle.ageSeconds * basePropagationSpeed * speedMultiplier * 0.18,
+      1.5,
+      8
+    );
+    const strength = 0.12 * source.strength * lifecycle.fade;
     casters.push({
       kind: "pulse",
       position: { x: source.positionX, y: 0.2, z: source.positionZ },
-      radius: 2.5,
+      radius,
       height: 0.2,
-      strength: 0.12 * source.strength,
+      strength,
       softness: 1.4,
-      shadowMapProxy: { shape: "disc", radius: 2.5, height: 0.2, strength: 0.12 },
-      importance: 35
+      shadowMapProxy: { shape: "disc", radius, height: 0.2, strength },
+      importance: 20 + lifecycle.fade * 25
     });
   }
   casters.sort((a, b) => b.importance - a.importance);

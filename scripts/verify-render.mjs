@@ -574,7 +574,7 @@ async function verifyWebGpuRender(page, pageProblems) {
       hasHoverPodAvatarPresentation(payload) &&
       payload.avatarCoreRadius > 0 &&
       payload.integrationSurface === "core-render-snapshot" &&
-      payload.pulseGlowCount > 0 &&
+      hasClassicPulseGlowState(payload) &&
       payload.supportsBloom === true &&
       payload.supportsLocalLights === true &&
       payload.bloomMode === "bright-downsample-separable-blur" &&
@@ -740,9 +740,11 @@ async function verifyWebGpuRender(page, pageProblems) {
   await waitForRunEvent(page, smokeRun, "pulseLight.webgpu.frame", (record) => {
     const payload = record.entry.payload;
     return payload.mode === "webgpu-pulse-glow" &&
+      payload.presentationMode === "disabled-classic" &&
+      payload.presentationProfile === WEBGPU_PRESENTATION_PROFILE &&
       payload.scenePresentationMode === "webgpu-core-scene" &&
       payload.depthMode === "field-depth-read" &&
-      payload.renderedGlows > 0 &&
+      payload.renderedGlows === 0 &&
       payload.deviceLost === false;
   });
   await waitForRunEvent(page, smokeRun, "echo.webgpu.frame", (record) => {
@@ -906,7 +908,7 @@ async function verifyWebGpuRender(page, pageProblems) {
       payload.stateMode === "playable" &&
       payload.cameraMode === "playable" &&
       payload.renderedSources >= 1 &&
-      payload.pulseGlowCount > 0 &&
+      hasClassicPulseGlowState(payload) &&
       payload.activeLocalLights >= initialActiveLocalLights &&
       payload.renderedLocalLights > 0 &&
       hasShapeProxyShadowMap(payload, { requireDisc: true }) &&
@@ -951,7 +953,7 @@ async function verifyWebGpuRender(page, pageProblems) {
       payload.stateMode === "playable" &&
       payload.activeSources >= 1 &&
       payload.renderedSources >= 1 &&
-      payload.pulseGlowCount > 0 &&
+      hasClassicPulseGlowState(payload) &&
       payload.renderedParticles > 0 &&
       payload.renderedLocalLights > 0 &&
       hasShapeProxyShadowMap(payload, { requireDisc: true }) &&
@@ -1723,7 +1725,7 @@ async function verifyWebGpuReadiness(page, pageProblems) {
       return hasDiagnosticCoreReadiness(payload) &&
         payload.activeSources >= 1 &&
         payload.renderedSources >= 1 &&
-        payload.pulseGlowCount > 0 &&
+        hasClassicPulseGlowState(payload) &&
         hasShapeProxyShadowMap(payload, { requireDisc: true }) &&
         payload.deviceLost === false;
     }, 12000);
@@ -1847,7 +1849,7 @@ async function verifyWebGpuDefaultSoak(page, pageProblems) {
       const payload = record.entry.payload;
       return hasDiagnosticCoreReadiness(payload) &&
         payload.renderedSources >= 1 &&
-        payload.pulseGlowCount > 0 &&
+        hasClassicPulseGlowState(payload) &&
         hasShapeProxyShadowMap(payload, { requireDisc: true }) &&
         payload.deviceLost === false;
     }, 12000);
@@ -1914,7 +1916,12 @@ async function verifyWebGpuDefaultSoak(page, pageProblems) {
 
 async function verifyWebGpuDemoHarness(page, pageProblems) {
   const smokeRun = createSmokeRun("webgpu-demo");
-  const url = buildAppUrl(config, { renderer: "webgpu", webgpuDemo: "1", smokeRun });
+  const url = buildAppUrl(config, {
+    renderer: "webgpu",
+    presentation: WEBGPU_CORE_PRESENTATION_PROFILE,
+    webgpuDemo: "1",
+    smokeRun
+  });
 
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await assertNonBlankCanvas(page, "WebGPU diagnostic demo canvas", "webgpu");
@@ -1957,11 +1964,18 @@ async function verifyWebGpuDemoHarness(page, pageProblems) {
   await waitForRunEvent(page, smokeRun, "pulseLight.webgpu.frame", (record) => {
     const payload = record.entry.payload;
     return payload.mode === "webgpu-pulse-glow" &&
+      payload.presentationMode === "core-proxy" &&
+      payload.presentationProfile === WEBGPU_CORE_PRESENTATION_PROFILE &&
       payload.scenePresentationMode === "webgpu-core-scene" &&
       payload.depthMode === "field-depth-read" &&
       payload.renderedGlows > 0 &&
       payload.deviceLost === false;
   });
+  await waitForRunEvent(page, smokeRun, "webgpu.sceneState.frame", (record) =>
+    hasCorePulseGlowState(record.entry.payload) &&
+    record.entry.payload.stateMode === "diagnostic-demo" &&
+    record.entry.payload.deviceLost === false
+  );
   await waitForRunEvent(page, smokeRun, "echo.webgpu.frame", (record) => {
     const payload = record.entry.payload;
     return payload.mode === "webgpu-echo-visual" &&
@@ -2246,7 +2260,6 @@ function hasDiagnosticCoreReadiness(payload) {
   if (!Array.isArray(payload?.remainingGaps)) return false;
   const remainingGaps = payload.remainingGaps;
   return payload?.readinessTier === WEBGPU_READINESS_TIER &&
-    payload?.presentationProfile === WEBGPU_PRESENTATION_PROFILE &&
     payload.defaultEligible === WEBGPU_DEFAULT_ELIGIBLE &&
     remainingGaps.length === WEBGPU_REQUIRED_REMAINING_GAPS.length &&
     WEBGPU_REQUIRED_REMAINING_GAPS.every((gap) => remainingGaps.includes(gap));
@@ -2254,6 +2267,7 @@ function hasDiagnosticCoreReadiness(payload) {
 
 function hasClassicFieldGeometry(payload) {
   return payload?.presentationProfile === WEBGPU_PRESENTATION_PROFILE &&
+    payload?.waveDynamicsMode === "classic-parity" &&
     payload?.fieldGeometryMode === "hex-prism" &&
     payload?.fieldVerticesPerInstance === 72 &&
     payload?.fieldTrianglesPerInstance === 24 &&
@@ -2262,8 +2276,21 @@ function hasClassicFieldGeometry(payload) {
     payload?.tileHeightMode === "animated-prism";
 }
 
+function hasClassicPulseGlowState(payload) {
+  return payload?.presentationProfile === WEBGPU_PRESENTATION_PROFILE &&
+    payload?.pulseGlowMode === "disabled-classic" &&
+    payload?.pulseGlowCount === 0;
+}
+
+function hasCorePulseGlowState(payload) {
+  return payload?.presentationProfile === WEBGPU_CORE_PRESENTATION_PROFILE &&
+    payload?.pulseGlowMode === "core-proxy" &&
+    payload?.pulseGlowCount > 0;
+}
+
 function hasCoreFieldGeometry(payload) {
   return payload?.presentationProfile === WEBGPU_CORE_PRESENTATION_PROFILE &&
+    payload?.waveDynamicsMode === "core-stylized" &&
     payload?.fieldGeometryMode === "hex-cap" &&
     payload?.fieldVerticesPerInstance === 18 &&
     payload?.fieldTrianglesPerInstance === 6 &&

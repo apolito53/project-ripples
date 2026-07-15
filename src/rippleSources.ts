@@ -50,6 +50,39 @@ export type RippleRenderSourceSnapshot = {
   readonly sources: readonly RippleRenderSource[];
 };
 
+export type RippleSourceLifecycleSample = {
+  readonly ageSeconds: number;
+  readonly lifetimeSeconds: number;
+  readonly normalizedAge: number;
+  readonly fade: number;
+  readonly pulse: number;
+};
+
+/**
+ * Shared CPU-side presentation envelope for renderer effects derived from a
+ * ripple source. The field shaders evaluate the same linear lifetime fade;
+ * keeping lights and shadow proxies on this helper prevents those secondary
+ * effects from holding at full strength and disappearing at prune time.
+ */
+export function sampleRippleSourceLifecycle(
+  source: Pick<RippleRenderSource, "startTime" | "lifetimeSeconds">,
+  time: number
+): RippleSourceLifecycleSample {
+  const ageSeconds = Math.max(0, finiteOrDefault(time, 0) - finiteOrDefault(source.startTime, 0));
+  const lifetimeSeconds = Math.max(
+    0.2,
+    finiteOrDefault(source.lifetimeSeconds, RIPPLE_LIFETIME_SECONDS)
+  );
+  const normalizedAge = ageSeconds / lifetimeSeconds;
+  return {
+    ageSeconds,
+    lifetimeSeconds,
+    normalizedAge,
+    fade: Math.max(0, 1 - normalizedAge),
+    pulse: Math.sin(ageSeconds * 9) * 0.5 + 0.5
+  };
+}
+
 export class RippleSourceStore {
   private readonly sources: RippleSource[] = [];
 

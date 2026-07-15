@@ -16,7 +16,7 @@ import rippleFieldPreviewSource from "./webGpuRippleFieldPreview.wgsl?raw";
 
 const FIELD_PREVIEW_FRAME_LOG_INTERVAL_SECONDS = 0.5;
 const FIELD_CAMERA_MATRIX_FLOATS = 16;
-const FIELD_UNIFORM_FLOATS = FIELD_CAMERA_MATRIX_FLOATS + 28;
+const FIELD_UNIFORM_FLOATS = FIELD_CAMERA_MATRIX_FLOATS + 32;
 const FIELD_CELL_FLOATS = 8;
 const SOURCE_FLOATS = 8;
 const ECHO_FLOATS = 8;
@@ -50,6 +50,7 @@ export type WebGpuRippleFieldPreviewMetrics = {
   readonly depthFormat: GPUTextureFormat;
   readonly qualityId: string;
   readonly presentationProfile: RenderPresentationProfile;
+  readonly waveDynamicsMode: "classic-parity" | "core-stylized";
   readonly fieldGeometryMode: "hex-cap" | "hex-prism";
   readonly fieldVerticesPerInstance: number;
   readonly fieldTrianglesPerInstance: number;
@@ -187,6 +188,7 @@ export class WebGpuRippleFieldPreview {
       trackMaskFormat: "rgba8unorm",
       supportedPresentationProfiles: "classic,core",
       presentationProfile: this.presentationProfile,
+      waveDynamicsMode: getWaveDynamicsMode(this.presentationProfile),
       ...getFieldGeometryMetrics(this.presentationProfile),
       drawCalls: FIELD_DRAW_CALLS,
       triangles: this.getTriangleCount()
@@ -402,6 +404,7 @@ export class WebGpuRippleFieldPreview {
       depthFormat: FIELD_DEPTH_FORMAT,
       qualityId: this.layout.qualityId,
       presentationProfile: this.presentationProfile,
+      waveDynamicsMode: getWaveDynamicsMode(this.presentationProfile),
       ...getFieldGeometryMetrics(this.presentationProfile),
       instanceCount: this.layout.instanceCount,
       sourceLimit: this.layout.renderedRippleSourceLimit,
@@ -496,26 +499,30 @@ export class WebGpuRippleFieldPreview {
     this.uniforms[uniformOffset + 5] = input.player.position.z;
     this.uniforms[uniformOffset + 6] = input.player.speed;
     this.uniforms[uniformOffset + 7] = input.player.groundContact;
-    this.uniforms[uniformOffset + 8] = input.settings.rippleHeight;
-    this.uniforms[uniformOffset + 9] = input.settings.rippleRadius;
-    this.uniforms[uniformOffset + 10] = input.settings.voxelSizeMeters;
-    this.uniforms[uniformOffset + 11] = basePropagationSpeed;
-    this.uniforms[uniformOffset + 12] = input.settings.waveMedium.damping;
-    this.uniforms[uniformOffset + 13] = input.settings.waveMedium.dispersion;
-    this.uniforms[uniformOffset + 14] = input.bloomStrength;
-    this.uniforms[uniformOffset + 15] = renderedSourceCount;
-    this.uniforms[uniformOffset + 16] = this.layout.renderedRippleSourceLimit;
-    this.uniforms[uniformOffset + 17] = wakeMetrics.textureSize;
-    this.uniforms[uniformOffset + 18] = HEX_TILE_DIAMETER;
-    this.uniforms[uniformOffset + 19] = BASE_TILE_HEIGHT;
-    this.uniforms[uniformOffset + 20] = echoCounts.renderedEchoes;
-    this.uniforms[uniformOffset + 21] = echoCounts.renderedEchoBursts;
-    this.uniforms[uniformOffset + 22] = MAX_WEBGPU_ECHO_MARKERS;
-    this.uniforms[uniformOffset + 23] = MAX_WEBGPU_ECHO_COLLECTION_EVENTS;
-    this.uniforms[uniformOffset + 24] = input.raceTrack.enabled ? input.raceTrack.strength : 0;
-    this.uniforms[uniformOffset + 25] = input.raceTrack.fieldRadius;
-    this.uniforms[uniformOffset + 26] = input.raceTrack.mask.width;
-    this.uniforms[uniformOffset + 27] = input.raceTrack.mask.height;
+    this.uniforms[uniformOffset + 8] = input.player.velocity.x;
+    this.uniforms[uniformOffset + 9] = input.player.velocity.z;
+    this.uniforms[uniformOffset + 10] = 0;
+    this.uniforms[uniformOffset + 11] = 0;
+    this.uniforms[uniformOffset + 12] = input.settings.rippleHeight;
+    this.uniforms[uniformOffset + 13] = input.settings.rippleRadius;
+    this.uniforms[uniformOffset + 14] = input.settings.voxelSizeMeters;
+    this.uniforms[uniformOffset + 15] = basePropagationSpeed;
+    this.uniforms[uniformOffset + 16] = input.settings.waveMedium.damping;
+    this.uniforms[uniformOffset + 17] = input.settings.waveMedium.dispersion;
+    this.uniforms[uniformOffset + 18] = input.bloomStrength;
+    this.uniforms[uniformOffset + 19] = renderedSourceCount;
+    this.uniforms[uniformOffset + 20] = this.layout.renderedRippleSourceLimit;
+    this.uniforms[uniformOffset + 21] = wakeMetrics.textureSize;
+    this.uniforms[uniformOffset + 22] = HEX_TILE_DIAMETER;
+    this.uniforms[uniformOffset + 23] = BASE_TILE_HEIGHT;
+    this.uniforms[uniformOffset + 24] = echoCounts.renderedEchoes;
+    this.uniforms[uniformOffset + 25] = echoCounts.renderedEchoBursts;
+    this.uniforms[uniformOffset + 26] = MAX_WEBGPU_ECHO_MARKERS;
+    this.uniforms[uniformOffset + 27] = MAX_WEBGPU_ECHO_COLLECTION_EVENTS;
+    this.uniforms[uniformOffset + 28] = input.raceTrack.enabled ? input.raceTrack.strength : 0;
+    this.uniforms[uniformOffset + 29] = input.raceTrack.fieldRadius;
+    this.uniforms[uniformOffset + 30] = input.raceTrack.mask.width;
+    this.uniforms[uniformOffset + 31] = input.raceTrack.mask.height;
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniforms);
   }
 
@@ -692,6 +699,7 @@ export class WebGpuRippleFieldPreview {
       passMs: roundMetric(this.passMs),
       quality: this.layout.qualityId,
       presentationProfile: this.presentationProfile,
+      waveDynamicsMode: getWaveDynamicsMode(this.presentationProfile),
       ...getFieldGeometryMetrics(this.presentationProfile),
       instanceCount: this.layout.instanceCount,
       sourceLimit: this.layout.renderedRippleSourceLimit,
@@ -774,6 +782,7 @@ export class WebGpuRippleFieldPreview {
     this.lastGeometryLogProfile = this.presentationProfile;
     this.log("ripple.webgpu.geometry", "Selected WebGPU RippleField geometry profile", {
       presentationProfile: this.presentationProfile,
+      waveDynamicsMode: getWaveDynamicsMode(this.presentationProfile),
       previousPresentationProfile,
       geometrySelectionReason: previousPresentationProfile === null ? "startup" : "profile-switch",
       ...getFieldGeometryMetrics(this.presentationProfile),
@@ -897,6 +906,12 @@ function getFieldGeometryMetrics(profile: RenderPresentationProfile) {
     bottomFaceIncluded: classic,
     tileHeightMode: classic ? "animated-prism" as const : "flat-cap" as const
   };
+}
+
+function getWaveDynamicsMode(
+  profile: RenderPresentationProfile
+): WebGpuRippleFieldPreviewMetrics["waveDynamicsMode"] {
+  return profile === "classic" ? "classic-parity" : "core-stylized";
 }
 
 function roundMetric(value: number): number {

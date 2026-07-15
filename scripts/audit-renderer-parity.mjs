@@ -20,7 +20,12 @@ import {
 const FIXED_VIEWPORT = Object.freeze({ width: 1280, height: 720 });
 const FIXED_DEVICE_SCALE_FACTOR = 1;
 const BENCHMARK_SEED = 1_337;
-const PULSE_SETTLE_TICKS = readIntegerEnv("RIPPLE_PARITY_PULSE_TICKS", 36, 12, 300);
+const PULSE_PHASE_TICKS = Object.freeze({
+  "pulse-early": readIntegerEnv("RIPPLE_PARITY_PULSE_EARLY_TICKS", 36, 12, 600),
+  "pulse-middle": readIntegerEnv("RIPPLE_PARITY_PULSE_MIDDLE_TICKS", 225, 24, 600),
+  "pulse-late": readIntegerEnv("RIPPLE_PARITY_PULSE_LATE_TICKS", 390, 36, 600),
+  "pulse-expired": readIntegerEnv("RIPPLE_PARITY_PULSE_EXPIRED_TICKS", 480, 48, 600)
+});
 const PAGE_TIMEOUT_MS = readIntegerEnv("RIPPLE_PARITY_TIMEOUT_MS", 60_000, 15_000, 180_000);
 const WEBGPU_PRESENTATION_PROFILE = readWebGpuPresentationProfile();
 const WEBGL_PRESENTATION_PROFILE = "webgl-reference";
@@ -33,7 +38,7 @@ const SCENES = Object.freeze([
     benchmarkScenario: "pretty-arena",
     benchmarkTier: 0,
     captureTick: 180,
-    states: Object.freeze(["settled", "pulse"])
+    states: Object.freeze(["settled", "pulse-early", "pulse-middle", "pulse-late", "pulse-expired"])
   }),
   Object.freeze({
     id: "track-showoff",
@@ -41,7 +46,7 @@ const SCENES = Object.freeze([
     benchmarkScenario: "showoff-track-motion",
     benchmarkTier: 0,
     captureTick: 180,
-    states: Object.freeze(["settled", "pulse"])
+    states: Object.freeze(["settled", "pulse-early", "pulse-middle", "pulse-late", "pulse-expired"])
   }),
   Object.freeze({
     id: "training-pretty",
@@ -115,10 +120,12 @@ try {
     }
   }
 
+  const pulseLifecycle = createPulseLifecycleEvidence(captures, buffers);
+
   const stateFailures = comparisons.filter((comparison) => !comparison.stateParity.passed);
   const reportPassed = stateFailures.length === 0;
   const report = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     passed: reportPassed,
     failureReasons: stateFailures.map((comparison) => `semantic-state-mismatch:${comparison.id}`),
     generatedAt: new Date().toISOString(),
@@ -128,13 +135,14 @@ try {
     deviceScaleFactor: FIXED_DEVICE_SCALE_FACTOR,
     benchmarkSeed: BENCHMARK_SEED,
     captureTicks: Object.fromEntries(SCENES.map((scene) => [scene.id, scene.captureTick])),
-    pulseSettleTicks: PULSE_SETTLE_TICKS,
+    pulsePhaseTicks: PULSE_PHASE_TICKS,
     referenceProfile: WEBGL_PRESENTATION_PROFILE,
     candidateProfile: WEBGPU_PRESENTATION_PROFILE,
     automationDecision: reportPassed ? "review-required" : "failed",
     automationPolicy: "Runtime and visual-bound failures are fatal; renderer similarity metrics are evidence, not a pixel-parity gate.",
     captures,
-    comparisons
+    comparisons,
+    pulseLifecycle
   };
   auditReport = report;
   await withAuditDeadline(context.close(), "browser context cleanup", 10_000);
@@ -211,11 +219,18 @@ async function captureScene(context, scene, backendId) {
     await waitForSceneReady(page, scene, backendId);
     await hideCaptureChrome(page);
     let fixtureState = await advanceAndFreeze(page, scene.captureTick);
+    let pulseStartTick = null;
+    let pulseStartSimulationTime = null;
 
     for (const state of scene.states) {
-      if (state === "pulse") {
-        await triggerPulse(page);
-        fixtureState = await advanceAndFreeze(page, fixtureState.tick + PULSE_SETTLE_TICKS);
+      if (Object.hasOwn(PULSE_PHASE_TICKS, state)) {
+        if (pulseStartTick === null) {
+          pulseStartTick = fixtureState.tick;
+          pulseStartSimulationTime = fixtureState.simulationTimeSeconds;
+          await triggerPulse(page);
+        }
+        fixtureState = await advanceAndFreeze(page, pulseStartTick + PULSE_PHASE_TICKS[state]);
+        assertPulseLifecycleFixture(state, fixtureState, pulseStartSimulationTime);
       }
 
       const captureId = `${scene.id}--${state}--${backendId}`;
@@ -359,6 +374,41 @@ async function triggerPulse(page) {
   });
 }
 
+function assertPulseLifecycleFixture(state, fixtureState, pulseStartSimulationTime) {
+  if (typeof pulseStartSimulationTime !== "number") {
+    throw new Error(`${state} capture is missing its pulse start time.`);
+  }
+  const sources = fixtureState.sourceState?.sources;
+  if (!Array.isArray(sources)) {
+    throw new Error(`${state} capture did not expose source lifecycle diagnostics.`);
+  }
+
+  const manualPulse = sources.find((source) =>
+    typeof source?.startTime === "number" &&
+    Math.abs(source.startTime - pulseStartSimulationTime) <= 0.001
+  );
+  const shouldRemainActive = state !== "pulse-expired";
+  if (shouldRemainActive && !manualPulse) {
+    throw new Error(`${state} pruned the audited manual pulse before its lifetime ended.`);
+  }
+  if (!shouldRemainActive && manualPulse) {
+    throw new Error(`${state} retained the audited manual pulse after its lifetime ended.`);
+  }
+
+  if (manualPulse) {
+    const ageSeconds = fixtureState.simulationTimeSeconds - manualPulse.startTime;
+    const expectedAgeSeconds = PULSE_PHASE_TICKS[state] / 60;
+    if (Math.abs(ageSeconds - expectedAgeSeconds) > 0.02) {
+      throw new Error(
+        `${state} source age was ${ageSeconds.toFixed(3)}s; expected ${expectedAgeSeconds.toFixed(3)}s.`
+      );
+    }
+    if (ageSeconds >= manualPulse.lifetimeSeconds) {
+      throw new Error(`${state} retained a source whose lifetime had already elapsed.`);
+    }
+  }
+}
+
 async function readRuntimeDiagnostics(page, backendId, mode) {
   const evidence = await page.evaluate(() => ({
     entries: window.__rippleDebugDump?.() ?? [],
@@ -393,6 +443,7 @@ async function readRuntimeDiagnostics(page, backendId, mode) {
 
   return {
     presentationProfile: frameSample.payload.presentationProfile,
+    waveDynamicsMode: frameSample.payload.waveDynamicsMode ?? null,
     fieldGeometryMode: frameSample.payload.fieldGeometryMode ?? null,
     fieldVerticesPerInstance: frameSample.payload.fieldVerticesPerInstance ?? null,
     fieldTrianglesPerInstance: frameSample.payload.fieldTrianglesPerInstance ?? null,
@@ -577,6 +628,23 @@ function renderSummary(report) {
 
   lines.push(
     "",
+    "## Pulse Lifecycle",
+    "",
+    "Each row follows one pulse from early response through expiry. Deltas are evidence for held middle phases or abrupt end-phase cliffs; they remain review-guided rather than universal pixel gates.",
+    "",
+    "| Scene / backend | Phase | Source age | Active sources | RGB delta vs settled | RGB delta vs previous phase | Edge delta vs settled |",
+    "| --- | --- | ---: | ---: | ---: | ---: | ---: |"
+  );
+  for (const phase of report.pulseLifecycle) {
+    lines.push(
+      `| ${phase.sceneId} / ${phase.backendId} | ${phase.state} | ${phase.sourceAgeSeconds}s | ` +
+      `${phase.activeSources} | ${phase.fromSettled.meanAbsoluteRgbDelta} | ` +
+      `${phase.fromPrevious.meanAbsoluteRgbDelta} | ${phase.fromSettled.edgeDensityDelta} |`
+    );
+  }
+
+  lines.push(
+    "",
     "## Interpretation",
     "",
     `- The left image in each review strip is WebGL, the center is the ${WEBGPU_PRESENTATION_PROFILE === "classic" ? "Classic 3D" : "Core (Minimal)"} WebGPU profile, and the right is an amplified absolute difference.`,
@@ -585,6 +653,37 @@ function renderSummary(report) {
     ""
   );
   return `${lines.join("\n")}\n`;
+}
+
+function createPulseLifecycleEvidence(captures, buffers) {
+  const evidence = [];
+  for (const scene of SCENES) {
+    const pulseStates = scene.states.filter((state) => Object.hasOwn(PULSE_PHASE_TICKS, state));
+    if (pulseStates.length === 0) continue;
+
+    for (const backendId of ["webgl", "webgpu"]) {
+      const settledId = `${scene.id}--settled--${backendId}`;
+      const settledBuffer = requireBuffer(buffers, settledId);
+      let previousBuffer = settledBuffer;
+      for (const state of pulseStates) {
+        const captureId = `${scene.id}--${state}--${backendId}`;
+        const capture = requireCapture(captures, captureId);
+        const buffer = requireBuffer(buffers, captureId);
+        evidence.push({
+          sceneId: scene.id,
+          backendId,
+          state,
+          sourceAgeSeconds: roundNumber(PULSE_PHASE_TICKS[state] / 60, 3),
+          activeSources: capture.fixtureState.activeSources,
+          renderedSources: capture.fixtureState.sourceState?.renderedCount ?? null,
+          fromSettled: compareRendererCaptures(settledBuffer, buffer),
+          fromPrevious: compareRendererCaptures(previousBuffer, buffer)
+        });
+        previousBuffer = buffer;
+      }
+    }
+  }
+  return evidence;
 }
 
 function compareFixtureStates(reference, candidate) {
@@ -755,7 +854,8 @@ function assertWebGpuPresentationGeometry(payload) {
         fieldTrianglesPerInstance: 24,
         visibleSideFaceCount: 6,
         bottomFaceIncluded: true,
-        tileHeightMode: "animated-prism"
+        tileHeightMode: "animated-prism",
+        waveDynamicsMode: "classic-parity"
       }
     : {
         fieldGeometryMode: "hex-cap",
@@ -763,7 +863,8 @@ function assertWebGpuPresentationGeometry(payload) {
         fieldTrianglesPerInstance: 6,
         visibleSideFaceCount: 0,
         bottomFaceIncluded: false,
-        tileHeightMode: "flat-cap"
+        tileHeightMode: "flat-cap",
+        waveDynamicsMode: "core-stylized"
       };
   for (const [key, expectedValue] of Object.entries(expected)) {
     if (payload?.[key] !== expectedValue) {
@@ -800,6 +901,11 @@ function delay(milliseconds) {
 
 function formatPercent(value) {
   return `${(value * 100).toFixed(1)}%`;
+}
+
+function roundNumber(value, digits) {
+  const scale = 10 ** digits;
+  return Math.round(value * scale) / scale;
 }
 
 function formatError(error) {

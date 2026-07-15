@@ -16,6 +16,7 @@ const PULSE_FRAME_LOG_INTERVAL_SECONDS = 0.5;
 
 export type WebGpuPulseGlowPassMetrics = {
   readonly mode: "webgpu-pulse-glow";
+  readonly presentationMode: "core-proxy" | "disabled-classic";
   readonly activeSources: number;
   readonly renderedGlows: number;
   readonly depthMode: "field-depth-read";
@@ -41,6 +42,7 @@ export class WebGpuPulseGlowPass {
   private readonly pulseScratch = new Float32Array(MAX_WEBGPU_PULSE_GLOWS * PULSE_FLOATS);
   private activeSources = 0;
   private renderedGlows = 0;
+  private presentationMode: WebGpuPulseGlowPassMetrics["presentationMode"] = "disabled-classic";
   private passMs = 0;
   private lastFrameLogAt = -Infinity;
 
@@ -66,6 +68,8 @@ export class WebGpuPulseGlowPass {
     this.log("pulseLight.webgpu.init", "WebGPU pulse glow proxy initialized", {
       mode: "webgpu-pulse-glow",
       pulseGlowLimit: MAX_WEBGPU_PULSE_GLOWS,
+      classicMode: "disabled",
+      coreMode: "core-proxy",
       depthMode: "field-depth-read",
       drawCalls: 1,
       trianglesPerGlow: PULSE_TRIANGLES_PER_INSTANCE
@@ -135,6 +139,16 @@ export class WebGpuPulseGlowPass {
     }
 
     const startedAt = performance.now();
+    if (input.renderInput.scenePresentation.profile === "classic") {
+      this.activeSources = input.renderInput.pulseSources.activeCount;
+      this.renderedGlows = 0;
+      this.presentationMode = "disabled-classic";
+      this.passMs = performance.now() - startedAt;
+      this.maybeLogFrame(input.renderInput, input.deviceLost);
+      return this.passMs;
+    }
+
+    this.presentationMode = "core-proxy";
     const renderedGlows = this.writePulseBuffer(input.renderInput.pulseSources);
     this.writeUniforms(input.renderInput);
 
@@ -179,6 +193,7 @@ export class WebGpuPulseGlowPass {
   getMetrics(): WebGpuPulseGlowPassMetrics {
     return {
       mode: "webgpu-pulse-glow",
+      presentationMode: this.presentationMode,
       activeSources: this.activeSources,
       renderedGlows: this.renderedGlows,
       depthMode: "field-depth-read",
@@ -218,7 +233,7 @@ export class WebGpuPulseGlowPass {
     this.uniforms[23] = 0;
     this.uniforms[24] = input.time;
     this.uniforms[25] = getBasePropagationSpeedMetersPerSecond(input.settings.waveMedium);
-    this.uniforms[26] = RIPPLE_LIFETIME_SECONDS;
+    this.uniforms[26] = 0;
     this.uniforms[27] = this.renderedGlows;
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniforms);
   }
@@ -236,7 +251,13 @@ export class WebGpuPulseGlowPass {
       this.pulseScratch[writeOffset + 3] = finiteOrDefault(source.strength, 0);
       this.pulseScratch[writeOffset + 4] = finiteOrDefault(source.speedMultiplier, 1);
       this.pulseScratch[writeOffset + 5] = finiteOrDefault(source.widthMultiplier, 1);
-      this.pulseScratch[writeOffset + 6] = finiteOrDefault(source.dampingMultiplier, 1);
+      // The field consumes damping, while this presentation proxy needs the
+      // source-specific lifetime so short jump pulses do not linger for the
+      // global manual-pulse horizon.
+      this.pulseScratch[writeOffset + 6] = finiteOrDefault(
+        source.lifetimeSeconds,
+        RIPPLE_LIFETIME_SECONDS
+      );
       this.pulseScratch[writeOffset + 7] = finiteOrDefault(source.hue, index % 2 === 0 ? 0.2 : 0.75);
     }
 
@@ -251,6 +272,8 @@ export class WebGpuPulseGlowPass {
     this.lastFrameLogAt = input.time;
     this.log("pulseLight.webgpu.frame", "WebGPU pulse glow proxy frame sample", {
       mode: "webgpu-pulse-glow",
+      presentationMode: this.presentationMode,
+      presentationProfile: input.scenePresentation.profile,
       scenePresentationMode: input.scenePresentation.mode,
       activeSources: this.activeSources,
       renderedGlows: this.renderedGlows,

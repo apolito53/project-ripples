@@ -218,6 +218,11 @@ export function createVisualCaptureSourceState(snapshot: RippleRenderSourceSnaps
   return {
     activeCount: snapshot.activeCount,
     renderedCount: snapshot.renderedCount,
+    sources: snapshot.sources.map((source) => ({
+      startTime: source.startTime,
+      lifetimeSeconds: source.lifetimeSeconds,
+      strength: source.strength
+    })),
     digest: hashVisualCaptureNumbers(values)
   };
 }

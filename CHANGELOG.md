@@ -67,6 +67,9 @@
 - Added policy checks, a dedicated Core-preservation/live-switch browser smoke,
   geometry diagnostics, and separate Classic-default/Core renderer parity
   audit commands.
+- Added early, middle, late, and post-expiry pulse captures to the fixed-tick
+  renderer audit, including source-lifetime assertions and per-backend
+  phase-to-phase image evidence.
 
 ### Changed
 
@@ -127,6 +130,14 @@
   field geometry and dedicated coverage. The earlier minimalist treatment is
   retained as selectable `core`; diagnostics and benchmark metadata identify
   the active profile so renderer evidence remains auditable.
+- Aligned Classic WebGPU pulse dynamics with the WebGL reference: removed the
+  diagnostic wake amplification and duplicate source lift, restored the local
+  body-wake/material transfer, removed the extra WebGPU-only global settle, and
+  faded pulse lights and shadow proxies with each source's own lifetime.
+- Restricted the billboard pulse-glow proxy to the preserved Core profile and
+  made it consume per-source lifetimes; Classic now relies on its real local
+  lights, field response, particles, and bloom instead of carrying a second
+  fixed-horizon halo.
 
 ## 0.5.3-2-ALPHA - 2026-07-08
 

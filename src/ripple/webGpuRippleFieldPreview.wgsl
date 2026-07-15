@@ -2,6 +2,7 @@ struct FieldParams {
   viewProjection: mat4x4f,
   timing: vec4f,
   player: vec4f,
+  playerMotion: vec4f,
   render: vec4f,
   medium: vec4f,
   shape: vec4f,
@@ -146,6 +147,32 @@ fn sourceWaveAt(cellPosition: vec2f) -> f32 {
   }
 
   return sourceWave;
+}
+
+// Match RippleField's immediate, player-relative hull response. Persistent
+// movement belongs to the sampled wake texture; keeping this term compact
+// prevents it from rotating into a long flashlight-shaped wake.
+fn movingBodyWake(fromPlayer: vec2f, distanceToPlayer: f32, phase: f32) -> f32 {
+  let speed = length(field.playerMotion.xy);
+  let moving = smoothstep(0.8, 10.5, speed) * clamp(field.player.w, 0.0, 1.0);
+  if (moving <= 0.001 || distanceToPlayer <= 0.001) {
+    return 0.0;
+  }
+
+  let direction = field.playerMotion.xy / max(speed, 0.001);
+  let radial = fromPlayer / max(distanceToPlayer, 0.001);
+  let ahead = dot(radial, direction);
+  let sideways = abs(radial.x * direction.y - radial.y * direction.x);
+  let bowBand = exp(-pow((distanceToPlayer - 1.75) / 1.05, 2.0));
+  let bow = smoothstep(0.12, 0.94, ahead) * bowBand;
+  let behind = smoothstep(0.08, 0.92, -ahead);
+  let localStern = exp(-pow(distanceToPlayer / 2.65, 2.0)) *
+    exp(-pow(sideways * 2.45, 2.0));
+  let shoulderWake = exp(-pow((sideways - 0.54) / 0.16, 2.0)) *
+    exp(-pow((distanceToPlayer - 2.0) / 1.25, 2.0));
+  let texture = 0.62 + 0.38 * sin(field.timing.x * 7.1 - distanceToPlayer * 3.2 + phase);
+
+  return moving * (bow * 0.34 + behind * texture * (localStern * 0.18 + shoulderWake * 0.28));
 }
 
 fn echoSignalAt(cellPosition: vec2f) -> vec3f {
@@ -446,37 +473,62 @@ fn buildClassicFieldVertex(
   let trackSignal = trackSignalAt(cellPosition);
   let sourceWave = sourceWaveAt(cellPosition);
   let echoSignal = echoSignalAt(cellPosition);
-  let heightEnergy = clamp(wake.x * 10.0 + sourceWave * 0.88, -1.0, 1.0);
-  let crestEnergy = clamp(max(wake.z, 0.0) * 2.2 + max(sourceWave, 0.0) * 0.64, 0.0, 1.0);
-  let velocityEnergy = clamp(abs(wake.y) * 10.0, 0.0, 1.0);
-  let shimmer = 0.5 + 0.5 * sin(field.timing.x * 3.7 + cell.positionPhase.w);
-  // Procedural corners use a unit circumradius while Three's prism uses 0.5. Convert the
-  // shared point-to-point diameter to a radius here so both backends occupy the
-  // same flat-top honeycomb instead of WebGPU masking a sheared grid by overlap.
-  let footprintDiameter = field.shape.z + crestEnergy * 0.05 + echoSignal.x * 0.012;
-  let footprint = footprintDiameter * field.render.z * 0.5;
-  let worldOffset = local * footprint;
-  let playerDistance = distance(cellPosition, field.player.xy);
+  let fromPlayer = cellPosition - field.player.xy;
+  let playerDistance = length(fromPlayer);
   let playerContact = clamp(field.player.w, 0.0, 1.0);
+  let proximity = (1.0 - smoothstep(0.0, field.render.y, playerDistance)) *
+    (0.12 + playerContact * 0.88);
   let bodyPressure = (1.0 - smoothstep(0.15, 2.55, playerDistance)) * playerContact;
   let pressureRim = exp(-pow((playerDistance - 2.35) / 0.9, 2.0)) * playerContact;
   let movementPush = clamp(field.player.z / 16.0, 0.0, 1.0) * playerContact;
-  let pressureResponse = (
-    -bodyPressure * (0.35 + shimmer * 0.09 + movementPush * 0.115) +
-    pressureRim * (0.16 + shimmer * 0.14 + movementPush * 0.1)
-  ) * field.render.x;
-  let baseLift = clamp(heightEnergy * field.render.x + sourceWave * 0.36 + echoSignal.z * 0.72, -1.6, 2.5);
-  let lift = clamp(baseLift + pressureResponse * prismWeight, -1.6, 2.5);
+  let shimmer = sin(field.timing.x * 5.8 - playerDistance * 2.15 + cell.positionPhase.w) * 0.5 + 0.5;
+  let flowWave = movingBodyWake(fromPlayer, playerDistance, cell.positionPhase.w);
+  let wakeTextureWave = wake.x;
+  let wakeTextureGlow = wake.z;
+  let wakeCrestEnergy = clamp(
+    wakeTextureGlow * 1.95 + max(wakeTextureWave, 0.0) * 0.28,
+    0.0,
+    1.0
+  );
+  let pressureDepression = bodyPressure * (0.35 + shimmer * 0.09 + movementPush * 0.115);
+  let rimLift = pressureRim * (0.16 + shimmer * 0.14 + movementPush * 0.1);
+  let shelteredSourceWave = sourceWave * (1.0 - bodyPressure * 0.44);
+  let crestGlow = clamp(
+    max(shelteredSourceWave, 0.0) * 1.18 +
+      max(flowWave, 0.0) * 0.34 +
+      wakeCrestEnergy * 1.28,
+    0.0,
+    0.98
+  );
+  let lift = clamp(
+    (-pressureDepression + rimLift + shelteredSourceWave * 0.92 + flowWave * 0.42 +
+      wakeTextureWave * 0.95) * field.render.x + echoSignal.z * 0.18,
+    -1.6,
+    2.5
+  );
+  let glow = clamp(
+    proximity * (0.04 + shimmer * 0.08) + pressureRim * 0.08 +
+      shelteredSourceWave * 0.2 + flowWave * 0.08 +
+      max(wakeTextureWave, 0.0) * 0.06 + wakeCrestEnergy * 0.48,
+    0.0,
+    0.62
+  );
+  let voxelScale = clamp(field.render.z, 0.25, 2.0);
   let tileHeight = max(
     0.02,
     (
       field.shape.w +
       pressureRim * 0.16 +
-      max(sourceWave, 0.0) * 0.44 +
-      max(heightEnergy, 0.0) * 0.22 -
+      shelteredSourceWave * 0.44 +
+      flowWave * 0.18 +
+      max(wakeTextureWave, 0.0) * 0.22 -
       bodyPressure * 0.009
-    ) * field.render.z
+    ) * voxelScale
   );
+  // Procedural corners use a unit circumradius while Three's prism uses 0.5.
+  let footprintDiameter = field.shape.z + glow * 0.05 + echoSignal.x * 0.012;
+  let footprint = footprintDiameter * voxelScale * 0.5;
+  let worldOffset = local * footprint;
   let worldPosition = vec3f(
     cellPosition.x + worldOffset.x,
     cell.positionPhase.y + lift + tileHeight * localHeight * prismWeight,
@@ -495,12 +547,20 @@ fn buildClassicFieldVertex(
   let topFace = 1.0 - sideFace - bottomFace;
   let bottomRim = 0.08 + keyLight * 0.08 + shimmer * 0.02;
   let rim = topRim * topFace + sideRim * sideFace + bottomRim * bottomFace;
-  let crestLight = crestEnergy * (0.28 + shimmer * 0.12);
+  let crestLight = crestGlow * (0.28 + shimmer * 0.12);
+  let rippleTint = mix(cell.tint.rgb, vec3f(0.18, 0.82, 0.74), clamp(glow * 0.46, 0.0, 0.7));
+  let shadedLowTint = rippleTint * (0.58 + terrainWhiteness * 0.34);
+  var classicTint = mix(
+    shadedLowTint,
+    vec3f(0.94, 0.985, 1.0),
+    clamp(terrainWhiteness * (0.34 + glow * 0.32), 0.0, 0.76)
+  );
+  classicTint = mix(classicTint, vec3f(0.76, 1.0, 0.92), crestGlow * 0.3);
 
   var output: VertexOutput;
   output.position = field.viewProjection * vec4f(worldPosition, 1.0);
   output.local = local;
-  output.energy = vec3f(heightEnergy, velocityEnergy, max(crestEnergy, echoSignal.y * 0.34));
+  output.energy = vec3f(glow, abs(wake.y), max(crestGlow, echoSignal.y * 0.34));
   output.lighting = vec3f(keyLight, rim, crestLight);
   output.localLighting = localLightingAt(worldPosition);
   output.contactShadow = contactShadowAt(worldPosition);
@@ -508,11 +568,7 @@ fn buildClassicFieldVertex(
   output.trackSignal = trackSignal;
   output.worldNormal = worldNormal;
   output.faceData = faceData;
-  output.color = cell.tint.rgb * (0.48 + terrainWhiteness * 0.34 + shimmer * 0.05);
-  output.color = output.color + max(heightEnergy, 0.0) * vec3f(0.04, 0.42, 0.5);
-  output.color = output.color + max(-heightEnergy, 0.0) * vec3f(0.34, 0.09, 0.44);
-  output.color = output.color + velocityEnergy * vec3f(0.03, 0.2, 0.11);
-  output.color = output.color + crestEnergy * vec3f(0.62, 0.52, 0.2);
+  output.color = classicTint * (0.62 + glow * 0.05 + terrainWhiteness * 0.07 + crestGlow * 0.2);
   output.color = output.color + echoSignal.x * vec3f(0.18, 0.36, 0.3);
   output.color = output.color + echoSignal.y * vec3f(0.42, 0.28, 0.1);
   let trackBody = mix(1.0, trackSignal.r, trackSignal.w);
@@ -603,8 +659,10 @@ fn fragmentClassicMain(input: VertexOutput) -> @location(0) vec4f {
   color = color * (1.0 - combinedShadow);
   color = color + gridLine * vec3f(0.015, 0.07, 0.075);
   let crestFaceStrength = mix(1.0, 0.34, sideFace);
-  color = color + input.energy.z * interior * vec3f(0.16, 0.22, 0.09) * crestFaceStrength;
-  color = color + input.lighting.z * vec3f(0.18, 0.16, 0.06) * crestFaceStrength;
+  let crestLight = mix(input.color, vec3f(0.7, 1.0, 0.9), 0.55);
+  color = color + input.color * input.energy.x * (0.025 + field.medium.z * 0.055) * interior;
+  color = color + crestLight * input.energy.z * (0.12 + field.medium.z * 0.32) *
+    interior * crestFaceStrength;
   color = color + localLight;
   let trackGlowBody = input.trackSignal.r * input.trackSignal.w;
   let trackGlowEdge = input.trackSignal.g * input.trackSignal.w;

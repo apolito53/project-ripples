@@ -218,7 +218,9 @@ immune to the cohort policy.
 Forced WebGPU now defaults to the `classic` presentation profile. Classic draws
 each field cell as a real procedural hex prism with a top cap and six visible
 side walls, animated tile height, wake/source displacement, and profile-specific
-lighting. A downward cap keeps the field closed during the supported underside
+lighting. Classic now uses the same source fade, local body-wake response,
+unamplified wake-texture transfer, pulse-light envelope, and late wake settling
+policy as the WebGL reference. A downward cap keeps the field closed during the supported underside
 camera orbit. The original flat,
 minimalist WebGPU treatment remains available as `core`.
 
@@ -242,6 +244,12 @@ wall-geometry, and Training-marker identity before producing image evidence. Set
 `RIPPLE_PARITY_APP_URL` only when deliberately targeting an existing server.
 External-server reports are marked `external-unverified` and are not attributed
 to the current workspace commit.
+
+Arena and Track pulse evidence follows one manual source through early (0.6s),
+middle (3.75s), late (6.5s), and post-expiry (8.0s) captures. The audit verifies
+that the source remains present through late phase, is pruned after its own
+lifetime, and records both cross-backend and phase-to-phase image metrics so a
+held middle or abrupt ending is visible in the report.
 
 Use `npm.cmd run audit:render:parity:core` to audit the preserved minimalist
 profile. Ignored results land under `parity-results/<profile>-<timestamp>/` as raw PNGs, side-by-

@@ -128,10 +128,6 @@ fn simulateMain(@builtin(global_invocation_id) globalId: vec3u) {
     moving * (crestBrush * 1.4 + centerBrush * 0.04)
   );
 
-  let globalSettle = max(0.0, 1.0 - safeDelta * (0.16 + wake.medium.y * 0.95));
-  height = height * globalSettle;
-  velocity = velocity * globalSettle;
-
   let radialDistance = length(worldPosition);
   let edgeSponge = smoothstep(fieldRadius * wake.shape.z, fieldRadius * wake.shape.w, radialDistance);
   let spongeDamping = max(0.0, 1.0 - edgeSponge * safeDelta * (2.8 + wake.medium.x * 0.04));

@@ -155,11 +155,12 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `scripts/benchmark-stock-acceptance.mjs`, `scripts/benchmark-package.mjs`,
   `scripts/package-renderer-benchmark.mjs`, and
   `scripts/verify-benchmark-reporting.mjs`
-- Fixed-tick presentation capture/reporting and non-gating image comparison:
+- Fixed-tick presentation capture/reporting, early/middle/late/post-expiry pulse
+  lifecycle evidence, and non-gating image comparison:
   `scripts/audit-renderer-parity.mjs`, `scripts/render-parity-analysis.mjs`, and
   `devlog/renderer-parity/README.md`
-- Classic 3D/Core field pipelines, procedural prism geometry, and profile
-  diagnostics: `src/ripple/webGpuRippleFieldPreview.ts` and
+- Classic 3D/Core field pipelines, procedural prism geometry, profile-specific
+  wave transfer, and profile diagnostics: `src/ripple/webGpuRippleFieldPreview.ts` and
   `src/ripple/webGpuRippleFieldPreview.wgsl`
 - Rollout policy checks: `scripts/verify-renderer-rollout.mjs`
 - Benchmark baseline registry, accepted RTX 4070 Ti v3 Classic evidence,
@@ -264,7 +265,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
     Training adds its one-draw objective marker and deterministic Echo policy.
     The selected presentation profile chooses either the default Classic 3D
     hex-prism pipeline or the preserved flat Core pipeline without rebuilding
-    gameplay state.
+    gameplay state. Classic consumes the WebGL source/wake transfer and pulse-
+    light lifecycle; Core retains the earlier stylized amplification and pulse
+    glow proxy.
     Readiness stays `diagnostic-core` and `defaultEligible=false` even after the
     automated remaining-gap list reaches empty.
 

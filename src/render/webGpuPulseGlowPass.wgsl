@@ -60,7 +60,7 @@ fn vertexMain(
   output.position = pulseParams.viewProjection * vec4f(worldPosition, 1.0);
   output.local = local;
   output.color = mix(colorA, colorB, clamp(hue, 0.0, 1.0));
-  output.alpha = strength * max(0.0, 1.0 - age / max(0.4, pulseParams.params.z)) * 0.13;
+  output.alpha = strength * max(0.0, 1.0 - age / max(0.4, pulse.metadata.z)) * 0.13;
   output.ring = vec2f(clamp(rippleRadius * 0.018, 0.16, 0.82), 0.18 + pulse.metadata.y * 0.02);
   return output;
 }
