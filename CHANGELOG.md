@@ -2,6 +2,162 @@
 
 ## Unreleased
 
+### Added
+
+- Added a renderer-neutral Field Palette selector with **Style Default**,
+  **Reference**, and **Legacy Neon** choices. Style Default preserves the
+  reference palette for WebGL/Classic and the original neon palette for Core;
+  explicit Legacy Neon restores color only, not the retired pulse dynamics.
+- Added the selectively integrated raw-WebGPU renderer runtime behind
+  `?renderer=webgpu`, including the compute wake, hex field, skybox, hover-pod,
+  particle, Echo, pulse-light, local-light, shadow-map, bloom, and Arena curtain
+  passes from the archived renderer rehearsal.
+- Added renderer-neutral pulse, Echo, particle, wake, field-layout, scene,
+  race-track mask/wall, and Training presentation snapshots shared by the
+  Three/WebGL adapters and forced-WebGPU runtime.
+- Added a packed one-draw WebGPU course-wall pass for Track and Training plus a
+  one-draw Training objective marker with two cyan posts, a magenta beam, and a
+  center glow. Both passes use explicit layouts and read the shared field depth.
+- Added Playwright coverage for WebGL and forced-WebGPU Arena, Track, Training,
+  menu transitions, Training step-one drag completion, conservative default/
+  auto policy, forced-unavailable/device-loss failures, soak, readiness, and
+  default soak.
+- Added a production comparative renderer benchmark with deterministic Arena,
+  Track, and Meltdown-ramp workloads, balanced/thermally rotated order, nonblocking
+  WebGL/WebGPU GPU timers, semantic parity gates, stable stress tiers, hardware/
+  driver metadata, raw artifacts, and optional same-machine baseline checks.
+- Added a clean-tree cross-hardware acceptance package that owns strict preview
+  port `4183`, runs stock no-flags Chrome Arena/Track/Training plus a 120-second
+  soak, executes the four-repetition instrumented benchmark, and emits portable
+  acceptance/baseline/summary evidence with compressed samples, representative
+  captures, relative paths, and SHA-256 checksums.
+- Added a stock-Chrome WebGPU smoke without unsafe/blocklist flags plus a pure
+  Stage-0 auto-rollout verifier covering cohort boundaries, denied storage,
+  browser/adapter gates, cooldown escalation, recovery, and reload-loop guards.
+- Added benchmark-reporting regression checks for asynchronous GPU sample
+  freshness, timer failures, workload parity, stable-tier continuity, strict
+  protocol compatibility, malformed baselines, normalized metadata,
+  cross-hardware classification, portable paths/checksums, baseline loss, and
+  metric-direction verdicts.
+- Added the original RTX 4070 Ti benchmark note as historical evidence; it is
+  now explicitly superseded because it came from a dirty pre-column-stagger
+  tree and is not an accepted v2 baseline.
+- Added the first accepted v2 RTX 4070 Ti baseline from clean commit `73df45e`.
+  Stable Chrome completed 56/56 samples, 28/28 semantic pairs, all stock and
+  packaging gates, and the two-minute continuity soak; WebGPU remained stable
+  through the 1.68-million-cell Meltdown tier 4.
+- Added the first accepted v3 Classic 3D RTX 4070 Ti baseline from clean commit
+  `efda975`. Stable Chrome completed 56/56 samples, 28/28 semantic pairs,
+  Arena/Track/Training stock checks, and a 120-second soak. Pretty and Showoff
+  held about 127 FPS; the strict 8 ms Meltdown classifier reached tier 1, while
+  tier 4 still averaged about 58 FPS in WebGPU versus 23 FPS in WebGL.
+- Added a capture-only fixed-tick controller shared by WebGL and WebGPU plus
+  `audit:render:parity`, which freezes matched Arena/Track/Training fixtures,
+  flushes GPU work, checks semantic state and same-backend repeatability, and
+  writes paired captures, amplified diffs, structural image metrics, and a
+  review-required report under ignored `parity-results/`.
+- Added a tracked renderer presentation matrix under
+  `devlog/renderer-parity/README.md` that separates exact/shared behavior,
+  WebGPU-native equivalents, intentional Core differences, parity suspects,
+  and the remaining visual audit fixtures.
+- Added a selectable WebGPU presentation policy. `?presentation=classic|core`
+  takes precedence over `localStorage.rippleWebGpuPresentation`, the pause menu
+  exposes the same choice, invalid values fail closed to Classic, and profile
+  changes preserve the active player position and simulation clock.
+- Added the Classic WebGPU field pipeline with procedural top caps and six
+  visible side quads plus a bottom cap per cell, animated prism height, smooth
+  radial side normals, lighting, and player pressure response. The
+  original flat-cap Core pipeline remains available unchanged.
+- Added policy checks, a dedicated Core-preservation/live-switch browser smoke,
+  geometry diagnostics, and separate Classic-default/Core renderer parity
+  audit commands.
+- Added early, middle, late, and post-expiry pulse captures to the fixed-tick
+  renderer audit, including source-lifetime assertions and per-backend
+  phase-to-phase image evidence.
+- Added a deterministic mocked-gamepad Playwright verifier that runs the same
+  connection, menu, Training, movement, camera, boost, brake, strafe, pulse,
+  jump, sensitivity, diagnostics, and haptic-call contract against WebGL and
+  forced WebGPU.
+
+### Changed
+
+- Reorganized the pause menu controls into accessible Graphics, Field,
+  Movement, and Effects tabs with click/tap and keyboard navigation, while
+  keeping Resume, Exit, and changelog actions continuously available.
+- Kept omitted and `auto` renderer requests on WebGL; explicit WebGPU requests
+  now fail visibly without silently falling back when WebGPU is unavailable.
+- Hardened the integration landing path: legacy persisted WebGPU preferences no
+  longer bypass Stage 0, field/quality rebuilds preserve the active player's
+  position and simulation clock, and runtime device loss stops the loop with a
+  visible terminal failure instead of leaving a frozen canvas.
+- Made browser verification confirm checkout identity before reusing its default
+  app/log pair, centralized forbidden WebGPU lifecycle diagnostics, and
+  exercised Arena, Track, and Training through one same-page menu lifecycle.
+- Adapted the forced-WebGPU runtime to the current `mainMenu`/`playing`/`paused`
+  lifecycle, fixed-step timing, base/boost controls, hover-pod presentation,
+  mode resets, Track clipping, Echo reseeding, hidden diagnostics, and Training
+  telemetry/HUD behavior.
+- Made `RaceTrack` remain the CPU gameplay owner while exposing versioned mask
+  bytes and packed wall segments to renderer modules. Training now supports an
+  optional Three scene and exposes an independent neutral marker snapshot.
+  Headless WebGPU gameplay instances no longer allocate unused Three wall,
+  mask-texture, or Training-marker visual resources.
+- Extended renderer stats/readiness diagnostics with course-wall and Training
+  fields through `trackWall.webgpu.*` and `training.webgpu.*`. The verified
+  runtime remains `diagnostic-core`, reports
+  `defaultEligible=false`, and now reports an empty remaining-gap list after
+  the integration, readiness, and two-minute default-soak checks passed.
+- Fixed local debug-log serialization so payload objects reused across multiple
+  readiness channels are not mistaken for circular references.
+- Kept automatic renderer rollout at a hard-zero Stage-0 cohort while emitting
+  `renderer.rollout.decision` diagnostics. Explicit modes remain immune, and
+  omitted/auto requests still resolve to WebGL.
+- Aligned continuous and pulse/Echo particle-density formulas across WebGL and
+  WebGPU so comparative workloads carry the same configured particle budgets.
+- Aligned forced-WebGPU Arena/Track Echo placement with current WebGL gameplay
+  rules, including vertical lift, deterministic Track offsets, horizontal
+  clearance checks, and random Arena sampling order. The fixed-tick audit now
+  verifies Echo/source identity plus Track mask/wall and Training marker state,
+  not only matching counts.
+- Corrected the shared flat-top hex lattice to stagger columns instead of rows,
+  aligned Three/WebGL and raw-WebGPU cap orientation and footprint scaling, and
+  removed the repeating triangular holes visible in dense Meltdown fields. A
+  fast geometry invariant now guards the three equal nearest-neighbor distances.
+- Versioned renderer benchmark artifacts as
+  `renderer-benchmark-v2-flat-top-column-stagger`, separated physical hardware
+  and actual selected adapters from environment metadata, removed raw PNP IDs,
+  and classified baseline comparisons as comparable, informational, or
+  incompatible before applying same-machine 10%/20% regression thresholds.
+- Advanced current benchmark evidence to
+  `renderer-benchmark-v3-classic-3d-tiles`, pinned benchmark and stock WebGPU
+  URLs to Classic, and required profile metadata so the old flat-Core v2
+  baseline cannot be treated as a compatible Classic performance baseline.
+- Hardened packaged benchmark provenance by building from a detached worktree at
+  the recorded commit, rechecking the clean branch/HEAD before acceptance,
+  requiring full sample-window coverage and matching stock/instrumented adapters,
+  validating cross-file bundle coherence, and making shortened test packages
+  explicitly ineligible for baseline use.
+- Made `classic` the forced-WebGPU default presentation now that it has true 3D
+  field geometry and dedicated coverage. The earlier minimalist treatment is
+  retained as selectable `core`; diagnostics and benchmark metadata identify
+  the active profile so renderer evidence remains auditable.
+- Aligned Classic WebGPU pulse dynamics with the WebGL reference: removed the
+  diagnostic wake amplification and duplicate source lift, restored the local
+  body-wake/material transfer, removed the extra WebGPU-only global settle, and
+  faded pulse lights and shadow proxies with each source's own lifetime.
+- Restricted the billboard pulse-glow proxy to the preserved Core profile and
+  made it consume per-source lifetimes; Classic now relies on its real local
+  lights, field response, particles, and bloom instead of carrying a second
+  fixed-horizon halo.
+- Brought main's once-per-render gamepad polling, controller-aware Training,
+  menu/tab navigation, sensitivity controls, app diagnostics, and jump, land,
+  Echo, and selection haptics into forced WebGPU without adding input state to
+  renderer snapshots or raw WebGPU passes.
+- Changed the parity audit to keep the user-selected field palette in semantic
+  parity while recording each profile's resolved palette as presentation
+  evidence, so Core's intentional Style Default neon palette no longer reports
+  a false gameplay-state mismatch.
+
 ## 0.5.5-ALPHA - 2026-07-13
 
 ### Added

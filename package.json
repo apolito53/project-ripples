@@ -4,21 +4,46 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1 --port 5183 --strictPort",
+    "dev": "node scripts/start-dev.mjs",
+    "dev:vite": "vite --host 127.0.0.1 --port 5183 --strictPort",
     "debug:logs": "node scripts/debug-log-server.mjs",
     "diagnostics": "node scripts/analyze-debug-log.mjs",
     "logs:summary": "node scripts/analyze-debug-log.mjs",
     "verify:perf": "node scripts/analyze-debug-log.mjs --max-frame-ms=1500 --max-rebuild-ms=1500 --max-update-ms=120 --max-render-ms=1500",
+    "verify:render:webgl": "node scripts/verify-render.mjs webgl",
+    "verify:gamepad": "node scripts/verify-gamepad.mjs",
+    "verify:webgpu:capabilities": "node scripts/verify-render.mjs webgpu-capabilities",
+    "verify:render:webgpu": "node scripts/verify-render.mjs webgpu",
+    "verify:render:webgpu:core": "node scripts/verify-render.mjs webgpu-core",
+    "verify:render:webgpu:stock": "node scripts/verify-render.mjs webgpu-stock",
+    "verify:render:webgpu:soak": "node scripts/verify-render.mjs webgpu-soak",
+    "verify:render:webgpu:readiness": "node scripts/verify-render.mjs webgpu-readiness",
+    "verify:render:webgpu:default-soak": "node scripts/verify-render.mjs webgpu-default-soak",
+    "verify:render:webgpu:device-lost": "node scripts/verify-render.mjs webgpu-device-lost",
+    "verify:render:webgpu:unavailable": "node scripts/verify-render.mjs webgpu-unavailable",
+    "verify:renderer:auto-rollout": "node scripts/verify-renderer-rollout.mjs",
+    "verify:renderer:presentation-profile": "node scripts/verify-presentation-profile.mjs",
+    "verify:smoke-harness": "node scripts/verify-smoke-harness.mjs",
+    "verify:hex-lattice": "node scripts/verify-hex-lattice.mjs",
+    "verify:benchmark:reporting": "node scripts/verify-benchmark-reporting.mjs",
+    "audit:render:parity": "npm run build && node scripts/audit-renderer-parity.mjs",
+    "audit:render:parity:core": "npm run build && node scripts/audit-renderer-parity.mjs --presentation=core",
+    "benchmark:renderers": "npm run build && node scripts/benchmark-renderers.mjs",
+    "benchmark:renderers:package": "node scripts/package-renderer-benchmark.mjs",
+    "smoke": "node scripts/smoke.mjs",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4183 --strictPort",
     "typecheck": "tsc --noEmit",
-    "validate": "npm run typecheck && npm run build"
+    "validate": "npm run typecheck && npm run build && npm run verify:hex-lattice && npm run verify:renderer:presentation-profile && npm run verify:smoke-harness && npm run smoke"
   },
   "dependencies": {
     "three": "^0.175.0"
   },
   "devDependencies": {
     "@types/three": "^0.184.0",
+    "@webgpu/types": "^0.1.70",
+    "playwright": "^1.61.1",
+    "pngjs": "^7.0.0",
     "typescript": "^5.8.3",
     "vite": "^8.0.16"
   }

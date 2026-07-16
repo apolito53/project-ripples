@@ -1,7 +1,9 @@
 # Ripple Field Lab
 
-A standalone GPU-heavy Three.js/Vite prototype for a field of luminous hex cells
-that ripple, glow, and throw particles when the player moves through them.
+A standalone GPU-heavy Vite prototype for a field of luminous hex cells that
+ripple, glow, and throw particles when the player moves through them. Three.js/
+WebGL remains the default renderer, with a raw-WebGPU runtime available for
+explicit integration testing.
 
 This is intentionally separate from `voxel-sandbox-engine`. The goal is to make
 a polished visual lab first, then borrow patterns or ideas later if they deserve
@@ -81,6 +83,7 @@ Gamepad controls use the browser's standard Xbox-style mapping:
 
 Keep the page focused and press a controller button after loading. Browsers may
 withhold an already-connected controller until the first user gesture.
+The same controller contract is active in WebGL and forced WebGPU.
 
 ## Startup Modes
 
@@ -115,8 +118,9 @@ generated.
 The arena edge is rendered as a smooth glowing gradient barrier so the playable
 boundary is visible in-world without looking like a tiled wall texture.
 
-The hex field is drawn as a single shader-animated cap surface. The render path
-keeps the field focused on lit hex caps for the upcoming spherical arena pass.
+The hex field is drawn as one instanced shader pass. WebGL and the default
+WebGPU Classic profile use real raised hex tiles with closed prism geometry;
+the optional WebGPU Core profile keeps the earlier minimalist flat-cap look.
 
 Meltdown uses a calibrated honeycomb footprint for visually interlocked tiny
 hexes, while lighter quality modes keep more breathing room.
@@ -161,9 +165,14 @@ texture for continuous surface response.
 
 ## Runtime Tuning
 
-The Esc/hamburger pause menu changes quality, skybox theme, hex size, arena
-radius, surface grip, ripple height/radius, Depth / Speed, particle density,
-bloom strength, and the diagnostics readouts while the scene is running.
+The Esc/hamburger pause menu groups live controls into **Graphics**, **Field**,
+**Movement**, and **Effects** tabs. It changes quality, skybox theme, field
+style/palette, hex size, arena radius, surface grip, ripple height/radius,
+Depth / Speed, particle density, bloom strength, and diagnostics while the
+scene is running. The tab strip supports click/tap plus Left/Right, Home, and
+End keyboard navigation. Controller Left/Right changes tabs while the tab strip
+is focused, then adjusts the visible slider or select once focus moves into a
+panel.
 
 Hex size treats the current cell scale as `1m`, ranges from `25cm` to `2m`, and
 measures the regular hexagon's widest point-to-point diameter. Changing it
@@ -214,6 +223,177 @@ closer to the arena instead of sinking below the play surface.
 - `Meltdown`: visually interlocked honeycomb hex density and intentionally
   excessive effects for GPU stress.
 
+## Renderer Backends
+
+Omitted renderer selection and `?renderer=auto` remain on Three/WebGL. Use
+`?renderer=webgl` to request it explicitly. `?renderer=webgpu` forces the raw
+WebGPU runtime; if the browser cannot initialize WebGPU, the app shows a visible
+failure state and does not silently fall back.
+
+During Stage 0, only the URL query may force WebGPU. A legacy
+`localStorage.rippleRendererMode = "webgpu"` preference is treated as `auto`, so
+an old persisted choice cannot bypass the dormant rollout policy.
+
+Both backends use the current menu, playing, and paused lifecycle; bounded
+fixed-step simulation; current base/boost controls; hover-pod behavior; mode
+resets; hidden diagnostics; Track clipping; Echo reseeding; and Training HUD/
+telemetry. Track and Training are course modes on both backends. In WebGPU they
+upload the neutral course mask, render the packed additive course walls, and
+disable the circular Arena curtain. Training also renders its neutral objective
+marker and keeps random Echo spawning disabled.
+
+The WebGPU readiness surface remains `diagnostic-core` and deliberately reports
+`defaultEligible=false`. Its automated integration/readiness gaps are empty,
+but automatic selection is held at rollout Stage 0 with a hard-zero cohort.
+`renderer.rollout.decision` records the dormant policy decision while broader
+hardware acceptance is gathered; explicit `webgl` and `webgpu` requests remain
+immune to the cohort policy.
+
+Forced WebGPU now defaults to the `classic` presentation profile. Classic draws
+each field cell as a real procedural hex prism with a top cap and six visible
+side walls, animated tile height, wake/source displacement, and profile-specific
+lighting. Classic now uses the same source fade, local body-wake response,
+unamplified wake-texture transfer, pulse-light envelope, and late wake settling
+policy as the WebGL reference. A downward cap keeps the field closed during the supported underside
+camera orbit. The original flat,
+minimalist WebGPU treatment remains available as `core`.
+
+Choose the profile with the pause-menu **Field Style** selector or with
+`?presentation=classic|core`. The query wins over
+`localStorage.rippleWebGpuPresentation`. With no query, a valid stored profile
+is used; with neither, Classic is the default. Invalid query or stored values
+fail closed to Classic. Switching profiles changes the field pipeline in place without
+resetting the current mode, player position, or simulation clock. WebGL ignores
+the WebGPU presentation preference.
+
+The adjacent **Field Palette** selector is renderer-neutral. **Style Default**
+keeps WebGL and WebGPU Classic on the current reference colors while preserving
+Core's original blue/cyan/purple/gold neon treatment. **Reference** and
+**Legacy Neon** can be forced explicitly on either renderer profile. Legacy
+Neon restores only the older color response; it continues using the corrected
+source fade, wake transfer, and pulse lifecycle.
+
+### Renderer Presentation Audit
+
+`npm.cmd run audit:render:parity` captures fixed-tick WebGL and WebGPU Classic
+fixtures for Pretty Arena, Showoff Track, and Pretty Training at 1280x720/DPR 1.
+The command builds current sources and owns strict preview port `4184`. The
+capture-only controller advances both simulations to exact ticks, freezes
+animation, flushes GPU work, checks same-backend repeatability, and verifies
+matching camera/player/mode/field state plus pulse-source, Echo, Track-mask,
+wall-geometry, and Training-marker identity before producing image evidence. Set
+`RIPPLE_PARITY_APP_URL` only when deliberately targeting an existing server.
+External-server reports are marked `external-unverified` and are not attributed
+to the current workspace commit.
+
+Arena and Track pulse evidence follows one manual source through early (0.6s),
+middle (3.75s), late (6.5s), and post-expiry (8.0s) captures. The audit verifies
+that the source remains present through late phase, is pruned after its own
+lifetime, and records both cross-backend and phase-to-phase image metrics so a
+held middle or abrupt ending is visible in the report.
+
+Use `npm.cmd run audit:render:parity:core` to audit the preserved minimalist
+profile. Ignored results land under `parity-results/<profile>-<timestamp>/` as raw PNGs, side-by-
+side amplified-diff strips, `report.json`, and `summary.md`. Cross-renderer
+histogram, coarse-luma, edge-density, and RGB-delta metrics guide review but do
+not assert naive pixel equality. The tracked classification and remaining
+fixtures live in `devlog/renderer-parity/README.md`.
+
+### Renderer Benchmark
+
+`npm.cmd run benchmark:renderers` builds production assets, starts the preview
+server on `4183` when needed, and compares WebGL with WebGPU at a fixed
+1280x720/DPR 1. It runs Pretty Arena, moving Showoff Track, and a five-tier
+Meltdown field ramp with balanced backend order and four thermally rotated
+repetitions.
+Results are written under `benchmark-results/<timestamp>/` as `summary.json`,
+`samples.ndjson.gz`, and `summary.md`. Set
+`RIPPLE_BENCHMARK_CAPTURE_FIRST_REPETITION=1` when the standalone benchmark
+also needs representative canvas captures.
+
+The page-side benchmark API records RAF interval, update CPU, snapshot CPU,
+render/submit CPU, and nonblocking GPU timer-query duration. The report also
+captures browser, CPU, GPU/driver, adapter limits/features, power plan, measured
+refresh interval, semantic workload parity, and the highest stable stress tier.
+
+Useful overrides:
+
+```powershell
+$env:RIPPLE_BENCHMARK_CASES='pretty-arena,showoff-track-motion'
+$env:RIPPLE_BENCHMARK_REPETITIONS='1'
+$env:RIPPLE_BENCHMARK_BASELINE='benchmark-results\previous\baseline.json'
+npm.cmd run benchmark:renderers
+```
+
+The current v3 protocol/workload ID is
+`renderer-benchmark-v3-classic-3d-tiles`. WebGPU benchmark and stock-acceptance
+URLs explicitly request Classic, and each sample must report that presentation
+profile. A baseline must match the v3 ID
+and the fixed workload configuration before regression math runs. Compatible
+same-hardware comparisons warn at a 10% p95 regression and fail at 20% or when
+a stable Meltdown tier is lost. Compatible cross-hardware comparisons are
+classified as informational; protocol or workload mismatches are incompatible
+and include reasons. A same-hardware warning remains a warning in the comparison
+report, but it blocks packaged acceptance and baseline promotion until reviewed.
+The accepted v2 flat-Core baseline remains tracked as historical evidence but is
+intentionally incompatible with Classic 3D measurements.
+
+For decision-grade cross-hardware evidence, run:
+
+```powershell
+$env:RIPPLE_CHROME_CHANNEL='chrome'
+npm.cmd run benchmark:renderers:package
+```
+
+Browser checks start and own the default `5183`/`5184` pair when those ports are
+free, and may reuse them when both servers identify the current checkout. To
+target another already-running pair, set all four `RIPPLE_APP_URL` and
+`RIPPLE_LOG_*_URL` variables together. Reusing an unverifiable default-port pair
+requires the explicit `RIPPLE_ALLOW_EXISTING_SERVERS=1` acknowledgement; this
+prevents a verifier from silently testing another worktree.
+
+The package command refuses a dirty Git tree, checks out the recorded commit in
+a temporary detached source worktree, runs `npm ci` from that commit's lockfile,
+builds those exact production assets, and owns the strict preview on
+`127.0.0.1:4183`; an existing listener is an error.
+It launches stable Chrome without fallback, verifies stock no-flags WebGPU in
+Arena, Track, and Training, completes a 120-second stock soak, then runs the
+fixed seven-case instrumented benchmark for four repetitions with 5-second
+warmup and 15-second sample windows. Acceptance requires complete sample-window
+coverage, semantic parity, the same WebGPU adapter in stock and instrumented
+phases, healthy stock modes/soak, no browser errors, device loss, or fallback,
+stable WebGPU Pretty and Showoff samples, at least 25% fresh GPU timer coverage,
+zero timer errors, and bounded stock canvas metrics. The branch, HEAD, and clean
+state are checked again before the acceptance decision.
+
+Each accepted package contains only relative artifact paths: `manifest.json`,
+`acceptance.json`, `baseline.json`, `summary.json`, `summary.md`,
+`samples.ndjson.gz`, stock captures, and first-repetition renderer captures.
+The manifest records SHA-256 and byte size for every payload file and verifies
+the run, protocol, workload, sample count, and source-commit relationships
+across the bundle. An optional comparison baseline is copied into the package
+and checksummed. Physical hardware and actual selected adapters are separated
+from browser/driver/runtime metadata, raw Windows PNP IDs are excluded, and
+portable failures omit local paths and stacks.
+
+`RIPPLE_BENCHMARK_PACKAGE_TEST=1` selects a deterministic shortened profile
+with one repetition and a 1.5-second soak for tooling verification. A healthy
+test run reports `test-only-passed`, `decisionGrade=false`, and an ineligible
+baseline projection. It is intentionally incompatible with a full acceptance
+baseline and is not cross-hardware evidence.
+
+The accepted current Classic baseline is tracked under
+`devlog/benchmark-baselines/rtx-4070-ti-2026-07-14-efda975/`. Its clean stable-
+Chrome package passed 56/56 samples, all 28 semantic pairs, stock Arena/Track/
+Training, and the 120-second soak. Pretty and Showoff held about 127 FPS. Under
+the strict 8 ms measured-refresh budget, WebGPU's stable Meltdown tier was 1;
+at tier 4 it still averaged about 58 FPS and 17.19 ms GPU time versus WebGL's
+23 FPS and 44.01 ms. The v2 flat-Core package under
+`devlog/benchmark-baselines/rtx-4070-ti-2026-07-12-73df45e/` remains historical
+and intentionally incompatible. The July 11 dirty pre-column-stagger note is
+superseded. `auto` nevertheless remains WebGL at the Stage-0 zero-percent
+rollout.
+
 ## Development
 
 ```powershell
@@ -223,7 +403,32 @@ npm.cmd run diagnostics
 npm.cmd run typecheck
 npm.cmd run build
 npm.cmd run validate
+npm.cmd run verify:render:webgl
+npm.cmd run verify:gamepad
+npm.cmd run verify:webgpu:capabilities
+npm.cmd run verify:render:webgpu
+npm.cmd run verify:render:webgpu:core
+npm.cmd run verify:render:webgpu:stock
+npm.cmd run verify:render:webgpu:unavailable
+npm.cmd run verify:render:webgpu:soak
+npm.cmd run verify:render:webgpu:readiness
+npm.cmd run verify:render:webgpu:default-soak
+npm.cmd run verify:render:webgpu:device-lost
+npm.cmd run verify:renderer:auto-rollout
+npm.cmd run verify:smoke-harness
+npm.cmd run verify:hex-lattice
+npm.cmd run verify:benchmark:reporting
+npm.cmd run audit:render:parity
+npm.cmd run audit:render:parity:core
+npm.cmd run benchmark:renderers
+npm.cmd run benchmark:renderers:package
 ```
+
+`verify:gamepad` injects a deterministic standard-mapped controller into
+Chrome and runs the same menu, Training, movement, camera, boost, brake,
+strafe, pulse, jump, sensitivity, and haptic-call contract against WebGL and
+forced WebGPU. It complements rather than replaces a final real-controller
+acceptance check for physical mapping and motor output.
 
 Local runs emit debug logs for Echo detonations, including particle burst counts
 and frame timings around collection. Broader frame warnings cover stalls outside
@@ -270,6 +475,16 @@ Versioning:
   gameplay, and pause, including clean mode starts, `?mode=` shortcuts,
   mode-specific player/Echo/runtime resets, course-mode scale guardrail bypass,
   Training Run lifecycle, and Echo reseeding after play-area rebuilds.
+- `src/render/rendererMode.ts` owns conservative backend selection;
+  `src/render/threeRenderRuntime.ts` wraps the current WebGL renderer, while
+  `src/render/webGpuApp.ts` adapts the same gameplay lifecycle and neutral state
+  into `src/render/webGpuRenderRuntime.ts`.
+- `src/render/types.ts` defines renderer-neutral frame, Track wall/mask,
+  Training marker, scene, and stats contracts. Raw-WebGPU modules consume those
+  contracts and do not import `RaceTrack`.
+- `src/render/webGpuTrackWallPass.ts` and
+  `src/render/webGpuTrainingMarkerPass.ts` own the additive course-wall and
+  objective-marker passes that read the shared field depth.
 - `src/trainingRun.ts` owns the guided Training Run director: step definitions,
   current objective checks, marker placement, scripted Echo requests, completion
   pulse trigger, tutorial HUD state, and `training.*` diagnostics.

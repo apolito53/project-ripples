@@ -5,6 +5,34 @@ concrete follow-ups that we actually intend to revisit.
 
 ## High Priority
 
+- Close the remaining Classic renderer presentation audit without erasing
+  WebGPU Core.
+  The fixed-tick Arena/Track/Training audit now proves matching semantic state
+  and records paired captures under `parity-results/`, while the tracked matrix
+  in `devlog/renderer-parity/README.md` separates intentional Core differences
+  from Classic parity suspects. Classic now uses true top-and-six-side prism
+  geometry, profile-specific lighting/height response, and is the forced-WebGPU
+  default; Core remains selectable in place. Add Clean jump/Echo, Training completion,
+  Meltdown grazing-camera, all-skybox, and Track wake-persistence fixtures;
+  resolve particle depth, skybox/fog, Echo field response, arena curtain,
+  stage-floor/fixture, light/shadow, and output-transform decisions in Classic.
+  Add a named renderer-neutral
+  particle RNG stream so particle placement can join the exact audit snapshot.
+
+- Repeat the accepted `renderer-benchmark-v3-classic-3d-tiles` package on at
+  least one integrated/lower-power GPU and one older or different-vendor
+  discrete GPU. The clean RTX 4070 Ti Classic baseline is tracked under
+  `devlog/benchmark-baselines/rtx-4070-ti-2026-07-14-efda975/`: all 56 samples,
+  28 semantic pairs, stock modes, and the 120-second soak passed. Pretty and
+  Showoff stayed refresh-capped; the strict Meltdown stability tier was 1, while
+  tier 4 still ran about 2.55x faster than WebGL. The clean v2 Core baseline
+  remains historical, intentionally incompatible evidence under
+  `devlog/benchmark-baselines/rtx-4070-ti-2026-07-12-73df45e/`; the old July 11
+  dirty pre-column-stagger result remains superseded.
+  Stage 0 keeps `auto` on WebGL and `defaultEligible=false` while those artifacts
+  establish cross-adapter confidence. Only then implement same-navigation
+  startup fallback/runtime-loss recovery and consider a 5% allowlisted cohort.
+
 - Shape the lab into a racing-game prototype.
   First pass now has a wide non-crossing track ribbon inside the arena with
   bright glowing walls, heavy off-track dimming, track-scoped Echo placement,
@@ -54,6 +82,25 @@ concrete follow-ups that we actually intend to revisit.
 
 ## Done / Recent Decisions
 
+- Integrated main's standard-mapped controller behavior into forced WebGPU and
+  added one deterministic Playwright contract for WebGL/WebGPU menu navigation,
+  Training alternatives, movement, camera, boost, brake, strafe, pulse, jump,
+  sensitivity, diagnostics, and haptic requests. Physical mapping and motor
+  output still need one real-controller Chrome acceptance pass.
+- Added shared pause-menu category tabs and a renderer-neutral field-palette
+  selector. Style Default follows each presentation profile, while Legacy Neon
+  deliberately restores color without restoring the retired WebGPU pulse
+  lifecycle.
+- Added the default Classic WebGPU profile with procedural 3D hex prisms,
+  animated tile thickness, real side-face lighting, query/storage/menu policy,
+  live session-preserving profile switches, and dedicated browser/parity checks.
+- Aligned Classic's complete pulse lifecycle with WebGL: source and wake transfer,
+  immediate player body wake, pulse-light/shadow fading, late wake settling, and
+  per-source expiry. The parity audit now records early, middle, late, and
+  post-expiry evidence while Core keeps its stylized pulse proxy.
+- Preserved the minimalist WebGPU art direction as selectable `core` and added a deterministic fixed-tick
+  renderer presentation audit with state matching, repeatability checks, paired
+  captures, image metrics, and amplified diffs.
 - Filled the circular arena with cubes instead of stopping the field at a square
   patch.
 - Clamped the player avatar inside the same circular arena used by the cube

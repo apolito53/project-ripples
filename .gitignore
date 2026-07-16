@@ -4,3 +4,5 @@ dist/
 *.log
 *.local
 logs/**/*.jsonl
+benchmark-results/
+parity-results/

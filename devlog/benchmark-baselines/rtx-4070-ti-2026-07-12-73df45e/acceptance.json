@@ -1,0 +1,258 @@
+{
+  "schemaVersion": 2,
+  "protocolVersion": "renderer-benchmark-v2-flat-top-column-stagger",
+  "workloadVersion": "renderer-benchmark-v2-flat-top-column-stagger",
+  "runId": "2026-07-12T06-54-07-571Z-package",
+  "packageProfile": "cross-hardware-acceptance",
+  "decisionGrade": true,
+  "status": "passed",
+  "thresholds": {
+    "timerCoverageMinimum": 0.25,
+    "sameMachineWarningPercent": 10,
+    "sameMachineFailurePercent": 20,
+    "stockSoakMs": 120000
+  },
+  "gates": {
+    "decisionGradeProtocol": {
+      "passed": true,
+      "detail": "Decision-grade protocol contains seven fixed cases, four repetitions, 28 pairs, and 56 samples."
+    },
+    "cleanTree": {
+      "passed": true,
+      "detail": "Git tree remained clean at codex/webgpu-core-integration@73df45e5c61e for the entire run."
+    },
+    "packageLifecycle": {
+      "passed": true,
+      "detail": "Strict preview and detached source worktree shut down cleanly before acceptance."
+    },
+    "benchmarkCompleted": {
+      "passed": true,
+      "detail": "Instrumented benchmark completed."
+    },
+    "semanticParity": {
+      "passed": true,
+      "detail": "28/28 paired checks passed."
+    },
+    "stockModes": {
+      "passed": true,
+      "detail": "Passed stock modes: arena, track, training."
+    },
+    "stockSoak": {
+      "passed": true,
+      "detail": "Observed 120055 ms of the required 120000 ms stock soak."
+    },
+    "adapterConsistency": {
+      "passed": true,
+      "detail": "Stock and instrumented runs selected nvidia / lovelace."
+    },
+    "runtimeHealth": {
+      "passed": true,
+      "detail": "Stock problems=0; benchmark problems=0."
+    },
+    "webGpuPrettyShowoffStable": {
+      "passed": true,
+      "detail": "WebGPU Pretty Arena and Showoff Track must have every repetition marked stable."
+    },
+    "timerCoverage": {
+      "passed": true,
+      "detail": "Minimum fresh GPU timer coverage was +64.1529%; required >=25%."
+    },
+    "timerErrors": {
+      "passed": true,
+      "detail": "Maximum reported GPU timer error count was 0."
+    },
+    "visualBounds": {
+      "passed": true,
+      "detail": "5/5 stock canvas checks stayed within bounds."
+    },
+    "baselineRegression": {
+      "passed": true,
+      "detail": "No prior baseline was supplied; this accepted run may become the v2 baseline."
+    }
+  },
+  "failedGateIds": [],
+  "comparison": null,
+  "stock": {
+    "schemaVersion": 2,
+    "protocolVersion": "renderer-benchmark-v2-flat-top-column-stagger",
+    "workloadVersion": "renderer-benchmark-v2-flat-top-column-stagger",
+    "browser": {
+      "name": "Chrome",
+      "version": "150.0.7871.101",
+      "channel": "chrome",
+      "headless": true,
+      "args": []
+    },
+    "startedAt": "2026-07-12T06:54:12.171Z",
+    "finishedAt": "2026-07-12T06:56:21.394Z",
+    "durationMs": 129223,
+    "modes": [
+      {
+        "mode": "arena",
+        "scenario": "pretty-arena",
+        "qualityId": "pretty",
+        "passed": true,
+        "instrumented": false,
+        "sampleCount": 2,
+        "deviceLost": false,
+        "fallbackObserved": false,
+        "problemCount": 0,
+        "selectedAdapter": {
+          "description": "nvidia / lovelace"
+        },
+        "capturePath": "captures/stock/arena.png"
+      },
+      {
+        "mode": "track",
+        "scenario": "pretty-arena",
+        "qualityId": "pretty",
+        "passed": true,
+        "instrumented": false,
+        "sampleCount": 3,
+        "deviceLost": false,
+        "fallbackObserved": false,
+        "problemCount": 0,
+        "selectedAdapter": {
+          "description": "nvidia / lovelace"
+        },
+        "capturePath": "captures/stock/track.png"
+      },
+      {
+        "mode": "training",
+        "scenario": "pretty-arena",
+        "qualityId": "pretty",
+        "passed": true,
+        "instrumented": false,
+        "sampleCount": 2,
+        "deviceLost": false,
+        "fallbackObserved": false,
+        "problemCount": 0,
+        "selectedAdapter": {
+          "description": "nvidia / lovelace"
+        },
+        "capturePath": "captures/stock/training.png"
+      }
+    ],
+    "soak": {
+      "passed": true,
+      "instrumented": false,
+      "requestedDurationMs": 120000,
+      "observedDurationMs": 120055,
+      "sampleCount": 24,
+      "deviceLost": false,
+      "fallbackObserved": false,
+      "selectedAdapter": {
+        "description": "nvidia / lovelace"
+      },
+      "frameContinuity": {
+        "pollIntervalMs": 250,
+        "maximumAllowedFrameGapMs": 2000,
+        "maximumObservedFrameGapMs": 521,
+        "observedFrameCount": 238,
+        "finalFrameIndex": 4089,
+        "finalFramePageMs": 121033.6
+      },
+      "animation": {
+        "passed": true,
+        "changedRatio": 0.855215,
+        "averageDiff": 23.771363
+      }
+    },
+    "visualLimits": {
+      "minimumAverageBrightness": 2,
+      "minimumNonBlackRatio": 0.01,
+      "maximumAverageBrightness": 185,
+      "maximumGlareRatio": 0.22,
+      "maximumCyanWashRatio": 0.9,
+      "maximumBlueWashRatio": 0.94
+    },
+    "visualChecks": [
+      {
+        "id": "stock-arena",
+        "path": "captures/stock/arena.png",
+        "passed": true,
+        "reasons": [],
+        "metrics": {
+          "width": 1280,
+          "height": 720,
+          "maxBrightness": 255,
+          "averageBrightness": 41.70854,
+          "nonBlackRatio": 1,
+          "glareRatio": 0.000459,
+          "cyanWashRatio": 0.095671,
+          "blueWashRatio": 0.220036
+        }
+      },
+      {
+        "id": "stock-track",
+        "path": "captures/stock/track.png",
+        "passed": true,
+        "reasons": [],
+        "metrics": {
+          "width": 1280,
+          "height": 720,
+          "maxBrightness": 255,
+          "averageBrightness": 76.39917,
+          "nonBlackRatio": 1,
+          "glareRatio": 0.025636,
+          "cyanWashRatio": 0.359717,
+          "blueWashRatio": 0.389423
+        }
+      },
+      {
+        "id": "stock-training",
+        "path": "captures/stock/training.png",
+        "passed": true,
+        "reasons": [],
+        "metrics": {
+          "width": 1280,
+          "height": 720,
+          "maxBrightness": 255,
+          "averageBrightness": 76.651019,
+          "nonBlackRatio": 1,
+          "glareRatio": 0.025879,
+          "cyanWashRatio": 0.349788,
+          "blueWashRatio": 0.381147
+        }
+      },
+      {
+        "id": "stock-soak-initial",
+        "path": "captures/stock/soak-initial.png",
+        "passed": true,
+        "reasons": [],
+        "metrics": {
+          "width": 1280,
+          "height": 720,
+          "maxBrightness": 255,
+          "averageBrightness": 39.13965,
+          "nonBlackRatio": 1,
+          "glareRatio": 0.000417,
+          "cyanWashRatio": 0.034542,
+          "blueWashRatio": 0.155714
+        }
+      },
+      {
+        "id": "stock-soak-final",
+        "path": "captures/stock/soak-final.png",
+        "passed": true,
+        "reasons": [],
+        "metrics": {
+          "width": 1280,
+          "height": 720,
+          "maxBrightness": 255,
+          "averageBrightness": 25.303889,
+          "nonBlackRatio": 1,
+          "glareRatio": 0.000217,
+          "cyanWashRatio": 0.005468,
+          "blueWashRatio": 0.02914
+        }
+      }
+    ],
+    "health": {
+      "passed": true,
+      "problemCount": 0,
+      "deviceLost": false,
+      "fallbackObserved": false
+    }
+  }
+}

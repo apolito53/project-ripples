@@ -1,8 +1,4 @@
 import * as THREE from "three";
-import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
-import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
-import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
-import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { ArenaBarrier } from "./arenaBarrier";
 import {
   PlayerRig,
@@ -16,6 +12,7 @@ import {
 } from "./controls";
 import { debugEvent, debugMeasure, roundMetric, vectorPayload, type RippleDebugPayload } from "./debugLog";
 import { EchoZoneField, type TriggeredEchoZone } from "./echoZones";
+import { isFieldPaletteId, resolveFieldPaletteForProfile } from "./fieldPalette";
 import { applyFieldInstanceBudget, type FieldScaleChangedControl } from "./fieldScaleGuardrails";
 import {
   createGlobalFrameHitchEvent,
@@ -25,6 +22,7 @@ import {
 import { GAMEPAD_BUTTON, GamepadInput, type GamepadNavigationDirection } from "./gamepadInput";
 import { cloneDefaultSettings, getQualityPreset } from "./labSettings";
 import { ParticleVeil } from "./particleVeil";
+import { wirePauseMenuTabs } from "./pauseMenuTabs";
 import { PulseLightRig } from "./pulseLights";
 import {
   ARENA_RADIUS_MAX_METERS,
@@ -35,7 +33,32 @@ import {
   type QualityPreset
 } from "./qualityPresets";
 import { RaceTrack } from "./raceTrack";
-import { RippleField, type FieldPlacementClipper } from "./rippleField";
+import { resolveRendererMode } from "./render/rendererMode";
+import {
+  ensureStableRendererInstallId,
+  evaluateRendererRollout,
+  identifyRendererBrowser,
+  readRendererRolloutHealthState,
+  type RendererRolloutDecision
+} from "./render/rendererRollout";
+import {
+  applyRenderBenchmarkSettings,
+  createRenderBenchmarkMotion,
+  isRenderBenchmarkEnabled,
+  recordRenderBenchmarkFrame,
+  setRenderBenchmarkMetadata
+} from "./render/renderBenchmark";
+import {
+  createVisualCaptureCourseState,
+  createVisualCaptureEchoState,
+  createVisualCaptureSourceState,
+  createRenderVisualCaptureController,
+  hashVisualCaptureNumbers
+} from "./render/renderVisualCapture";
+import { ThreeRenderRuntime } from "./render/threeRenderRuntime";
+import { startWebGpuApp } from "./render/webGpuApp";
+import { RippleField } from "./rippleField";
+import type { FieldPlacementClipper } from "./rippleFieldLayout";
 import { RippleSourceStore, type RippleSourceOptions } from "./rippleSources";
 import { SKYBOX_OPTIONS, SkyboxManager, isSkyboxId } from "./skybox";
 import "./styles.css";
@@ -45,6 +68,12 @@ import { WakeField } from "./wakeField";
 import { getBasePropagationSpeedMetersPerSecond } from "./waveMedium";
 import changelogMarkdown from "../CHANGELOG.md?raw";
 import packageMetadata from "../package.json";
+
+function requireElement<T extends HTMLElement>(selector: string): T {
+  const element = document.querySelector<T>(selector);
+  if (!element) throw new Error(`Missing required element: ${selector}`);
+  return element;
+}
 
 const app = requireElement<HTMLElement>("#app");
 const mainMenu = requireElement<HTMLElement>("#main-menu");
@@ -63,6 +92,7 @@ const trainingInstruction = requireElement<HTMLElement>("#training-instruction")
 const trainingProgress = requireElement<HTMLElement>("#training-progress");
 const qualitySelect = requireElement<HTMLSelectElement>("#quality-select");
 const skyboxSelect = requireElement<HTMLSelectElement>("#skybox-select");
+const fieldPaletteSelect = requireElement<HTMLSelectElement>("#field-palette-select");
 const voxelSizeSlider = requireElement<HTMLInputElement>("#voxel-size-slider");
 const voxelSizeValue = requireElement<HTMLOutputElement>("#voxel-size-value");
 const arenaRadiusSlider = requireElement<HTMLInputElement>("#arena-radius-slider");
@@ -110,6 +140,9 @@ const perfWaves = requireElement<HTMLElement>("#perf-waves");
 const perfWake = requireElement<HTMLElement>("#perf-wake");
 const perfRenderer = requireElement<HTMLElement>("#perf-renderer");
 const APP_VERSION = `v${packageMetadata.version}`;
+const RENDERER_ROLLOUT_BUILD_ID = `ripple-field-lab-${packageMetadata.version}`;
+const RENDERER_ROLLOUT_PERCENT = 0;
+const RENDERER_ROLLOUT_STAGE = "stage-0-disabled";
 const PLAYER_BOUNDARY_PADDING = 1.1;
 const PLAYER_START_HEIGHT = 1.75;
 const TRACK_FIELD_SAFETY_SKIRT_METERS = 10;
@@ -220,25 +253,116 @@ type SceneLightSource = {
   readonly phaseOffset: number;
 };
 
-const renderer = new THREE.WebGLRenderer({
-  antialias: true,
-  powerPreference: "high-performance"
-});
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.72;
-renderer.setClearColor(0x020409, 1);
-// Postprocessing uses multiple internal renders. Manual info resets let the
-// perf overlay report the whole frame instead of only the final composer pass.
-renderer.info.autoReset = false;
-app.append(renderer.domElement);
+function createRendererRolloutDecision(
+  requestedMode: "auto" | "webgl" | "webgpu"
+): RendererRolloutDecision {
+  if (requestedMode !== "auto") return evaluateRendererRollout({ requestedMode });
+
+  const storage = getSafeLocalStorage();
+  const installIdResolution = ensureStableRendererInstallId(storage);
+  const userAgentData = navigator as Navigator & {
+    readonly userAgentData?: { readonly brands?: readonly { readonly brand: string; readonly version: string }[] };
+  };
+  return evaluateRendererRollout({
+    requestedMode: "auto",
+    auto: {
+      nowMs: Date.now(),
+      config: {
+        buildId: RENDERER_ROLLOUT_BUILD_ID,
+        rolloutPercent: RENDERER_ROLLOUT_PERCENT,
+        cohortKey: "ripple-webgpu-v1"
+      },
+      environment: {
+        secureContext: window.isSecureContext,
+        navigatorGpuAvailable: Boolean(navigator.gpu),
+        storageWritable: installIdResolution.storageWritable,
+        browser: identifyRendererBrowser(
+          navigator.userAgent,
+          userAgentData.userAgentData?.brands ?? []
+        ),
+        // Stage 0 deliberately avoids adapter discovery. The active runtime is
+        // the capability probe once a later build enables a real cohort.
+        maxTextureDimension2D: null
+      },
+      installId: installIdResolution.installId,
+      healthState: readRendererRolloutHealthState(storage)
+    }
+  });
+}
+
+function reportRendererRolloutDecision(decision: RendererRolloutDecision): void {
+  const payload = {
+    rolloutStage: RENDERER_ROLLOUT_STAGE,
+    buildId: decision.buildId ?? RENDERER_ROLLOUT_BUILD_ID,
+    requestedMode: decision.requestedMode,
+    selectedMode: decision.selectedMode,
+    policyKind: decision.policyKind,
+    decisionCode: decision.decisionCode,
+    rolloutPercent: decision.rolloutPercent ?? RENDERER_ROLLOUT_PERCENT,
+    cohortBucket: decision.cohortBucket,
+    cohortEligible: decision.checks?.cohortEligible ?? null,
+    autoEligible: decision.autoEligible,
+    blockingReasons: [...decision.blockingReasons],
+    cooldownRemainingMs: decision.cooldownRemainingMs,
+    defaultEligible: false
+  };
+  debugEvent("renderer.rollout.decision", "Resolved renderer rollout policy", payload, "info");
+  if ((decision.cooldownRemainingMs ?? 0) > 0) {
+    debugEvent("renderer.rollout.cooldown", "WebGPU auto rollout is cooling down", payload, "info");
+  }
+}
+
+function getSafeLocalStorage(): Storage | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+const rendererModeSelection = resolveRendererMode();
+const rendererRolloutDecision = createRendererRolloutDecision(rendererModeSelection.requestedMode);
+reportRendererRolloutDecision(rendererRolloutDecision);
+
+if (rendererModeSelection.requestedMode === "webgpu") {
+  void startWebGpuApp(
+    rendererModeSelection,
+    (fieldRadius, arenaRadiusMeters) => new RaceTrack(null, fieldRadius, arenaRadiusMeters)
+  );
+} else {
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x020409);
-const skybox = new SkyboxManager(scene, renderer);
 const camera = new THREE.PerspectiveCamera(54, 1, 0.1, 450);
 const clock = new THREE.Clock();
 const settings = cloneDefaultSettings();
+applyRenderBenchmarkSettings(settings);
+const renderRuntime = new ThreeRenderRuntime({
+  app,
+  scene,
+  camera,
+  initialBloomStrength: settings.bloomStrength,
+  fallbackReason: rendererModeSelection.fallbackReason
+});
+const renderer = renderRuntime.renderer;
+const composer = renderRuntime.composer;
+const bloomPass = renderRuntime.bloomPass;
+const webGlContext = renderer.getContext();
+const webGlDebugInfo = webGlContext.getExtension("WEBGL_debug_renderer_info");
+setRenderBenchmarkMetadata({
+  presentationProfile: "webgl-reference",
+  userAgent: navigator.userAgent,
+  hardwareConcurrency: navigator.hardwareConcurrency,
+  deviceMemoryGiB: (navigator as Navigator & { readonly deviceMemory?: number }).deviceMemory ?? null,
+  webGlRenderer: webGlDebugInfo
+    ? webGlContext.getParameter(webGlDebugInfo.UNMASKED_RENDERER_WEBGL)
+    : webGlContext.getParameter(webGlContext.RENDERER),
+  webGlVendor: webGlDebugInfo
+    ? webGlContext.getParameter(webGlDebugInfo.UNMASKED_VENDOR_WEBGL)
+    : webGlContext.getParameter(webGlContext.VENDOR),
+  webGlVersion: webGlContext.getParameter(webGlContext.VERSION)
+});
+const skybox = new SkyboxManager(scene, renderer);
 const fieldStressModeEnabled = isFieldStressModeEnabled();
 let preset = getQualityPreset(settings);
 let frameCount = 0;
@@ -249,13 +373,17 @@ let echoDebugFrameWatchUntil = -Infinity;
 let echoDebugLastFrameLogAt = -Infinity;
 let lastGlobalFrameHitchLogAt = -Infinity;
 let lastFrameUpdateMs = 0;
+let lastFrameSnapshotMs = 0;
 let lastFrameRenderMs = 0;
 let lastRawDeltaMs = 0;
+let lastRendererFrameSampleAt = -Infinity;
 let simulationTimeSeconds = 0;
 let lastSimulatedDeltaSeconds = 0;
 let lastSimStepCount = 0;
 let fieldRebuildTimeoutId = 0;
 const previousWakePlayerPosition = new THREE.Vector3();
+const benchmarkPlayerPosition = new THREE.Vector3();
+const benchmarkPlayerVelocity = new THREE.Vector3();
 const sceneLightSources: SceneLightSource[] = [];
 const mobileQuery = window.matchMedia("(pointer: coarse), (hover: none)");
 const activeTouchSticks = new Map<number, TouchStickState>();
@@ -282,14 +410,6 @@ type TouchStickState = {
   lastY: number;
 };
 
-const composer = new EffectComposer(renderer);
-const renderPass = new RenderPass(scene, camera);
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), settings.bloomStrength, 0.3, 0.95);
-const outputPass = new OutputPass();
-composer.addPass(renderPass);
-composer.addPass(bloomPass);
-composer.addPass(outputPass);
-
 const rippleSources = new RippleSourceStore();
 const echoZones = new EchoZoneField(scene);
 const gamepad = new GamepadInput();
@@ -310,7 +430,7 @@ const avatar = createAvatar();
 scene.add(avatar.object);
 
 const player = new PlayerRig({
-  canvas: renderer.domElement,
+  canvas: renderRuntime.canvas,
   camera,
   sampleHeight: sampleFieldHeight,
   getBoundaryRadius: () => Math.max(0, preset.fieldRadius - PLAYER_BOUNDARY_PADDING),
@@ -342,6 +462,7 @@ const arenaBarrier = new ArenaBarrier(scene);
 skybox.setSkybox(settings.skyboxId);
 syncControlValues();
 wireControls();
+wirePauseMenuTabs();
 updateTuningReadouts();
 applyQualityPreset(preset, true);
 resize();
@@ -350,6 +471,14 @@ window.addEventListener("resize", resize);
 window.visualViewport?.addEventListener("resize", resize);
 window.visualViewport?.addEventListener("scroll", resize);
 
+const visualCapture = createRenderVisualCaptureController({
+  fixedStepSeconds: SIM_STEP_SECONDS,
+  describe: describeWebGlVisualCapture,
+  waitForGpuIdle: async () => {
+    webGlContext.finish();
+  }
+});
+
 const requestedMode = readRequestedPlayMode();
 if (requestedMode) {
   startGame(requestedMode, "query");
@@ -357,7 +486,7 @@ if (requestedMode) {
   showMainMenu(false, "startup");
 }
 
-renderer.setAnimationLoop(animate);
+renderRuntime.setAnimationLoop(animate);
 
 function startGame(mode: PlayModeId, reason = "menu"): void {
   activePlayMode = mode;
@@ -369,6 +498,7 @@ function startGame(mode: PlayModeId, reason = "menu"): void {
   cancelScheduledFieldRebuild();
   applyPlayMode(mode, reason);
   updateAppChrome();
+  reportWebGlRendererMode();
 
   debugEvent("mode.select", "Started Ripple Field Lab play mode", {
     mode,
@@ -398,6 +528,7 @@ function showMainMenu(shouldFocus = true, reason = "exit"): void {
   player.resetForSession(spawn.position, spawn.facingYaw);
   previousWakePlayerPosition.copy(player.position);
   updateAppChrome();
+  reportWebGlRendererMode();
 
   debugEvent("mode.menu", "Returned to main menu", {
     reason,
@@ -443,6 +574,7 @@ function resetSimulationClock(): void {
   simulationTimeSeconds = 0;
   lastSimulatedDeltaSeconds = 0;
   lastSimStepCount = 0;
+  lastRendererFrameSampleAt = -Infinity;
 }
 
 function resetRuntimeState(reason: string): void {
@@ -580,18 +712,22 @@ function renderTrainingProgress(state: TrainingHudState): void {
   }
 }
 
-function animate(): void {
+function animate(frameTimestampMs = performance.now()): void {
   // Poll once per rendered frame. Fixed-step simulation may run several times
   // afterward, but consumable button edges still fire only once.
   gamepad.poll();
   handleGamepadUiInput();
   updateGamepadStatus();
-  const rawDelta = clock.getDelta();
+  const rawDelta = visualCapture.resolveFrameDelta(clock.getDelta());
   lastRawDeltaMs = rawDelta * 1000;
   const frameStartedAt = performance.now();
   const simulatedDeltaThisFrame = runSimulationFrame(rawDelta);
+  visualCapture.recordSimulation(simulatedDeltaThisFrame);
+  const updateFinishedAt = performance.now();
+  lastFrameUpdateMs = updateFinishedAt - frameStartedAt;
 
-  renderPresentation(rawDelta, simulatedDeltaThisFrame, frameStartedAt);
+  renderPresentation(rawDelta, simulatedDeltaThisFrame, frameStartedAt, updateFinishedAt, frameTimestampMs);
+  visualCapture.afterRender();
 }
 
 function runSimulationFrame(rawDelta: number): number {
@@ -617,7 +753,8 @@ function runSimulationFrame(rawDelta: number): number {
 }
 
 function updateSimulationStep(delta: number, time: number): void {
-  player.update(delta, time);
+  if (isRenderBenchmarkEnabled()) updateBenchmarkPlayer(delta, time);
+  else player.update(delta, time);
   const playerTelemetry = player.getTelemetry();
   if (activePlayMode === "training") {
     trainingRun.update({
@@ -632,14 +769,21 @@ function updateSimulationStep(delta: number, time: number): void {
   maybeSpawnEchoZone(time);
 }
 
-function renderPresentation(rawDelta: number, simulatedDeltaThisFrame: number, frameStartedAt: number): void {
+function renderPresentation(
+  rawDelta: number,
+  simulatedDeltaThisFrame: number,
+  frameStartedAt: number,
+  updateFinishedAt: number,
+  frameTimestampMs: number
+): void {
   const time = simulationTimeSeconds;
   const playerSpeed = player.getSpeed();
   const playerGroundContact = player.getGroundContactStrength();
   avatar.update(simulatedDeltaThisFrame, time, player.position, playerSpeed, player.getFacingYaw());
   if (appState === "playing" && settings.particlesEnabled && simulatedDeltaThisFrame > 0) {
-    particles.spawnAura(player.position, simulatedDeltaThisFrame, playerSpeed / 18);
-    particles.spawnWake(player.position, simulatedDeltaThisFrame, (playerSpeed / 18) * playerGroundContact, player.velocity);
+    const particleEmissionDelta = simulatedDeltaThisFrame * settings.particleDensity;
+    particles.spawnAura(player.position, particleEmissionDelta, playerSpeed / 18);
+    particles.spawnWake(player.position, particleEmissionDelta, (playerSpeed / 18) * playerGroundContact, player.velocity);
     particles.update(simulatedDeltaThisFrame);
   }
   raceTrack.update(time);
@@ -655,8 +799,8 @@ function renderPresentation(rawDelta: number, simulatedDeltaThisFrame: number, f
   );
   bloomPass.strength = effectiveBloomStrength;
   const renderStartedAt = performance.now();
-  lastFrameUpdateMs = renderStartedAt - frameStartedAt;
-  renderer.info.reset();
+  lastFrameSnapshotMs = renderStartedAt - updateFinishedAt;
+  renderRuntime.beginFrame();
   if (appState === "playing" && simulatedDeltaThisFrame > 0) {
     wakeField.render({
       time,
@@ -679,7 +823,7 @@ function renderPresentation(rawDelta: number, simulatedDeltaThisFrame: number, f
     time,
     getEffectiveRenderSettings(),
     preset,
-    rippleSources,
+    rippleSources.getRenderSourceSnapshot(time, rippleField.getRecommendedRenderSourceLimit()),
     player.position,
     player.velocity,
     playerSpeed,
@@ -692,18 +836,149 @@ function renderPresentation(rawDelta: number, simulatedDeltaThisFrame: number, f
   );
   renderSceneFrame();
   lastFrameRenderMs = performance.now() - renderStartedAt;
+  recordWebGlBenchmarkFrame(frameTimestampMs);
   previousWakePlayerPosition.copy(player.position);
   updateStats(rawDelta, time);
+  emitWebGlRendererFrameSample(time);
   logGlobalFrameHitch(time, simulatedDeltaThisFrame, rawDelta, frameStartedAt);
   logEchoDetonationFrame(time, simulatedDeltaThisFrame, frameStartedAt);
 }
 
 function renderSceneFrame(): void {
-  if (getEffectiveBloomStrength() > 0.02) {
-    composer.render();
-  } else {
-    renderer.render(scene, camera);
-  }
+  renderRuntime.renderCurrentScene(getEffectiveBloomStrength());
+}
+
+function updateBenchmarkPlayer(delta: number, time: number): void {
+  const motion = createRenderBenchmarkMotion(
+    time,
+    delta,
+    preset.fieldRadius,
+    isCourseMode(activePlayMode)
+      ? (fraction) => raceTrack.samplePointAt(fraction)
+      : null
+  );
+  benchmarkPlayerPosition.set(
+    motion.x,
+    sampleFieldHeight(motion.x, motion.z) + PLAYER_START_HEIGHT,
+    motion.z
+  );
+  benchmarkPlayerVelocity.set(motion.velocityX, 0, motion.velocityZ);
+  player.applyScriptedPose(
+    benchmarkPlayerPosition,
+    benchmarkPlayerVelocity,
+    motion.facingYawRadians,
+    delta,
+    time
+  );
+}
+
+function recordWebGlBenchmarkFrame(frameTimestampMs: number): void {
+  const stats = renderRuntime.getStats();
+  const activeSources = rippleSources.getActiveSources(simulationTimeSeconds);
+  recordRenderBenchmarkFrame({
+    backendId: "webgl",
+    updateCpuMs: lastFrameUpdateMs,
+    snapshotCpuMs: lastFrameSnapshotMs,
+    renderCpuMs: lastFrameRenderMs,
+    gpuFrameMs: stats.gpuFrameMs ?? null,
+    gpuFrameSequence: stats.gpuFrameSequence ?? null,
+    gpuTimerMode: stats.gpuTimerMode ?? "unavailable",
+    gpuTimerErrorCount: stats.gpuTimerErrorCount ?? 0,
+    semantic: {
+      playMode: activePlayMode ?? "none",
+      qualityId: preset.id,
+      fieldInstances: rippleField.getInstanceCount(),
+      particleBudget: preset.particleBudget,
+      activeParticles: particles.getActiveCount(),
+      activeSources: activeSources.length,
+      activeEchoes: echoZones.getActiveCount(),
+      playerSpeed: player.getSpeed(),
+      bloomEnabled: getEffectiveBloomStrength() > 0.02,
+      shadowMode: renderer.shadowMap.enabled ? "three-shadow-map" : "disabled",
+      viewportWidth: renderRuntime.canvas.width,
+      viewportHeight: renderRuntime.canvas.height,
+      pixelRatio: stats.pixelRatio,
+      deviceLost: false
+    }
+  }, frameTimestampMs);
+}
+
+function describeWebGlVisualCapture(tick: number): Readonly<Record<string, unknown>> {
+  camera.updateMatrixWorld();
+  const sourceSnapshot = rippleSources.getRenderSourceSnapshot(simulationTimeSeconds);
+  const echoSnapshot = echoZones.getRenderSnapshot(simulationTimeSeconds);
+  const fieldBuild = rippleField.getBuildStats();
+  const courseEnabled = activePlayMode === "track" || activePlayMode === "training";
+  const courseMask = courseEnabled ? raceTrack.getMaskSnapshot() : null;
+  const courseWalls = courseEnabled ? raceTrack.getWallSnapshot() : null;
+  const viewProjectionMatrix = new THREE.Matrix4()
+    .multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+    .toArray();
+  const training = activePlayMode === "training"
+    ? trainingRun.getPresentationSnapshot()
+    : null;
+  return {
+    backendId: "webgl",
+    presentationProfile: "webgl-reference",
+    fieldPalette: settings.fieldPaletteId,
+    resolvedFieldPalette: resolveFieldPaletteForProfile(settings.fieldPaletteId, "webgl-reference"),
+    playMode: activePlayMode ?? "none",
+    tick,
+    simulationTimeSeconds,
+    qualityId: preset.id,
+    fieldInstances: rippleField.getInstanceCount(),
+    activeSources: sourceSnapshot.activeCount,
+    activeEchoes: echoSnapshot.activeEchoes,
+    activeParticles: particles.getActiveCount(),
+    sourceState: createVisualCaptureSourceState(sourceSnapshot),
+    echoState: createVisualCaptureEchoState(echoSnapshot),
+    field: {
+      mode: fieldBuild.mode,
+      fullHexCount: fieldBuild.fullHexCount,
+      culledHexCount: fieldBuild.culledHexCount,
+      instanceCount: fieldBuild.instanceCount
+    },
+    course: createVisualCaptureCourseState(courseEnabled, courseMask, courseWalls),
+    player: {
+      position: exactVectorSnapshot(player.position),
+      velocity: exactVectorSnapshot(player.velocity),
+      speed: player.getSpeed(),
+      groundContact: player.getGroundContactStrength(),
+      facingYawRadians: player.getFacingYaw()
+    },
+    camera: {
+      position: exactVectorSnapshot(camera.position),
+      quaternion: {
+        x: camera.quaternion.x,
+        y: camera.quaternion.y,
+        z: camera.quaternion.z,
+        w: camera.quaternion.w
+      },
+      viewProjectionMatrix
+    },
+    training: training ? {
+      active: training.active,
+      complete: training.complete,
+      stepId: training.stepId,
+      stepIndex: training.stepIndex,
+      markerVisible: training.marker.visible,
+      markerDigest: hashVisualCaptureNumbers([
+        training.marker.position.x,
+        training.marker.position.y,
+        training.marker.position.z,
+        training.marker.facingYawRadians
+      ])
+    } : null,
+    viewport: {
+      width: renderer.domElement.width,
+      height: renderer.domElement.height,
+      pixelRatio: renderer.getPixelRatio()
+    }
+  };
+}
+
+function exactVectorSnapshot(value: THREE.Vector3): { readonly x: number; readonly y: number; readonly z: number } {
+  return { x: value.x, y: value.y, z: value.z };
 }
 
 function spawnPulse(
@@ -785,6 +1060,7 @@ function seedArenaEchoZones(time: number): void {
 }
 
 function maybeSpawnEchoZone(time: number): void {
+  if (isRenderBenchmarkEnabled()) return;
   if (activePlayMode === "training") return;
   if (time < nextEchoZoneAt) return;
   if (echoZones.getActiveCount() >= ECHO_ZONE_MAX_ACTIVE) {
@@ -1078,6 +1354,16 @@ function wireControls(): void {
     skybox.setSkybox(settings.skyboxId);
     updateSceneFog(preset);
   });
+  fieldPaletteSelect.addEventListener("change", () => {
+    if (!isFieldPaletteId(fieldPaletteSelect.value)) return;
+    settings.fieldPaletteId = fieldPaletteSelect.value;
+    debugEvent("settings.change", "Field palette changed", {
+      backendId: "webgl",
+      setting: "fieldPalette",
+      fieldPalette: settings.fieldPaletteId,
+      resolvedFieldPalette: resolveFieldPaletteForProfile(settings.fieldPaletteId, "webgl-reference")
+    });
+  });
 
   voxelSizeSlider.addEventListener("input", () => {
     settings.voxelSizeMeters = Number(voxelSizeSlider.value);
@@ -1158,6 +1444,7 @@ function syncControlValues(): void {
   syncSkyboxOptions();
   qualitySelect.value = settings.qualityId;
   skyboxSelect.value = settings.skyboxId;
+  fieldPaletteSelect.value = settings.fieldPaletteId;
   voxelSizeSlider.min = String(VOXEL_SIZE_MIN_METERS);
   voxelSizeSlider.max = String(VOXEL_SIZE_MAX_METERS);
   voxelSizeSlider.step = "0.05";
@@ -1384,6 +1671,17 @@ function getGamepadFocusableElements(root: HTMLElement): HTMLElement[] {
 
 function adjustFocusedGamepadControl(direction: number): boolean {
   const activeElement = document.activeElement;
+  if (activeElement instanceof HTMLButtonElement && activeElement.matches("[data-settings-tab]")) {
+    const tabs = Array.from(sceneMenu.querySelectorAll<HTMLButtonElement>("[data-settings-tab]"));
+    const currentIndex = tabs.indexOf(activeElement);
+    if (currentIndex < 0 || tabs.length === 0) return false;
+    const nextIndex = (currentIndex + Math.sign(direction) + tabs.length) % tabs.length;
+    const next = tabs[nextIndex];
+    next.click();
+    next.focus({ preventScroll: true });
+    return true;
+  }
+
   if (activeElement instanceof HTMLInputElement && activeElement.type === "range") {
     const step = Number(activeElement.step) || 1;
     const min = Number.isFinite(Number(activeElement.min)) ? Number(activeElement.min) : -Infinity;
@@ -1418,6 +1716,17 @@ function updateGamepadStatus(): void {
   lastGamepadStatusText = nextText;
   gamepadStatus.textContent = nextText;
   gamepadStatus.classList.toggle("gamepad-status--connected", state.connected);
+}
+
+function getGamepadDiagnosticsPayload(): RippleDebugPayload {
+  const state = gamepad.getState();
+  return {
+    gamepadConnected: state.connected,
+    gamepadActive: state.connected && performance.now() - state.lastInputAt <= 1_000,
+    gamepadHapticsAvailable: state.hapticsAvailable,
+    gamepadLeftStickSensitivity: roundMetric(settings.gamepadSensitivity.leftStick),
+    gamepadRightStickSensitivity: roundMetric(settings.gamepadSensitivity.rightStick)
+  };
 }
 
 function setPerfOverlayVisible(visible: boolean): void {
@@ -2879,8 +3188,83 @@ function getPixelRatio(): number {
   return Math.min(window.devicePixelRatio || 1, settings.qualityId === "meltdown" ? 2.5 : 2);
 }
 
-function requireElement<T extends HTMLElement>(selector: string): T {
-  const element = document.querySelector<T>(selector);
-  if (!element) throw new Error(`Missing required element: ${selector}`);
-  return element;
+function reportWebGlRendererMode(): void {
+  const courseMode = isCourseMode(activePlayMode);
+  const buildStats = rippleField.getBuildStats();
+  debugEvent("renderer.mode", "Renderer mode selected", {
+    requestedMode: rendererModeSelection.requestedMode,
+    selectionSource: rendererModeSelection.source,
+    activeBackend: "webgl",
+    presentationProfile: "webgl-reference",
+    fieldPalette: settings.fieldPaletteId,
+    resolvedFieldPalette: resolveFieldPaletteForProfile(settings.fieldPaletteId, "webgl-reference"),
+    rolloutStage: RENDERER_ROLLOUT_STAGE,
+    rolloutDecisionCode: rendererRolloutDecision.decisionCode,
+    rolloutPercent: rendererRolloutDecision.rolloutPercent ?? RENDERER_ROLLOUT_PERCENT,
+    cohortBucket: rendererRolloutDecision.cohortBucket,
+    cohortEligible: rendererRolloutDecision.checks?.cohortEligible ?? null,
+    defaultEligible: false,
+    playMode: activePlayMode ?? "none",
+    raceTrackEnabled: courseMode,
+    trackMaskUploaded: false,
+    arenaBarrierEnabled: !courseMode,
+    fieldLayoutMode: buildStats.mode === "clipped" ? "track-clipped" : "arena-full",
+    culledHexCount: buildStats.culledHexCount,
+    trackWallEnabled: courseMode,
+    trackWallSegments: courseMode ? raceTrack.getWallSnapshot().segmentCount : 0,
+    trainingEnabled: activePlayMode === "training",
+    trainingStepIndex: activePlayMode === "training" ? trainingRun.getPresentationSnapshot().stepIndex : 0,
+    trainingMarkerVisible: activePlayMode === "training" && trainingRun.getPresentationSnapshot().marker.visible,
+    ...getGamepadDiagnosticsPayload(),
+    fallbackReason: rendererModeSelection.fallbackReason
+  }, "info");
+}
+
+function emitWebGlRendererFrameSample(time: number): void {
+  if (time - lastRendererFrameSampleAt < 0.5) return;
+  lastRendererFrameSampleAt = time;
+  const stats = renderRuntime.getStats();
+  const buildStats = rippleField.getBuildStats();
+  const courseMode = isCourseMode(activePlayMode);
+  const training = activePlayMode === "training"
+    ? trainingRun.getPresentationSnapshot()
+    : null;
+  debugEvent("renderer.frameSample", "Renderer frame sample", {
+    backendId: stats.backendId,
+    presentationProfile: "webgl-reference",
+    fieldPalette: settings.fieldPaletteId,
+    resolvedFieldPalette: resolveFieldPaletteForProfile(settings.fieldPaletteId, "webgl-reference"),
+    rolloutStage: RENDERER_ROLLOUT_STAGE,
+    rolloutDecisionCode: rendererRolloutDecision.decisionCode,
+    defaultEligible: false,
+    playMode: activePlayMode ?? "none",
+    raceTrackEnabled: courseMode,
+    trackMaskUploaded: false,
+    arenaBarrierEnabled: !courseMode,
+    fieldLayoutMode: buildStats.mode === "clipped" ? "track-clipped" : "arena-full",
+    culledHexCount: buildStats.culledHexCount,
+    trackWallEnabled: courseMode,
+    trackWallSegments: courseMode ? raceTrack.getWallSnapshot().segmentCount : 0,
+    trainingEnabled: training?.enabled ?? false,
+    trainingActive: training?.active ?? false,
+    trainingComplete: training?.complete ?? false,
+    trainingStepId: training?.stepId ?? "",
+    trainingStepIndex: training?.stepIndex ?? 0,
+    trainingStepCount: training?.stepCount ?? 0,
+    trainingMarkerVisible: training?.marker.visible ?? false,
+    drawCalls: stats.drawCalls,
+    triangles: stats.triangles,
+    pixelRatio: stats.pixelRatio,
+    updateMs: roundMetric(lastFrameUpdateMs),
+    snapshotMs: roundMetric(lastFrameSnapshotMs),
+    renderMs: roundMetric(lastFrameRenderMs),
+    gpuFrameMs: stats.gpuFrameMs === undefined ? null : roundMetric(stats.gpuFrameMs),
+    gpuFrameSequence: stats.gpuFrameSequence ?? null,
+    gpuTimerMode: stats.gpuTimerMode ?? "unavailable",
+    gpuTimerErrorCount: stats.gpuTimerErrorCount ?? 0,
+    ...getGamepadDiagnosticsPayload(),
+    deviceLost: stats.deviceLost
+  }, "debug");
+}
+
 }
