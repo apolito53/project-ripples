@@ -78,6 +78,13 @@
   connection, menu, Training, movement, camera, boost, brake, strafe, pulse,
   jump, sensitivity, diagnostics, and haptic-call contract against WebGL and
   forced WebGPU.
+- Added `audit:render:parity:closure`, an exhaustive deterministic Classic
+  evidence matrix covering Clean Arena Echo/jump/landing/collection, Training
+  advancement/completion, Meltdown grazing views, every skybox quadrant and
+  below-horizon view, and Track boost/coast/stop/settled wake behavior.
+- Added reusable deterministic gamepad fixture helpers plus named random streams
+  for renderer-neutral particle spawning and Echo gameplay placement. Parity
+  reports now compare exact canonical dynamic/static particle digests.
 
 ### Changed
 
@@ -157,6 +164,9 @@
   parity while recording each profile's resolved palette as presentation
   evidence, so Core's intentional Style Default neon palette no longer reports
   a false gameplay-state mismatch.
+- Changed cleared Echo state stores to restart scene-local identities, isolating
+  reset/rebuild lifecycle details from parity evidence while preserving current
+  spawn, collection, and presentation behavior.
 
 ## 0.5.5-ALPHA - 2026-07-13
 

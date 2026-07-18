@@ -12,12 +12,12 @@ concrete follow-ups that we actually intend to revisit.
   in `devlog/renderer-parity/README.md` separates intentional Core differences
   from Classic parity suspects. Classic now uses true top-and-six-side prism
   geometry, profile-specific lighting/height response, and is the forced-WebGPU
-  default; Core remains selectable in place. Add Clean jump/Echo, Training completion,
-  Meltdown grazing-camera, all-skybox, and Track wake-persistence fixtures;
-  resolve particle depth, skybox/fog, Echo field response, arena curtain,
+  default; Core remains selectable in place. The expanded closure audit now
+  covers Clean jump/Echo/collection, Training advancement/completion, Meltdown
+  grazing cameras, every skybox quadrant/below-horizon view, and Track wake
+  persistence with exact named-stream particle state. Resolve particle depth,
+  skybox/fog, Echo field response, arena curtain,
   stage-floor/fixture, light/shadow, and output-transform decisions in Classic.
-  Add a named renderer-neutral
-  particle RNG stream so particle placement can join the exact audit snapshot.
 
 - Repeat the accepted `renderer-benchmark-v3-classic-3d-tiles` package on at
   least one integrated/lower-power GPU and one older or different-vendor
@@ -82,6 +82,9 @@ concrete follow-ups that we actually intend to revisit.
 
 ## Done / Recent Decisions
 
+- Added named renderer-neutral particle and Echo gameplay streams, exact
+  canonical particle-state digests, a reusable deterministic gamepad fixture
+  harness, and the exhaustive `audit:render:parity:closure` evidence matrix.
 - Integrated main's standard-mapped controller behavior into forced WebGPU and
   added one deterministic Playwright contract for WebGL/WebGPU menu navigation,
   Training alternatives, movement, camera, boost, brake, strafe, pulse, jump,

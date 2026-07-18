@@ -23,20 +23,23 @@ the pause-menu **Field Style** control or `?presentation=classic|core`.
 
 Functional and fixed-tick semantic parity is established for the audited Arena,
 Track, and Training fixtures for both profiles. Strict Classic presentation
-parity is **review-required**. The deterministic audit matched player/camera/mode/field state, pulse
-sources, Echo identity, Track mask/walls, and Training marker state at every
-fixture while showing substantial, expected visual differences between
-`webgl-reference` and each selected WebGPU profile.
+parity is **review-required**. The deterministic audits match player/camera/mode/
+field state, pulse sources, Echo identity, packed particle state, Track mask/
+walls, and Training marker state at every fixture while retaining image
+differences as review evidence rather than a naive pixel-equality gate.
 
 Run the current audit with:
 
 ```powershell
 npm.cmd run audit:render:parity
 npm.cmd run audit:render:parity:core
+npm.cmd run audit:render:parity:closure
 ```
 
-The first command audits Classic; the second preserves Core evidence. They write
-ignored evidence under `parity-results/<profile>-<timestamp>/`: raw captures,
+The first command audits the compact Classic baseline; the second preserves Core
+baseline evidence. The closure command runs the exhaustive Classic interaction
+and presentation matrix. They write ignored evidence under
+`parity-results/<profile>-<suite>-<timestamp>/`: raw captures,
 WebGL/WebGPU/amplified-diff strips, `report.json`, and `summary.md`. Each page
 uses the benchmark seed plus a capture-only fixed-step controller. Arena and
 Track freeze at tick 180; Training freezes at tick 60. Arena and Track then
@@ -50,11 +53,10 @@ Cross-backend image metrics are evidence, not a pixel-equality gate. Browser
 errors, diagnostic errors, blank/unsafe images, state mismatch, fallback, and
 device loss are fatal.
 
-Particle counts remain an observation rather than a semantic gate. Both paths
-are repeatable, but renderer-specific initialization currently advances the
-global random stream before shared particle spawning. A named renderer-neutral
-particle RNG stream is required before particle placement can join the exact
-cross-backend snapshot.
+Particle placement is now part of the semantic gate. Capture and benchmark runs
+derive a page-lifetime `particles` stream from a stable named seed, normal runs
+use session entropy, and the report compares exact canonical digests for active
+packed dynamic and static particle state.
 
 ## System Matrix
 
@@ -77,16 +79,19 @@ cross-backend snapshot.
 
 ## Audit Fixtures
 
-Implemented:
+Implemented baseline fixtures:
 
 - Pretty Arena settled plus early/middle/late/post-expiry manual-pulse states.
 - Showoff Track motion settled plus early/middle/late/post-expiry manual-pulse states.
 - Pretty Training at the first visible objective marker.
 
-Still required before claiming strict presentation closure:
+Implemented closure fixtures:
 
 - Clean Arena with bloom off, jump/land, and a nearby Echo.
-- Training advancement and completion/hide states.
+- Training initial, advancement, completion, and hidden-marker states.
 - Meltdown tiers 0 and 4 from a grazing camera.
-- All skyboxes through full yaw and below-horizon pitch.
+- All four skyboxes at yaw 0/90/180/270 plus below-horizon pitch.
 - Track boost/coast/stop wake persistence.
+
+These fixtures close evidence coverage, not visual judgment. The suspect rows in
+the system matrix remain the deliberate review/tuning backlog.

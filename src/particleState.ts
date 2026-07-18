@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { debugEvent } from "./debugLog";
+import type { RandomSource } from "./randomStream";
 
 const TEMP_COLOR = new THREE.Color();
 const TURQUOISE = new THREE.Color(0x7dffd8);
@@ -27,7 +28,10 @@ const CONTINUOUS_EMISSION_THROTTLE_END = 0.94;
 const CONTINUOUS_EMISSION_MIN_SCALE = 0.2;
 const TEMP_WAKE_DIRECTION = new THREE.Vector2();
 const TEMP_WAKE_RIGHT = new THREE.Vector2();
+const TEMP_CANONICAL_CENTER = new THREE.Vector3();
 const EMPTY_FLOATS = new Float32Array(0);
+const DEFAULT_RANDOM_SOURCE: RandomSource = () => Math.random();
+const PARTICLE_INPUT_CANONICAL_SCALE = 10_000;
 
 export type ParticleStateSnapshot = {
   readonly activeParticles: number;
@@ -90,7 +94,7 @@ export class ParticleVeilState {
   private staticDirtyMinIndex = Number.POSITIVE_INFINITY;
   private staticDirtyMaxIndex = -1;
 
-  constructor(budget: number) {
+  constructor(budget: number, private readonly random: RandomSource = DEFAULT_RANDOM_SOURCE) {
     this.capacity = Math.max(0, Math.floor(budget));
     this.positions = new Float32Array(this.capacity * 3);
     this.velocities = new Float32Array(this.capacity * 3);
@@ -167,16 +171,20 @@ export class ParticleVeilState {
   }
 
   spawnBurst(center: THREE.Vector3, count: number, strength: number): void {
+    const stableCenter = canonicalizeParticleCenter(center);
+    const stableStrength = canonicalizeParticleInput(strength);
     for (let burstIndex = 0; burstIndex < count; burstIndex += 1) {
-      this.emitCloudParticle(center, strength, 1, 1, 0.9);
+      this.emitCloudParticle(stableCenter, stableStrength, 1, 1, 0.9);
     }
 
     this.markDirty(true);
   }
 
   spawnPulseBurst(center: THREE.Vector3, count: number, strength: number): void {
+    const stableCenter = canonicalizeParticleCenter(center);
+    const stableStrength = canonicalizeParticleInput(strength);
     for (let burstIndex = 0; burstIndex < count; burstIndex += 1) {
-      this.emitPulseParticle(center, strength);
+      this.emitPulseParticle(stableCenter, stableStrength);
     }
 
     this.markDirty(true);
@@ -186,6 +194,9 @@ export class ParticleVeilState {
     const intensityBudget = Math.max(0, Math.floor(count));
     if (intensityBudget <= 0) return 0;
 
+    const stableCenter = canonicalizeParticleCenter(center);
+    const stableStrength = canonicalizeParticleInput(strength);
+    const stableRadius = canonicalizeParticleInput(radius);
     const cloudCount = Math.min(
       DISC_CLOUD_PARTICLE_MAX,
       Math.max(18, Math.floor(intensityBudget * DISC_CLOUD_PARTICLE_RATIO))
@@ -196,11 +207,11 @@ export class ParticleVeilState {
     );
 
     for (let burstIndex = 0; burstIndex < cloudCount; burstIndex += 1) {
-      this.emitDiscCloudParticle(center, strength, radius);
+      this.emitDiscCloudParticle(stableCenter, stableStrength, stableRadius);
     }
 
     for (let burstIndex = 0; burstIndex < glitterCount; burstIndex += 1) {
-      this.emitDiscParticle(center, strength, radius);
+      this.emitDiscParticle(stableCenter, stableStrength, stableRadius);
     }
 
     this.markDirty(true);
@@ -208,8 +219,10 @@ export class ParticleVeilState {
   }
 
   spawnAura(center: THREE.Vector3, delta: number, movementStrength: number): void {
+    const stableCenter = canonicalizeParticleCenter(center);
+    const stableMovementStrength = canonicalizeParticleInput(movementStrength);
     const emissionScale = this.getContinuousEmissionScale();
-    const particlesPerSecond = (2250 + movementStrength * 1750) * emissionScale;
+    const particlesPerSecond = (2250 + stableMovementStrength * 1750) * emissionScale;
     this.auraAccumulator += delta * particlesPerSecond;
     const frameCap = Math.max(42, Math.floor(340 * emissionScale));
     const count = Math.min(frameCap, Math.floor(this.auraAccumulator));
@@ -217,7 +230,7 @@ export class ParticleVeilState {
 
     this.auraAccumulator -= count;
     for (let auraIndex = 0; auraIndex < count; auraIndex += 1) {
-      this.emitCloudParticle(center, 0.12 + movementStrength * 0.16, 0.7, 0.92, 0.05);
+      this.emitCloudParticle(stableCenter, 0.12 + stableMovementStrength * 0.16, 0.7, 0.92, 0.05);
     }
 
     this.markDirty(true);
@@ -225,24 +238,35 @@ export class ParticleVeilState {
 
   spawnWake(center: THREE.Vector3, delta: number, movementStrength: number, movementVelocity: THREE.Vector3): void {
     const emissionScale = this.getContinuousEmissionScale();
-    if (movementStrength <= 0.08 || delta <= 0 || emissionScale <= 0) return;
+    const stableMovementStrength = canonicalizeParticleInput(movementStrength);
+    if (stableMovementStrength <= 0.08 || delta <= 0 || emissionScale <= 0) return;
 
-    TEMP_WAKE_DIRECTION.set(movementVelocity.x, movementVelocity.z);
+    TEMP_WAKE_DIRECTION.set(
+      canonicalizeParticleInput(movementVelocity.x),
+      canonicalizeParticleInput(movementVelocity.z)
+    );
     if (TEMP_WAKE_DIRECTION.lengthSq() <= 0.0001) return;
     TEMP_WAKE_DIRECTION.normalize();
     TEMP_WAKE_RIGHT.set(-TEMP_WAKE_DIRECTION.y, TEMP_WAKE_DIRECTION.x);
 
-    const rawCount = WAKE_PARTICLE_COUNT_BASE + Math.floor(movementStrength * WAKE_PARTICLE_COUNT_MOVEMENT_BONUS);
-    const particlesPerSecond = rawCount * movementStrength * 0.55 * emissionScale * emissionScale * 60;
+    const rawCount = WAKE_PARTICLE_COUNT_BASE + Math.floor(stableMovementStrength * WAKE_PARTICLE_COUNT_MOVEMENT_BONUS);
+    const particlesPerSecond = rawCount * stableMovementStrength * 0.55 * emissionScale * emissionScale * 60;
     this.wakeAccumulator += delta * particlesPerSecond;
     const frameCap = Math.max(18, Math.floor(rawCount * emissionScale * 4));
     const count = Math.min(frameCap, Math.floor(this.wakeAccumulator));
     if (count <= 0) return;
 
     this.wakeAccumulator -= count;
-    const strength = 0.12 + movementStrength * 0.16;
+    const stableCenter = canonicalizeParticleCenter(center);
+    const strength = 0.12 + stableMovementStrength * 0.16;
     for (let wakeIndex = 0; wakeIndex < count; wakeIndex += 1) {
-      this.emitWakeParticle(center, strength, movementStrength, TEMP_WAKE_DIRECTION, TEMP_WAKE_RIGHT);
+      this.emitWakeParticle(
+        stableCenter,
+        strength,
+        stableMovementStrength,
+        TEMP_WAKE_DIRECTION,
+        TEMP_WAKE_RIGHT
+      );
     }
 
     this.markDirty(true);
@@ -307,15 +331,15 @@ export class ParticleVeilState {
     const index = this.allocateParticleSlot();
     if (index < 0) return;
 
-    const angle = Math.random() * Math.PI * 2;
+    const angle = this.random() * Math.PI * 2;
     const cloudRadius = (0.8 + strength * 3.1) * cloudScale;
-    const radius = Math.sqrt(Math.random()) * cloudRadius;
-    const heightJitter = (Math.random() - 0.42) * (1.25 + strength * 1.7) * cloudScale;
-    const outward = (0.28 + Math.random() * (0.85 + strength * 1.6)) * cloudScale;
-    const tangent = (Math.random() - 0.5) * (0.55 + strength * 1.4) * cloudScale;
-    const upward = (Math.random() - 0.18) * (0.28 + strength * 0.72) * cloudScale;
+    const radius = Math.sqrt(this.random()) * cloudRadius;
+    const heightJitter = (this.random() - 0.42) * (1.25 + strength * 1.7) * cloudScale;
+    const outward = (0.28 + this.random() * (0.85 + strength * 1.6)) * cloudScale;
+    const tangent = (this.random() - 0.5) * (0.55 + strength * 1.4) * cloudScale;
+    const upward = (this.random() - 0.18) * (0.28 + strength * 0.72) * cloudScale;
     const positionOffset = index * 3;
-    const color = pickParticleColor(Math.random());
+    const color = pickParticleColor(this.random());
 
     this.positions[positionOffset] = center.x + Math.cos(angle) * radius;
     this.positions[positionOffset + 1] = center.y + verticalLift + heightJitter;
@@ -327,12 +351,12 @@ export class ParticleVeilState {
     this.colors[positionOffset + 1] = color.g;
     this.colors[positionOffset + 2] = color.b;
     this.ages[index] = 0;
-    this.lifetimes[index] = 0.9 + Math.random() * 1.85;
-    this.baseAlphas[index] = (PARTICLE_ALPHA_MIN + Math.random() * PARTICLE_ALPHA_VARIANCE) * alphaScale;
-    this.baseSizes[index] = (0.45 + Math.random() * (1.05 + strength * 0.58)) * cloudScale;
+    this.lifetimes[index] = 0.9 + this.random() * 1.85;
+    this.baseAlphas[index] = (PARTICLE_ALPHA_MIN + this.random() * PARTICLE_ALPHA_VARIANCE) * alphaScale;
+    this.baseSizes[index] = (0.45 + this.random() * (1.05 + strength * 0.58)) * cloudScale;
     this.alphas[index] = this.baseAlphas[index];
     this.sizes[index] = this.baseSizes[index];
-    this.twinkles[index] = Math.random();
+    this.twinkles[index] = this.random();
     this.cloudinesses[index] = 0;
   }
 
@@ -340,17 +364,17 @@ export class ParticleVeilState {
     const index = this.allocateParticleSlot();
     if (index < 0) return;
 
-    const angle = Math.random() * Math.PI * 2;
-    const startRadius = Math.sqrt(Math.random()) * (0.45 + strength * 1.35);
-    const outward = 2.2 + Math.random() * (3.8 + strength * 5.2);
-    const tangent = (Math.random() - 0.5) * (0.55 + strength * 1.1);
-    const upward = (Math.random() - 0.58) * (0.12 + strength * 0.28);
+    const angle = this.random() * Math.PI * 2;
+    const startRadius = Math.sqrt(this.random()) * (0.45 + strength * 1.35);
+    const outward = 2.2 + this.random() * (3.8 + strength * 5.2);
+    const tangent = (this.random() - 0.5) * (0.55 + strength * 1.1);
+    const upward = (this.random() - 0.58) * (0.12 + strength * 0.28);
     const positionOffset = index * 3;
-    const color = pickParticleColor(Math.random());
+    const color = pickParticleColor(this.random());
 
     this.positions[positionOffset] = center.x + Math.cos(angle) * startRadius;
     this.positions[positionOffset + 1] = center.y + PULSE_VERTICAL_LIFT +
-      (Math.random() - 0.5) * PULSE_VERTICAL_JITTER;
+      (this.random() - 0.5) * PULSE_VERTICAL_JITTER;
     this.positions[positionOffset + 2] = center.z + Math.sin(angle) * startRadius;
     this.velocities[positionOffset] = Math.cos(angle) * outward - Math.sin(angle) * tangent;
     this.velocities[positionOffset + 1] = upward;
@@ -359,12 +383,12 @@ export class ParticleVeilState {
     this.colors[positionOffset + 1] = color.g;
     this.colors[positionOffset + 2] = color.b;
     this.ages[index] = 0;
-    this.lifetimes[index] = PULSE_LIFETIME_BASE + Math.random() * PULSE_LIFETIME_VARIANCE;
-    this.baseAlphas[index] = (PARTICLE_ALPHA_MIN + Math.random() * PARTICLE_ALPHA_VARIANCE) * 0.92;
-    this.baseSizes[index] = 0.48 + Math.random() * (1.15 + strength * 0.52);
+    this.lifetimes[index] = PULSE_LIFETIME_BASE + this.random() * PULSE_LIFETIME_VARIANCE;
+    this.baseAlphas[index] = (PARTICLE_ALPHA_MIN + this.random() * PARTICLE_ALPHA_VARIANCE) * 0.92;
+    this.baseSizes[index] = 0.48 + this.random() * (1.15 + strength * 0.52);
     this.alphas[index] = this.baseAlphas[index];
     this.sizes[index] = this.baseSizes[index];
-    this.twinkles[index] = Math.random();
+    this.twinkles[index] = this.random();
     this.cloudinesses[index] = 0;
   }
 
@@ -378,17 +402,17 @@ export class ParticleVeilState {
     const index = this.allocateParticleSlot();
     if (index < 0) return;
 
-    const tailT = Math.random();
+    const tailT = this.random();
     const tailDistance = 0.22 + tailT * tailT * (1.1 + movementStrength * 3.1);
     const lateralSpread = 0.08 + tailT * (0.18 + movementStrength * 0.28);
-    const lateral = (Math.random() - 0.5) * lateralSpread;
-    const heightJitter = (Math.random() - 0.5) *
+    const lateral = (this.random() - 0.5) * lateralSpread;
+    const heightJitter = (this.random() - 0.5) *
       (WAKE_VERTICAL_JITTER_BASE + movementStrength * WAKE_VERTICAL_JITTER_MOVEMENT_BONUS);
-    const backwardDrift = 0.1 + Math.random() * (0.22 + movementStrength * 0.34);
-    const lateralDrift = (Math.random() - 0.5) * (0.06 + movementStrength * 0.16);
-    const upward = (Math.random() - 0.56) * (0.05 + movementStrength * 0.09);
+    const backwardDrift = 0.1 + this.random() * (0.22 + movementStrength * 0.34);
+    const lateralDrift = (this.random() - 0.5) * (0.06 + movementStrength * 0.16);
+    const upward = (this.random() - 0.56) * (0.05 + movementStrength * 0.09);
     const positionOffset = index * 3;
-    const color = pickParticleColor(Math.random());
+    const color = pickParticleColor(this.random());
 
     this.positions[positionOffset] = center.x - direction.x * tailDistance + right.x * lateral;
     this.positions[positionOffset + 1] = center.y + WAKE_VERTICAL_LIFT + heightJitter;
@@ -400,12 +424,12 @@ export class ParticleVeilState {
     this.colors[positionOffset + 1] = color.g;
     this.colors[positionOffset + 2] = color.b;
     this.ages[index] = 0;
-    this.lifetimes[index] = 0.42 + Math.random() * 0.76;
-    this.baseAlphas[index] = (PARTICLE_ALPHA_MIN + Math.random() * PARTICLE_ALPHA_VARIANCE) * 0.98;
-    this.baseSizes[index] = 0.36 + Math.random() * (0.72 + strength * 0.3);
+    this.lifetimes[index] = 0.42 + this.random() * 0.76;
+    this.baseAlphas[index] = (PARTICLE_ALPHA_MIN + this.random() * PARTICLE_ALPHA_VARIANCE) * 0.98;
+    this.baseSizes[index] = 0.36 + this.random() * (0.72 + strength * 0.3);
     this.alphas[index] = this.baseAlphas[index];
     this.sizes[index] = this.baseSizes[index];
-    this.twinkles[index] = Math.random();
+    this.twinkles[index] = this.random();
     this.cloudinesses[index] = 0;
   }
 
@@ -413,17 +437,17 @@ export class ParticleVeilState {
     const index = this.allocateParticleSlot();
     if (index < 0) return;
 
-    const angle = Math.random() * Math.PI * 2;
-    const normalizedRadius = Math.sqrt(Math.random());
-    const radius = normalizedRadius * discRadius * (0.36 + Math.random() * 0.74);
-    const outward = (1.8 + Math.random() * 3.8 + strength * 2.2) * (0.45 + normalizedRadius * 0.7);
-    const tangent = (Math.random() - 0.5) * (1.2 + strength * 1.1);
-    const lift = (Math.random() - 0.32) * (0.12 + strength * 0.2);
+    const angle = this.random() * Math.PI * 2;
+    const normalizedRadius = Math.sqrt(this.random());
+    const radius = normalizedRadius * discRadius * (0.36 + this.random() * 0.74);
+    const outward = (1.8 + this.random() * 3.8 + strength * 2.2) * (0.45 + normalizedRadius * 0.7);
+    const tangent = (this.random() - 0.5) * (1.2 + strength * 1.1);
+    const lift = (this.random() - 0.32) * (0.12 + strength * 0.2);
     const positionOffset = index * 3;
-    const color = pickDiscCloudColor(Math.random());
+    const color = pickDiscCloudColor(this.random());
 
     this.positions[positionOffset] = center.x + Math.cos(angle) * radius;
-    this.positions[positionOffset + 1] = center.y + (Math.random() - 0.48) * 0.7;
+    this.positions[positionOffset + 1] = center.y + (this.random() - 0.48) * 0.7;
     this.positions[positionOffset + 2] = center.z + Math.sin(angle) * radius;
     this.velocities[positionOffset] = Math.cos(angle) * outward - Math.sin(angle) * tangent;
     this.velocities[positionOffset + 1] = lift;
@@ -432,12 +456,12 @@ export class ParticleVeilState {
     this.colors[positionOffset + 1] = color.g;
     this.colors[positionOffset + 2] = color.b;
     this.ages[index] = 0;
-    this.lifetimes[index] = 0.52 + Math.random() * 0.78;
-    this.baseAlphas[index] = 0.052 + Math.random() * 0.082;
-    this.baseSizes[index] = 6.8 + Math.random() * (9.4 + strength * 4.2);
+    this.lifetimes[index] = 0.52 + this.random() * 0.78;
+    this.baseAlphas[index] = 0.052 + this.random() * 0.082;
+    this.baseSizes[index] = 6.8 + this.random() * (9.4 + strength * 4.2);
     this.alphas[index] = this.baseAlphas[index];
     this.sizes[index] = this.baseSizes[index];
-    this.twinkles[index] = Math.random();
+    this.twinkles[index] = this.random();
     this.cloudinesses[index] = 1;
   }
 
@@ -445,17 +469,17 @@ export class ParticleVeilState {
     const index = this.allocateParticleSlot();
     if (index < 0) return;
 
-    const angle = Math.random() * Math.PI * 2;
-    const normalizedRadius = Math.sqrt(Math.random());
+    const angle = this.random() * Math.PI * 2;
+    const normalizedRadius = Math.sqrt(this.random());
     const radius = normalizedRadius * discRadius;
-    const outward = (4.2 + Math.random() * 7.6 + strength * 5.4) * (0.54 + normalizedRadius * 0.6);
-    const tangent = (Math.random() - 0.5) * (0.9 + strength * 1.3);
-    const lift = (Math.random() - 0.38) * (0.24 + strength * 0.34);
+    const outward = (4.2 + this.random() * 7.6 + strength * 5.4) * (0.54 + normalizedRadius * 0.6);
+    const tangent = (this.random() - 0.5) * (0.9 + strength * 1.3);
+    const lift = (this.random() - 0.38) * (0.24 + strength * 0.34);
     const positionOffset = index * 3;
-    const color = pickParticleColor(Math.random());
+    const color = pickParticleColor(this.random());
 
     this.positions[positionOffset] = center.x + Math.cos(angle) * radius;
-    this.positions[positionOffset + 1] = center.y + (Math.random() - 0.48) * 0.62;
+    this.positions[positionOffset + 1] = center.y + (this.random() - 0.48) * 0.62;
     this.positions[positionOffset + 2] = center.z + Math.sin(angle) * radius;
     this.velocities[positionOffset] = Math.cos(angle) * outward - Math.sin(angle) * tangent;
     this.velocities[positionOffset + 1] = lift;
@@ -464,12 +488,12 @@ export class ParticleVeilState {
     this.colors[positionOffset + 1] = color.g;
     this.colors[positionOffset + 2] = color.b;
     this.ages[index] = 0;
-    this.lifetimes[index] = 0.58 + Math.random() * 0.88;
-    this.baseAlphas[index] = PARTICLE_ALPHA_MIN + 0.3 + Math.random() * (PARTICLE_ALPHA_VARIANCE + 0.22);
-    this.baseSizes[index] = 1.1 + Math.random() * (2.2 + strength * 1.15);
+    this.lifetimes[index] = 0.58 + this.random() * 0.88;
+    this.baseAlphas[index] = PARTICLE_ALPHA_MIN + 0.3 + this.random() * (PARTICLE_ALPHA_VARIANCE + 0.22);
+    this.baseSizes[index] = 1.1 + this.random() * (2.2 + strength * 1.15);
     this.alphas[index] = this.baseAlphas[index];
     this.sizes[index] = this.baseSizes[index];
-    this.twinkles[index] = Math.random();
+    this.twinkles[index] = this.random();
     this.cloudinesses[index] = 0;
   }
 
@@ -540,6 +564,22 @@ export class ParticleVeilState {
     this.staticDirtyMinIndex = Math.min(this.staticDirtyMinIndex, index);
     this.staticDirtyMaxIndex = Math.max(this.staticDirtyMaxIndex, index);
   }
+}
+
+function canonicalizeParticleCenter(center: THREE.Vector3): THREE.Vector3 {
+  // Shared gameplay can accumulate harmless renderer-specific float noise in
+  // closed-loop camera steering. Quantizing only the particle spawn boundary
+  // keeps the neutral CPU particle simulation bit-stable without moving the
+  // player or changing visible motion.
+  return TEMP_CANONICAL_CENTER.set(
+    canonicalizeParticleInput(center.x),
+    canonicalizeParticleInput(center.y),
+    canonicalizeParticleInput(center.z)
+  );
+}
+
+function canonicalizeParticleInput(value: number): number {
+  return Math.round(value * PARTICLE_INPUT_CANONICAL_SCALE) / PARTICLE_INPUT_CANONICAL_SCALE || 0;
 }
 
 function pickParticleColor(seed: number): THREE.Color {

@@ -1,6 +1,6 @@
 # Codebase Index
 
-Last reviewed: 2026-07-16
+Last reviewed: 2026-07-18
 
 Purpose: compact map for the standalone ripple-field visual lab.
 
@@ -58,6 +58,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `npm.cmd run audit:render:parity`
 - Fixed-tick WebGL/preserved-Core presentation audit:
   `npm.cmd run audit:render:parity:core`
+- Full deterministic Classic parity-closure matrix:
+  `npm.cmd run audit:render:parity:closure`
 - Production WebGL/WebGPU comparative benchmark:
   `npm.cmd run benchmark:renderers`
 - Clean-tree cross-hardware acceptance package with stock Chrome checks,
@@ -82,13 +84,16 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `scripts/ripple-smoke-harness.mjs`; explicit runs provide all four
   `RIPPLE_APP_URL`/`RIPPLE_LOG_*_URL` values together.
 - Deterministic browser gamepad injection and shared-backend controller
-  acceptance: `scripts/verify-gamepad.mjs`
+  acceptance plus reusable fixed-tick fixture input:
+  `scripts/verify-gamepad.mjs` and `scripts/gamepad-fixture-harness.mjs`
 - Stage-0 cohort/cooldown policy, benchmark recorder, and nonblocking GPU timers:
   `src/render/rendererRollout.ts`, `src/render/renderBenchmark.ts`, and
   `src/render/gpuFrameTimer.ts`
 - Capture-only deterministic simulation control and renderer state descriptions:
   `src/render/renderVisualCapture.ts`, `src/main.ts`, and
   `src/render/webGpuApp.ts`
+- Named renderer-neutral random streams for capture, benchmark, and normal
+  sessions: `src/randomStream.ts` and `src/render/renderRandom.ts`
 - WebGPU course-wall and Training marker passes with explicit layouts and shared
   field depth: `src/render/webGpuTrackWallPass.ts` and
   `src/render/webGpuTrainingMarkerPass.ts` plus their WGSL shaders
@@ -164,10 +169,10 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `scripts/benchmark-stock-acceptance.mjs`, `scripts/benchmark-package.mjs`,
   `scripts/package-renderer-benchmark.mjs`, and
   `scripts/verify-benchmark-reporting.mjs`
-- Fixed-tick presentation capture/reporting, early/middle/late/post-expiry pulse
-  lifecycle evidence, and non-gating image comparison:
-  `scripts/audit-renderer-parity.mjs`, `scripts/render-parity-analysis.mjs`, and
-  `devlog/renderer-parity/README.md`
+- Fixed-tick presentation capture/reporting, compact pulse-lifecycle evidence,
+  expanded parity-closure fixtures, and non-gating image comparison:
+  `scripts/audit-renderer-parity.mjs`, `scripts/renderer-parity-fixtures.mjs`,
+  `scripts/render-parity-analysis.mjs`, and `devlog/renderer-parity/README.md`
 - Classic 3D/Core field pipelines, procedural prism geometry, profile-specific
   wave transfer, and profile diagnostics: `src/ripple/webGpuRippleFieldPreview.ts` and
   `src/ripple/webGpuRippleFieldPreview.wgsl`
@@ -323,8 +328,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `src/main.ts`
 - Change avatar marker motes, long orbit trails, lights, or shell visuals:
   `src/main.ts`
-- Change particles, wake-tail shape, or burst count: `src/particleVeil.ts` and
-  `src/main.ts`
+- Change particles, wake-tail shape, burst count, or deterministic spawn
+  streams: `src/particleState.ts`, `src/particleVeil.ts`,
+  `src/render/renderRandom.ts`, and `src/main.ts`
 - Change pulse source strength or cooldown: `src/main.ts`
 - Change propagation-speed semantics or medium parameters: `src/waveMedium.ts`,
   `src/labSettings.ts`, and `devlog/PROPAGATION_NOTES.md`

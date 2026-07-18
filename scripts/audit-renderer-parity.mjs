@@ -16,6 +16,15 @@ import {
   compareRendererCaptures,
   createRendererParityStrip
 } from "./render-parity-analysis.mjs";
+import {
+  GAMEPAD_BUTTON,
+  advanceUntilVisualState,
+  advanceWithGamepadInput,
+  captureVisualState,
+  connectMockGamepad,
+  installDeterministicGamepad
+} from "./gamepad-fixture-harness.mjs";
+import { getRendererParityScenes } from "./renderer-parity-fixtures.mjs";
 
 const FIXED_VIEWPORT = Object.freeze({ width: 1280, height: 720 });
 const FIXED_DEVICE_SCALE_FACTOR = 1;
@@ -28,42 +37,17 @@ const PULSE_PHASE_TICKS = Object.freeze({
 });
 const PAGE_TIMEOUT_MS = readIntegerEnv("RIPPLE_PARITY_TIMEOUT_MS", 60_000, 15_000, 180_000);
 const WEBGPU_PRESENTATION_PROFILE = readWebGpuPresentationProfile();
+const PARITY_SUITE = readParitySuite();
 const WEBGL_PRESENTATION_PROFILE = "webgl-reference";
 const DEFAULT_AUDIT_APP_URL = "http://127.0.0.1:4184/";
-
-const SCENES = Object.freeze([
-  Object.freeze({
-    id: "arena-pretty",
-    mode: "arena",
-    benchmarkScenario: "pretty-arena",
-    benchmarkTier: 0,
-    captureTick: 180,
-    states: Object.freeze(["settled", "pulse-early", "pulse-middle", "pulse-late", "pulse-expired"])
-  }),
-  Object.freeze({
-    id: "track-showoff",
-    mode: "track",
-    benchmarkScenario: "showoff-track-motion",
-    benchmarkTier: 0,
-    captureTick: 180,
-    states: Object.freeze(["settled", "pulse-early", "pulse-middle", "pulse-late", "pulse-expired"])
-  }),
-  Object.freeze({
-    id: "training-pretty",
-    mode: "training",
-    benchmarkScenario: "pretty-arena",
-    benchmarkTier: 0,
-    captureTick: 60,
-    states: Object.freeze(["settled"])
-  })
-]);
+const SCENES = getRendererParityScenes(PARITY_SUITE);
 
 const appServer = await ensureAuditAppReady();
 const config = {
   appUrl: appServer.appUrl,
   logServerQueryValue: "0"
 };
-const runId = `${WEBGPU_PRESENTATION_PROFILE}-${createRunId()}`;
+const runId = `${WEBGPU_PRESENTATION_PROFILE}-${PARITY_SUITE}-${createRunId()}`;
 const outputDirectory = path.resolve(
   process.env.RIPPLE_PARITY_OUTPUT_DIR || "parity-results",
   runId
@@ -83,6 +67,7 @@ try {
     viewport: FIXED_VIEWPORT,
     deviceScaleFactor: FIXED_DEVICE_SCALE_FACTOR
   });
+  if (PARITY_SUITE === "closure") await installDeterministicGamepad(context);
   const captures = [];
   const buffers = new Map();
 
@@ -125,16 +110,17 @@ try {
   const stateFailures = comparisons.filter((comparison) => !comparison.stateParity.passed);
   const reportPassed = stateFailures.length === 0;
   const report = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     passed: reportPassed,
     failureReasons: stateFailures.map((comparison) => `semantic-state-mismatch:${comparison.id}`),
     generatedAt: new Date().toISOString(),
     runId,
+    fixtureSuite: PARITY_SUITE,
     source: readSourceState(appServer),
     viewport: FIXED_VIEWPORT,
     deviceScaleFactor: FIXED_DEVICE_SCALE_FACTOR,
     benchmarkSeed: BENCHMARK_SEED,
-    captureTicks: Object.fromEntries(SCENES.map((scene) => [scene.id, scene.captureTick])),
+    captureTicks: Object.fromEntries(SCENES.map((scene) => [scene.id, scene.captureTick ?? null])),
     pulsePhaseTicks: PULSE_PHASE_TICKS,
     referenceProfile: WEBGL_PRESENTATION_PROFILE,
     candidateProfile: WEBGPU_PRESENTATION_PROFILE,
@@ -198,6 +184,10 @@ if (auditError) {
 }
 
 async function captureScene(context, scene, backendId) {
+  if (scene.driver !== "pulse-lifecycle") {
+    return captureClosureScene(context, scene, backendId);
+  }
+
   const page = await context.newPage();
   const problems = collectPageProblems(page);
   const pageUrl = createSceneUrl(scene, backendId);
@@ -233,49 +223,9 @@ async function captureScene(context, scene, backendId) {
         assertPulseLifecycleFixture(state, fixtureState, pulseStartSimulationTime);
       }
 
-      const captureId = `${scene.id}--${state}--${backendId}`;
-      const capturePath = path.join(capturesDirectory, `${captureId}.png`);
-      const canvas = page.locator(`canvas[data-renderer-backend="${backendId}"]`);
-      const buffer = await canvas.screenshot({ type: "png", path: capturePath });
-      const visualMetrics = analyzeCanvasPng(buffer);
-      const visualBounds = evaluateVisualBounds(visualMetrics);
-      if (!visualBounds.passed) {
-        throw new Error(`${captureId} failed visual bounds: ${visualBounds.reasons.join(", ")}`);
-      }
-
-      const repeatedFixtureState = await freezeCurrent(page);
-      const repeatedBuffer = await canvas.screenshot({ type: "png" });
-      const repeatability = compareRendererCaptures(buffer, repeatedBuffer);
-      const repeatedStateParity = compareFixtureStates(fixtureState, repeatedFixtureState);
-      const repeatabilityPassed = repeatedStateParity.passed &&
-        repeatability.changedPixelRatio <= 0.001 &&
-        repeatability.meanAbsoluteRgbDelta <= 0.5;
-      if (!repeatabilityPassed) {
-        throw new Error(
-          `${captureId} was not stable while frozen: ` +
-          `${JSON.stringify({ repeatability, repeatedStateParity })}`
-        );
-      }
-
-      const diagnostics = await readRuntimeDiagnostics(page, backendId, scene.mode);
-      captures.push({
-        id: captureId,
-        sceneId: scene.id,
-        mode: scene.mode,
-        state,
-        backendId,
-        presentationProfile: diagnostics.presentationProfile,
-        path: toPortableRelativePath(outputDirectory, capturePath),
-        visualBounds,
-        visualMetrics,
-        repeatability: {
-          passed: repeatabilityPassed,
-          metrics: repeatability
-        },
-        fixtureState,
-        runtime: diagnostics
-      });
-      buffers.set(captureId, buffer);
+      const captured = await captureCurrentFixture(page, scene, state, backendId, fixtureState, []);
+      captures.push(captured.metadata);
+      buffers.set(captured.metadata.id, captured.buffer);
     }
 
     problems.assertNone(`${scene.id}/${backendId}`);
@@ -285,7 +235,657 @@ async function captureScene(context, scene, backendId) {
   }
 }
 
+async function captureClosureScene(context, scene, backendId) {
+  const page = await context.newPage();
+  const problems = collectPageProblems(page);
+  const captures = [];
+  const buffers = new Map();
+  const inputTranscript = [];
+
+  const capture = async (state, fixtureState) => {
+    assertClosureFixtureState(scene, state, fixtureState);
+    const captured = await captureCurrentFixture(
+      page,
+      scene,
+      state,
+      backendId,
+      fixtureState,
+      inputTranscript
+    );
+    captures.push(captured.metadata);
+    buffers.set(captured.metadata.id, captured.buffer);
+  };
+
+  try {
+    await installGlobalRandomSeed(page);
+    await page.goto(createSceneUrl(scene, backendId), {
+      waitUntil: "domcontentloaded",
+      timeout: PAGE_TIMEOUT_MS
+    });
+    await waitForSceneReady(page, scene, backendId);
+    await hideCaptureChrome(page);
+    await connectMockGamepad(page);
+    inputTranscript.push("connect-standard-gamepad");
+    await applyClosureSceneSettings(page, scene, backendId, inputTranscript);
+    await runClosureFixture(page, scene, capture, inputTranscript);
+    problems.assertNone(`${scene.id}/${backendId}`);
+    return { captures, buffers };
+  } finally {
+    await withAuditDeadline(page.close(), `${scene.id}/${backendId} page cleanup`, 10_000);
+  }
+}
+
+async function captureCurrentFixture(page, scene, state, backendId, fixtureState, inputTranscript) {
+  const captureId = `${scene.id}--${state}--${backendId}`;
+  const capturePath = path.join(capturesDirectory, `${captureId}.png`);
+  const canvas = page.locator(`canvas[data-renderer-backend="${backendId}"]`);
+  const buffer = await canvas.screenshot({ type: "png", path: capturePath });
+  const visualMetrics = analyzeCanvasPng(buffer);
+  const visualBounds = evaluateVisualBounds(visualMetrics);
+  if (!visualBounds.passed) {
+    throw new Error(`${captureId} failed visual bounds: ${visualBounds.reasons.join(", ")}`);
+  }
+
+  const repeatedFixtureState = await freezeCurrent(page);
+  const repeatedBuffer = await canvas.screenshot({ type: "png" });
+  const repeatability = compareRendererCaptures(buffer, repeatedBuffer);
+  const repeatedStateParity = compareFixtureStates(fixtureState, repeatedFixtureState);
+  const repeatabilityPassed = repeatedStateParity.passed &&
+    repeatability.changedPixelRatio <= 0.001 &&
+    repeatability.meanAbsoluteRgbDelta <= 0.5;
+  if (!repeatabilityPassed) {
+    throw new Error(
+      `${captureId} was not stable while frozen: ` +
+      `${JSON.stringify({ repeatability, repeatedStateParity })}`
+    );
+  }
+
+  const diagnostics = await readRuntimeDiagnostics(page, backendId, scene.mode);
+  return {
+    buffer,
+    metadata: {
+      id: captureId,
+      sceneId: scene.id,
+      fixtureSuite: scene.suite,
+      fixtureDriver: scene.driver,
+      mode: scene.mode,
+      state,
+      backendId,
+      presentationProfile: diagnostics.presentationProfile,
+      inputTranscript: [...inputTranscript],
+      path: toPortableRelativePath(outputDirectory, capturePath),
+      visualBounds,
+      visualMetrics,
+      repeatability: {
+        passed: repeatabilityPassed,
+        metrics: repeatability
+      },
+      fixtureState,
+      runtime: diagnostics
+    }
+  };
+}
+
+async function runClosureFixture(page, scene, capture, inputTranscript) {
+  if (scene.driver === "clean-events") {
+    await runCleanEventFixture(page, capture, inputTranscript);
+    return;
+  }
+  if (scene.driver === "training-lifecycle") {
+    await runTrainingLifecycleFixture(page, capture, inputTranscript);
+    return;
+  }
+  if (scene.driver === "meltdown-grazing") {
+    await runMeltdownGrazingFixture(page, capture, inputTranscript);
+    return;
+  }
+  if (scene.driver === "skybox-views") {
+    await runSkyboxFixture(page, scene, capture, inputTranscript);
+    return;
+  }
+  if (scene.driver === "track-wake") {
+    await runTrackWakeFixture(page, capture, inputTranscript);
+    return;
+  }
+  throw new Error(`Unsupported closure fixture driver ${JSON.stringify(scene.driver)}.`);
+}
+
+async function runCleanEventFixture(page, capture, inputTranscript) {
+  const initial = await advanceWithGamepadInput(page, {}, 1);
+  const initialEchoes = initial.activeEchoes;
+  const auditedEcho = getNearestEcho(initial);
+  if (!auditedEcho) throw new Error("Clean Arena fixture has no initial Echo target.");
+  const auditedEchoPosition = {
+    x: auditedEcho.positionX,
+    y: auditedEcho.positionY,
+    z: auditedEcho.positionZ
+  };
+  await driveTowardTargetUntil(
+    page,
+    () => auditedEchoPosition,
+    (snapshot) => getPlanarDistance(snapshot.player.position, auditedEchoPosition) <= 7.5,
+    "Clean Echo approach",
+    {
+      maxTicks: 1_200,
+      chunkTicks: 1,
+      failWhen: (snapshot) => snapshot.activeEchoes < initialEchoes
+    }
+  );
+  const nearby = await advanceUntilVisualState(
+    page,
+    { buttons: { [GAMEPAD_BUTTON.secondary]: 1 } },
+    (snapshot) => snapshot.player.speed <= 0.2,
+    "Clean pre-jump brake",
+    { maxTicks: 180, chunkTicks: 1 }
+  );
+  if (nearby.activeEchoes !== initialEchoes || nearby.echoState.activeVisualBursts !== 0) {
+    throw new Error("Clean pre-jump approach collected its Echo before the jump fixtures.");
+  }
+  inputTranscript.push(
+    "camera-relative-steer-until-echo-distance<=7.5",
+    "gamepad-B-until-speed<=0.2"
+  );
+  await capture("echo-nearby", nearby);
+
+  const takeoff = await advanceWithGamepadInput(page, {
+    buttons: { [GAMEPAD_BUTTON.primary]: 1 }
+  }, 1);
+  inputTranscript.push("gamepad-A-jump");
+  await capture("jump-takeoff", takeoff);
+
+  const airborne = await advanceUntilVisualState(
+    page,
+    {},
+    (snapshot) => snapshot.player.groundContact <= 0.05,
+    "Clean airborne state",
+    { maxTicks: 90, chunkTicks: 2 }
+  );
+  inputTranscript.push("neutral-until-ground-contact<=0.05");
+  await capture("jump-airborne", airborne);
+
+  const landed = await advanceUntilVisualState(
+    page,
+    {},
+    (snapshot) => snapshot.player.groundContact >= 0.999 && snapshot.player.position.y < airborne.player.position.y,
+    "Clean landing state",
+    { maxTicks: 180, chunkTicks: 2 }
+  );
+  inputTranscript.push("neutral-until-landed");
+  await capture("jump-landed", landed);
+
+  const collected = await driveTowardTargetUntil(
+    page,
+    () => auditedEchoPosition,
+    (snapshot) => !snapshot.echoState.echoes.some((echo) => echo.id === auditedEcho.id) &&
+      snapshot.echoState.activeVisualBursts > 0,
+    "Clean Echo collection",
+    { maxTicks: 1_200, chunkTicks: 2 }
+  );
+  inputTranscript.push("camera-relative-steer-until-echo-collected");
+  await capture("echo-collected", collected);
+}
+
+async function runTrainingLifecycleFixture(page, capture, inputTranscript) {
+  const initial = await advanceWithGamepadInput(page, {}, 1);
+  inputTranscript.push("training-neutral-initial");
+  await capture("initial", initial);
+
+  await advanceUntilVisualState(
+    page,
+    { axes: [0, 0, 0.9, 0] },
+    (snapshot) => snapshot.training?.stepId === "steer-facing",
+    "Training camera orbit",
+    { maxTicks: 120, chunkTicks: 8 }
+  );
+  const advanced = await advanceUntilVisualState(
+    page,
+    { axes: [0.9, 0, 0, 0] },
+    (snapshot) => snapshot.training?.stepId === "keyboard-movement",
+    "Training steer-facing",
+    { maxTicks: 120, chunkTicks: 8 }
+  );
+  inputTranscript.push("right-stick-orbit", "left-stick-steer-facing");
+  await capture("advanced", advanced);
+
+  await completeTrainingMovementSet(page, inputTranscript);
+  await advanceUntilVisualState(
+    page,
+    {
+      axes: [0, -1, 0, 0],
+      buttons: { [GAMEPAD_BUTTON.rightTrigger]: 1 }
+    },
+    (snapshot) => snapshot.training?.stepId === "mouse-forward",
+    "Training boost",
+    { maxTicks: 240, chunkTicks: 8 }
+  );
+  inputTranscript.push("left-stick-forward-plus-RT-until-boost-complete");
+  await advanceUntilVisualState(
+    page,
+    { buttons: { [GAMEPAD_BUTTON.secondary]: 1 } },
+    (snapshot) => snapshot.training?.stepId === "momentum-brake",
+    "Training active brake",
+    { maxTicks: 180, chunkTicks: 4 }
+  );
+  inputTranscript.push("gamepad-B-until-active-brake-complete");
+  await advanceUntilVisualState(
+    page,
+    { axes: [0, -1, 0, 0] },
+    (snapshot) => snapshot.player.speed >= 8,
+    "Training momentum build",
+    { maxTicks: 180, chunkTicks: 6 }
+  );
+  await advanceUntilVisualState(
+    page,
+    {},
+    (snapshot) => snapshot.training?.stepId === "jump",
+    "Training momentum release",
+    { maxTicks: 60, chunkTicks: 1 }
+  );
+  inputTranscript.push("left-stick-forward-build-momentum", "neutral-release-momentum");
+  await advanceUntilVisualState(
+    page,
+    { buttons: { [GAMEPAD_BUTTON.primary]: 1 } },
+    (snapshot) => snapshot.training?.stepId === "echo-pickup",
+    "Training jump",
+    { maxTicks: 12, chunkTicks: 1 }
+  );
+  inputTranscript.push("gamepad-A-jump");
+  await driveTowardTargetUntil(
+    page,
+    getNearestEchoPosition,
+    (snapshot) => snapshot.training?.stepId === "wall-slide",
+    "Training Echo pickup",
+    { maxTicks: 1_800, chunkTicks: 2, followCourse: true }
+  );
+  inputTranscript.push("camera-relative-steer-until-training-echo-collected");
+  const complete = await completeTrainingWallSlide(page);
+  inputTranscript.push("camera-relative-steer-to-wall-marker");
+  await capture("complete", complete);
+}
+
+async function completeTrainingMovementSet(page, inputTranscript) {
+  const inputs = [
+    { label: "left-bumper-strafe", value: { buttons: { [GAMEPAD_BUTTON.leftBumper]: 1 } } },
+    { label: "left-stick-turn", value: { axes: [-0.9, 0, 0, 0] } },
+    { label: "left-stick-forward", value: { axes: [0, -0.9, 0, 0] } },
+    { label: "left-stick-reverse", value: { axes: [0, 0.9, 0, 0] } }
+  ];
+  let snapshot = await captureVisualState(page);
+  for (const input of inputs) {
+    if (snapshot.training?.stepId !== "keyboard-movement") break;
+    snapshot = await advanceWithGamepadInput(page, input.value, 10);
+    inputTranscript.push(input.label);
+  }
+  if (snapshot.training?.stepId !== "boost") {
+    throw new Error(`Training movement set stopped at ${JSON.stringify(snapshot.training?.stepId)}.`);
+  }
+}
+
+async function completeTrainingWallSlide(page) {
+  return driveTowardTargetUntil(
+    page,
+    (snapshot) => snapshot.training?.markerPosition ?? null,
+    (snapshot) => snapshot.training?.complete === true,
+    "Training wall-slide",
+    {
+      maxTicks: 1_200,
+      chunkTicks: 2,
+      followCourse: true,
+      pushBeyondCourseTarget: true
+    }
+  );
+}
+
+async function runMeltdownGrazingFixture(page, capture, inputTranscript) {
+  await advanceWithGamepadInput(page, {}, 65);
+  const grazing = await advanceWithGamepadInput(page, { axes: [0, 0, 0, -1] }, 22);
+  inputTranscript.push("neutral-settle-65", "right-stick-down-grazing-camera-22");
+  await capture("grazing", grazing);
+}
+
+async function runSkyboxFixture(page, scene, capture, inputTranscript) {
+  await setSkybox(page, scene.skyboxId);
+  inputTranscript.push(`select-skybox:${scene.skyboxId}`);
+  let snapshot = await advanceWithGamepadInput(page, {}, 65);
+  await capture("yaw-0", snapshot);
+
+  for (const state of ["yaw-90", "yaw-180", "yaw-270"]) {
+    snapshot = await rotateCameraByYaw(page, snapshot, Math.PI * 0.5, state);
+    inputTranscript.push(`right-stick-quarter-turn:${state}`);
+    await capture(state, snapshot);
+  }
+
+  snapshot = await advanceWithGamepadInput(page, { axes: [0, 0, 0, -1] }, 42);
+  inputTranscript.push("right-stick-down-below-horizon-42");
+  await capture("below-horizon", snapshot);
+}
+
+async function rotateCameraByYaw(page, initialSnapshot, targetRadians, label) {
+  const toleranceRadians = 0.75 * Math.PI / 180;
+  let snapshot = initialSnapshot;
+  let previousYaw = getCameraOrbitYaw(snapshot);
+  let traveledRadians = 0;
+
+  for (let tick = 0; tick < 180; tick += 1) {
+    const remainingRadians = targetRadians - traveledRadians;
+    if (remainingRadians <= toleranceRadians) return snapshot;
+
+    // Ease the final few controller ticks so each fixture lands on a measured
+    // quarter-turn instead of assuming camera smoothing maps to a fixed count.
+    const lookMagnitude = Math.min(1, Math.max(0.24, remainingRadians / 0.04));
+    snapshot = await advanceWithGamepadInput(
+      page,
+      { axes: [0, 0, -lookMagnitude, 0] },
+      1
+    );
+    const currentYaw = getCameraOrbitYaw(snapshot);
+    traveledRadians += Math.max(0, shortestAngleDelta(previousYaw, currentYaw));
+    previousYaw = currentYaw;
+  }
+
+  throw new Error(
+    `${label} camera turn reached ${(traveledRadians * 180 / Math.PI).toFixed(2)} degrees; expected 90.`
+  );
+}
+
+function getCameraOrbitYaw(snapshot) {
+  return Math.atan2(
+    snapshot.camera.position.x - snapshot.player.position.x,
+    snapshot.camera.position.z - snapshot.player.position.z
+  );
+}
+
+function shortestAngleDelta(from, to) {
+  return Math.atan2(Math.sin(to - from), Math.cos(to - from));
+}
+
+async function runTrackWakeFixture(page, capture, inputTranscript) {
+  const boost = await advanceUntilVisualState(
+    page,
+    {
+      axes: [0, -1, 0, 0],
+      buttons: { [GAMEPAD_BUTTON.rightTrigger]: 1 }
+    },
+    (snapshot) => snapshot.player.speed >= 20,
+    "Track boost state",
+    { maxTicks: 360, chunkTicks: 4 }
+  );
+  inputTranscript.push("left-stick-forward-plus-RT-until-speed>=20");
+  await capture("boost", boost);
+
+  const coast = await advanceUntilVisualState(
+    page,
+    {},
+    (snapshot) => snapshot.player.speed <= 8 && snapshot.player.speed >= 2,
+    "Track coast state",
+    { maxTicks: 180, chunkTicks: 2 }
+  );
+  inputTranscript.push("neutral-until-speed-between-2-and-8");
+  await capture("coast", coast);
+
+  const stop = await advanceUntilVisualState(
+    page,
+    {},
+    (snapshot) => snapshot.player.speed <= 0.35,
+    "Track stop state",
+    { maxTicks: 360, chunkTicks: 4 }
+  );
+  inputTranscript.push("neutral-until-speed<=0.35");
+  await capture("stop", stop);
+
+  const settled = await advanceWithGamepadInput(page, {}, 240);
+  inputTranscript.push("neutral-wake-settle-240");
+  await capture("settled", settled);
+}
+
+async function applyClosureSceneSettings(page, scene, backendId, inputTranscript) {
+  if (scene.qualityId) {
+    await setControlValue(page, "#quality-select", scene.qualityId, "change");
+    inputTranscript.push(`quality:${scene.qualityId}`);
+  }
+  if (typeof scene.voxelSizeMeters === "number") {
+    await setControlValue(page, "#arena-radius-slider", 400, "input");
+    await setControlValue(page, "#voxel-size-slider", scene.voxelSizeMeters, "input");
+    inputTranscript.push("arena-radius:400", `voxel-size:${scene.voxelSizeMeters}`);
+  }
+
+  await page.waitForTimeout(typeof scene.voxelSizeMeters === "number" ? 1_200 : 350);
+  await page.waitForFunction(({ expectedBackendId, qualityId }) => {
+    const entries = window.__rippleDebugDump?.() ?? [];
+    return entries.some((entry) =>
+      entry.channel === "renderer.frameSample" &&
+      entry.payload?.backendId === expectedBackendId &&
+      entry.payload?.quality === qualityId
+    ) || document.querySelector("#quality-select")?.value === qualityId;
+  }, { expectedBackendId: backendId, qualityId: scene.qualityId }, { timeout: 15_000 });
+}
+
+async function setControlValue(page, selector, value, eventType) {
+  await page.evaluate(({ controlSelector, nextValue, type }) => {
+    const control = document.querySelector(controlSelector);
+    if (!(control instanceof HTMLInputElement || control instanceof HTMLSelectElement)) {
+      throw new Error(`Missing parity fixture control ${controlSelector}.`);
+    }
+    control.value = String(nextValue);
+    control.dispatchEvent(new Event(type, { bubbles: true }));
+  }, { controlSelector: selector, nextValue: value, type: eventType });
+}
+
+async function setSkybox(page, skyboxId) {
+  await setControlValue(page, "#skybox-select", skyboxId, "change");
+  await page.waitForFunction((expectedSkybox) => {
+    const entries = window.__rippleDebugDump?.() ?? [];
+    return entries.some((entry) =>
+      (entry.channel === "skybox.load" || entry.channel === "skybox.webgpu.load") &&
+      entry.payload?.skybox === expectedSkybox
+    );
+  }, skyboxId, { timeout: PAGE_TIMEOUT_MS });
+}
+
+async function driveTowardTargetUntil(page, selectTarget, predicate, label, options = {}) {
+  const maxTicks = options.maxTicks ?? 1_200;
+  const chunkTicks = options.chunkTicks ?? 2;
+  let advancedTicks = 0;
+  let snapshot = await captureVisualState(page);
+
+  while (advancedTicks < maxTicks) {
+    if (predicate(snapshot)) return snapshot;
+    if (options.failWhen?.(snapshot)) {
+      throw new Error(`${label} entered a forbidden state before reaching its target.`);
+    }
+    const target = selectTarget(snapshot);
+    if (!target) {
+      throw new Error(`${label} has no renderer-neutral target position.`);
+    }
+    const movementTarget = options.followCourse
+      ? selectCourseNavigationTarget(snapshot, target, options.pushBeyondCourseTarget === true)
+      : target;
+    const axes = createCameraRelativeMovementAxes(snapshot, movementTarget);
+    const ticks = Math.min(chunkTicks, maxTicks - advancedTicks);
+    snapshot = await advanceWithGamepadInput(page, { axes }, ticks);
+    advancedTicks += ticks;
+  }
+
+  throw new Error(
+    `${label} did not satisfy its contract within ${maxTicks} ticks: ` +
+    JSON.stringify({
+      tick: snapshot.tick,
+      player: snapshot.player,
+      training: snapshot.training,
+      activeEchoes: snapshot.activeEchoes,
+      nearestEchoDistance: getNearestEchoDistance(snapshot)
+    })
+  );
+}
+
+function selectCourseNavigationTarget(snapshot, finalTarget, pushBeyondTarget = false) {
+  const samples = snapshot.course?.centerlineSamples ?? [];
+  if (samples.length < 3) return finalTarget;
+
+  const player = snapshot.player.position;
+  const playerSampleIndex = findNearestCourseSampleIndex(samples, player);
+  const targetSampleIndex = findNearestCourseSampleIndex(samples, finalTarget);
+  const forwardDistance = positiveModulo(targetSampleIndex - playerSampleIndex, samples.length);
+  const backwardDistance = positiveModulo(playerSampleIndex - targetSampleIndex, samples.length);
+  const direction = forwardDistance <= backwardDistance ? 1 : -1;
+  const remainingSegments = Math.min(forwardDistance, backwardDistance);
+
+  // Aim several segments ahead so analog steering follows the ribbon smoothly.
+  // Once the target is nearby, steering directly lets collection and wall-slide
+  // triggers use their real collision radii instead of stopping at centerline.
+  if (remainingSegments <= 4) {
+    return pushBeyondTarget
+      ? extendCourseTargetPastWall(samples, targetSampleIndex, finalTarget)
+      : finalTarget;
+  }
+  const lookAheadSegments = Math.min(6, remainingSegments);
+  const waypointIndex = positiveModulo(
+    playerSampleIndex + direction * lookAheadSegments,
+    samples.length
+  );
+  return samples[waypointIndex];
+}
+
+function extendCourseTargetPastWall(samples, targetSampleIndex, finalTarget) {
+  const centerline = samples[targetSampleIndex];
+  const outwardX = finalTarget.x - centerline.x;
+  const outwardZ = finalTarget.z - centerline.z;
+  const outwardLength = Math.hypot(outwardX, outwardZ);
+  if (outwardLength <= 0.0001) return finalTarget;
+
+  // Training places its last gate on the outside edge. Steering beyond that
+  // gate makes the real play-area constraint register wall contact instead of
+  // allowing the fixture to hover politely at the marker forever.
+  const pushDistance = 8;
+  return {
+    x: finalTarget.x + (outwardX / outwardLength) * pushDistance,
+    y: finalTarget.y,
+    z: finalTarget.z + (outwardZ / outwardLength) * pushDistance
+  };
+}
+
+function findNearestCourseSampleIndex(samples, position) {
+  let nearestIndex = 0;
+  let nearestDistanceSquared = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < samples.length; index += 1) {
+    const deltaX = samples[index].x - position.x;
+    const deltaZ = samples[index].z - position.z;
+    const distanceSquared = deltaX * deltaX + deltaZ * deltaZ;
+    if (distanceSquared >= nearestDistanceSquared) continue;
+    nearestDistanceSquared = distanceSquared;
+    nearestIndex = index;
+  }
+  return nearestIndex;
+}
+
+function positiveModulo(value, divisor) {
+  return ((value % divisor) + divisor) % divisor;
+}
+
+function createCameraRelativeMovementAxes(snapshot, target) {
+  const player = snapshot.player.position;
+  const camera = snapshot.camera.position;
+  const desiredX = target.x - player.x;
+  const desiredZ = target.z - player.z;
+  const desiredLength = Math.hypot(desiredX, desiredZ);
+  if (desiredLength <= 0.0001) return [0, 0, 0, 0];
+
+  const cameraForwardX = player.x - camera.x;
+  const cameraForwardZ = player.z - camera.z;
+  const cameraForwardLength = Math.max(0.0001, Math.hypot(cameraForwardX, cameraForwardZ));
+  const forwardX = cameraForwardX / cameraForwardLength;
+  const forwardZ = cameraForwardZ / cameraForwardLength;
+  const directionX = desiredX / desiredLength;
+  const directionZ = desiredZ / desiredLength;
+  const forwardAmount = directionX * forwardX + directionZ * forwardZ;
+  const rightAmount = directionX * -forwardZ + directionZ * forwardX;
+  return [rightAmount, -forwardAmount, 0, 0];
+}
+
+function getNearestEchoPosition(snapshot) {
+  const echo = getNearestEcho(snapshot);
+  return echo
+    ? { x: echo.positionX, y: echo.positionY, z: echo.positionZ }
+    : null;
+}
+
+function getNearestEcho(snapshot) {
+  const echoes = snapshot.echoState?.echoes ?? [];
+  let nearest = null;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (const echo of echoes) {
+    const distance = Math.hypot(
+      echo.positionX - snapshot.player.position.x,
+      echo.positionY - snapshot.player.position.y,
+      echo.positionZ - snapshot.player.position.z
+    );
+    if (distance >= nearestDistance) continue;
+    nearestDistance = distance;
+    nearest = echo;
+  }
+  return nearest;
+}
+
+function getNearestEchoDistance(snapshot) {
+  const echoes = snapshot.echoState?.echoes ?? [];
+  let nearest = Number.POSITIVE_INFINITY;
+  for (const echo of echoes) {
+    nearest = Math.min(nearest, Math.hypot(
+      echo.positionX - snapshot.player.position.x,
+      echo.positionY - snapshot.player.position.y,
+      echo.positionZ - snapshot.player.position.z
+    ));
+  }
+  return nearest;
+}
+
+function getPlanarDistance(left, right) {
+  return Math.hypot(left.x - right.x, left.z - right.z);
+}
+
+function assertClosureFixtureState(scene, state, snapshot) {
+  if (snapshot.playMode !== scene.mode) {
+    throw new Error(`${scene.id}/${state} reported playMode=${JSON.stringify(snapshot.playMode)}.`);
+  }
+  if (scene.qualityId && snapshot.qualityId !== scene.qualityId) {
+    throw new Error(`${scene.id}/${state} reported qualityId=${JSON.stringify(snapshot.qualityId)}.`);
+  }
+  if (scene.skyboxId && snapshot.skyboxId !== scene.skyboxId) {
+    throw new Error(`${scene.id}/${state} reported skyboxId=${JSON.stringify(snapshot.skyboxId)}.`);
+  }
+  if (state === "jump-airborne" && snapshot.player.groundContact > 0.05) {
+    throw new Error(`${scene.id}/${state} was not airborne.`);
+  }
+  if (state === "jump-landed" && snapshot.player.groundContact < 0.999) {
+    throw new Error(`${scene.id}/${state} was not grounded.`);
+  }
+  if (["echo-nearby", "jump-takeoff", "jump-airborne", "jump-landed"].includes(state) &&
+    snapshot.echoState.activeVisualBursts !== 0) {
+    throw new Error(`${scene.id}/${state} collected its Echo too early.`);
+  }
+  if (state === "echo-collected" && snapshot.echoState.activeVisualBursts <= 0) {
+    throw new Error(`${scene.id}/${state} did not retain an Echo collection burst.`);
+  }
+  if (state === "complete" && (!snapshot.training?.complete || snapshot.training?.markerVisible)) {
+    throw new Error(`${scene.id}/${state} did not report completed Training with a hidden marker.`);
+  }
+}
+
+async function installGlobalRandomSeed(page) {
+  await page.addInitScript((seed) => {
+    let randomState = seed >>> 0;
+    Math.random = () => {
+      randomState = (randomState + 0x6d2b79f5) >>> 0;
+      let value = randomState;
+      value = Math.imul(value ^ (value >>> 15), value | 1);
+      value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+      return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+    };
+  }, BENCHMARK_SEED);
+}
+
 function createSceneUrl(scene, backendId) {
+  const usesBenchmarkMotion = scene.driver === "pulse-lifecycle";
   return buildAppUrl(config, {
     // Keep local diagnostics retained in-page while disabling network posts.
     debug: "1",
@@ -293,19 +893,20 @@ function createSceneUrl(scene, backendId) {
     renderer: backendId,
     presentation: backendId === "webgpu" ? WEBGPU_PRESENTATION_PROFILE : undefined,
     mode: scene.mode,
-    benchmark: "1",
-    benchmarkScenario: scene.benchmarkScenario,
-    benchmarkTier: scene.benchmarkTier,
-    benchmarkSeed: BENCHMARK_SEED,
+    benchmark: usesBenchmarkMotion ? "1" : undefined,
+    benchmarkScenario: usesBenchmarkMotion ? scene.benchmarkScenario : undefined,
+    benchmarkTier: usesBenchmarkMotion ? scene.benchmarkTier : undefined,
+    benchmarkSeed: usesBenchmarkMotion ? BENCHMARK_SEED : undefined,
     stress: "1",
     visualCapture: "1",
+    visualCaptureSeed: BENCHMARK_SEED,
     parityAudit: runId
   });
 }
 
 async function waitForSceneReady(page, scene, backendId) {
-  await page.waitForFunction(({ expectedBackendId, expectedMode }) => {
-    const benchmarkReady = window.__rippleBenchmark?.version === 1;
+  await page.waitForFunction(({ expectedBackendId, expectedMode, benchmarkRequired }) => {
+    const benchmarkReady = !benchmarkRequired || window.__rippleBenchmark?.version === 1;
     const visualCaptureReady = window.__rippleVisualCapture?.version === 1;
     const canvas = document.querySelector(`canvas[data-renderer-backend="${expectedBackendId}"]`);
     const entries = window.__rippleDebugDump?.() ?? [];
@@ -320,7 +921,8 @@ async function waitForSceneReady(page, scene, backendId) {
     return benchmarkReady && visualCaptureReady && canvas instanceof HTMLCanvasElement && rendererReady && skyboxReady;
   }, {
     expectedBackendId: backendId,
-    expectedMode: scene.mode
+    expectedMode: scene.mode,
+    benchmarkRequired: scene.driver === "pulse-lifecycle"
   }, { timeout: PAGE_TIMEOUT_MS });
 }
 
@@ -692,16 +1294,27 @@ function compareFixtureStates(reference, candidate) {
     "playMode",
     "tick",
     "qualityId",
+    "skyboxId",
+    "bloomEnabled",
     "fieldPalette",
     "fieldInstances",
     "activeSources",
     "activeEchoes",
+    "activeParticles",
     "sourceState.activeCount",
     "sourceState.renderedCount",
     "sourceState.digest",
     "echoState.activeEchoes",
     "echoState.activeVisualBursts",
     "echoState.digest",
+    "particleState.activeParticles",
+    "particleState.particleBudget",
+    "particleState.streamName",
+    "particleState.randomBaseSeed",
+    "particleState.randomSeedMode",
+    "particleState.dynamicPrecisionDecimals",
+    "particleState.dynamicDigest",
+    "particleState.staticDigest",
     "field.mode",
     "field.fullHexCount",
     "field.culledHexCount",
@@ -726,6 +1339,7 @@ function compareFixtureStates(reference, candidate) {
   ];
   const numericPaths = [
     "simulationTimeSeconds",
+    "particleState.elapsedSeconds",
     "player.position.x",
     "player.position.y",
     "player.position.z",
@@ -755,6 +1369,16 @@ function compareFixtureStates(reference, candidate) {
   }
   for (const valuePath of numericPaths) {
     compareNumericValue(differences, valuePath, readPath(reference, valuePath), readPath(candidate, valuePath), 0.0001);
+  }
+  if (reference.training || candidate.training) {
+    for (const valuePath of [
+      "training.markerPosition.x",
+      "training.markerPosition.y",
+      "training.markerPosition.z",
+      "training.markerFacingYawRadians"
+    ]) {
+      compareNumericValue(differences, valuePath, readPath(reference, valuePath), readPath(candidate, valuePath), 0.0001);
+    }
   }
   const referenceMatrix = reference.camera?.viewProjectionMatrix ?? [];
   const candidateMatrix = candidate.camera?.viewProjectionMatrix ?? [];
@@ -844,6 +1468,17 @@ function readWebGpuPresentationProfile() {
     "classic";
   if (value !== "classic" && value !== "core") {
     throw new Error(`Unsupported WebGPU parity presentation profile ${JSON.stringify(value)}; expected classic or core.`);
+  }
+  return value;
+}
+
+function readParitySuite() {
+  const argument = process.argv.slice(2).find((value) => value.startsWith("--suite="));
+  const value = argument?.slice("--suite=".length) ||
+    process.env.RIPPLE_PARITY_SUITE ||
+    "baseline";
+  if (value !== "baseline" && value !== "closure") {
+    throw new Error(`Unsupported renderer parity suite ${JSON.stringify(value)}; expected baseline or closure.`);
   }
   return value;
 }

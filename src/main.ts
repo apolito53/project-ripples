@@ -11,6 +11,7 @@ import {
   normalizePlayerSpeedSettings
 } from "./controls";
 import { debugEvent, debugMeasure, roundMetric, vectorPayload, type RippleDebugPayload } from "./debugLog";
+import { EchoZoneStateStore } from "./echoState";
 import { EchoZoneField, type TriggeredEchoZone } from "./echoZones";
 import { isFieldPaletteId, resolveFieldPaletteForProfile } from "./fieldPalette";
 import { applyFieldInstanceBudget, type FieldScaleChangedControl } from "./fieldScaleGuardrails";
@@ -51,10 +52,12 @@ import {
 import {
   createVisualCaptureCourseState,
   createVisualCaptureEchoState,
+  createVisualCaptureParticleState,
   createVisualCaptureSourceState,
   createRenderVisualCaptureController,
   hashVisualCaptureNumbers
 } from "./render/renderVisualCapture";
+import { getRenderRandomSource, getRenderRandomSourceDescriptor } from "./render/renderRandom";
 import { ThreeRenderRuntime } from "./render/threeRenderRuntime";
 import { startWebGpuApp } from "./render/webGpuApp";
 import { RippleField } from "./rippleField";
@@ -410,8 +413,12 @@ type TouchStickState = {
   lastY: number;
 };
 
+const particleRandom = getRenderRandomSource("particles");
+const echoPlacementRandom = getRenderRandomSource("echo-placement");
+const echoPhaseRandom = getRenderRandomSource("echo-phase");
 const rippleSources = new RippleSourceStore();
-const echoZones = new EchoZoneField(scene);
+const echoState = new EchoZoneStateStore(undefined, echoPhaseRandom);
+const echoZones = new EchoZoneField(scene, echoState);
 const gamepad = new GamepadInput();
 const wakeField = new WakeField(renderer, preset);
 const raceTrack = new RaceTrack(scene, preset.fieldRadius, settings.arenaRadiusMeters);
@@ -423,7 +430,7 @@ const trainingRun = new TrainingRun(scene, {
   spawnEchoAtTrackFraction: spawnTrainingEchoAtTrackFraction,
   spawnCelebrationPulse: spawnTrainingCelebrationPulse
 });
-let particles = new ParticleVeil(scene, preset.particleBudget, getPixelRatio());
+let particles = new ParticleVeil(scene, preset.particleBudget, getPixelRatio(), particleRandom);
 let pulseLights = new PulseLightRig(scene, preset.pulseLightCount);
 
 const avatar = createAvatar();
@@ -926,12 +933,19 @@ function describeWebGlVisualCapture(tick: number): Readonly<Record<string, unkno
     tick,
     simulationTimeSeconds,
     qualityId: preset.id,
+    skyboxId: skybox.getActiveOption().id,
+    bloomEnabled: getEffectiveBloomStrength() > 0.02,
+    shadowMode: renderer.shadowMap.enabled ? "three-shadow-map" : "disabled",
     fieldInstances: rippleField.getInstanceCount(),
     activeSources: sourceSnapshot.activeCount,
     activeEchoes: echoSnapshot.activeEchoes,
     activeParticles: particles.getActiveCount(),
     sourceState: createVisualCaptureSourceState(sourceSnapshot),
     echoState: createVisualCaptureEchoState(echoSnapshot),
+    particleState: createVisualCaptureParticleState(
+      particles.getSnapshot(),
+      getRenderRandomSourceDescriptor("particles")
+    ),
     field: {
       mode: fieldBuild.mode,
       fullHexCount: fieldBuild.fullHexCount,
@@ -962,6 +976,12 @@ function describeWebGlVisualCapture(tick: number): Readonly<Record<string, unkno
       stepId: training.stepId,
       stepIndex: training.stepIndex,
       markerVisible: training.marker.visible,
+      markerPosition: exactVectorSnapshot(new THREE.Vector3(
+        training.marker.position.x,
+        training.marker.position.y,
+        training.marker.position.z
+      )),
+      markerFacingYawRadians: training.marker.facingYawRadians,
       markerDigest: hashVisualCaptureNumbers([
         training.marker.position.x,
         training.marker.position.y,
@@ -1107,8 +1127,8 @@ function createEchoZonePosition(): THREE.Vector3 | null {
   const maxJitterMeters = raceTrack.getSafeEchoJitterMeters(ECHO_ZONE_RADIUS);
 
   for (let attempt = 0; attempt < ECHO_ZONE_SPAWN_ATTEMPTS; attempt += 1) {
-    const fraction = Math.random();
-    const lateralOffsetMeters = (Math.random() * 2 - 1) * maxJitterMeters;
+    const fraction = echoPlacementRandom();
+    const lateralOffsetMeters = (echoPlacementRandom() * 2 - 1) * maxJitterMeters;
     const position = raceTrack.samplePointAt(fraction, lateralOffsetMeters);
     const playerDistance = Math.hypot(position.x - player.position.x, position.z - player.position.z);
     if (playerDistance < ECHO_ZONE_MIN_PLAYER_DISTANCE) continue;
@@ -1144,8 +1164,8 @@ function createArenaEchoZonePosition(): THREE.Vector3 | null {
   for (let attempt = 0; attempt < ECHO_ZONE_SPAWN_ATTEMPTS; attempt += 1) {
     // sqrt keeps the distribution even across a disc instead of clustering at
     // the center, which matters now that Arena mode is a real sandbox again.
-    const radius = Math.sqrt(Math.random()) * maxSpawnRadius;
-    const angle = Math.random() * Math.PI * 2;
+    const radius = Math.sqrt(echoPlacementRandom()) * maxSpawnRadius;
+    const angle = echoPlacementRandom() * Math.PI * 2;
     const position = new THREE.Vector3(
       Math.cos(angle) * radius,
       0,

@@ -293,11 +293,24 @@ lifetime, and records both cross-backend and phase-to-phase image metrics so a
 held middle or abrupt ending is visible in the report.
 
 Use `npm.cmd run audit:render:parity:core` to audit the preserved minimalist
-profile. Ignored results land under `parity-results/<profile>-<timestamp>/` as raw PNGs, side-by-
+profile. Use `npm.cmd run audit:render:parity:closure` for the larger Classic
+evidence matrix: Clean Arena Echo/jump/landing/collection states, Training
+initial/advanced/complete states, Meltdown tiers 0 and 4 from a grazing camera,
+all four skyboxes at four yaw angles plus below-horizon pitch, and Track
+boost/coast/stop/settled wake states. The interaction fixtures use a shared
+deterministic gamepad harness and real movement/collision; Training navigation
+follows neutral centerline breadcrumbs derived from the captured wall snapshot.
+
+Ignored results land under `parity-results/<profile>-<suite>-<timestamp>/` as raw PNGs, side-by-
 side amplified-diff strips, `report.json`, and `summary.md`. Cross-renderer
 histogram, coarse-luma, edge-density, and RGB-delta metrics guide review but do
 not assert naive pixel equality. The tracked classification and remaining
 fixtures live in `devlog/renderer-parity/README.md`.
+
+Particle spawning uses page-lifetime named random streams under capture and
+benchmark seeds, so renderer initialization cannot shift particle placement.
+The audit compares exact canonical digests for packed dynamic/static particle
+state, while normal sessions receive independent entropy-seeded streams.
 
 ### Renderer Benchmark
 
@@ -420,6 +433,7 @@ npm.cmd run verify:hex-lattice
 npm.cmd run verify:benchmark:reporting
 npm.cmd run audit:render:parity
 npm.cmd run audit:render:parity:core
+npm.cmd run audit:render:parity:closure
 npm.cmd run benchmark:renderers
 npm.cmd run benchmark:renderers:package
 ```

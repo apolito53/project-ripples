@@ -66,11 +66,13 @@ import {
 import {
   createVisualCaptureCourseState,
   createVisualCaptureEchoState,
+  createVisualCaptureParticleState,
   createVisualCaptureSourceState,
   createRenderVisualCaptureController,
   hashVisualCaptureNumbers,
   type RenderVisualCaptureController
 } from "./renderVisualCapture";
+import { getRenderRandomSource, getRenderRandomSourceDescriptor } from "./renderRandom";
 import {
   RENDER_SCENE_LOCAL_LIGHT_LIMIT,
   RENDER_SCENE_SHADOW_CASTER_LIMIT,
@@ -234,9 +236,12 @@ async function startWebGpuAppInternal(
   applyRenderBenchmarkSettings(settings);
   let preset = getQualityPreset(settings);
   let presentationProfile = presentationSelection.profile;
-  let particleState = new ParticleVeilState(preset.particleBudget);
+  const particleRandom = getRenderRandomSource("particles");
+  const echoPlacementRandom = getRenderRandomSource("echo-placement");
+  const echoPhaseRandom = getRenderRandomSource("echo-phase");
+  let particleState = new ParticleVeilState(preset.particleBudget, particleRandom);
   const rippleSources = new RippleSourceStore();
-  const echoState = new EchoZoneStateStore();
+  const echoState = new EchoZoneStateStore(undefined, echoPhaseRandom);
   const gamepad = new GamepadInput();
   const raceTrack = createCourseGameplay(preset.fieldRadius, settings.arenaRadiusMeters);
   const camera = new THREE.PerspectiveCamera(54, 1, 0.1, 450);
@@ -670,7 +675,10 @@ async function startWebGpuAppInternal(
   function spawnRandomTrackEcho(time: number): boolean {
     const maxJitter = raceTrack.getSafeEchoJitterMeters(ECHO_ZONE_RADIUS);
     for (let attempt = 0; attempt < ECHO_ZONE_SPAWN_ATTEMPTS; attempt += 1) {
-      const position = raceTrack.samplePointAt(Math.random(), (Math.random() * 2 - 1) * maxJitter);
+      const position = raceTrack.samplePointAt(
+        echoPlacementRandom(),
+        (echoPlacementRandom() * 2 - 1) * maxJitter
+      );
       position.y = sampleFieldHeight(position.x, position.z) + 0.16;
       if (Math.hypot(position.x - player.position.x, position.z - player.position.z) < ECHO_ZONE_MIN_PLAYER_DISTANCE) continue;
       if (!echoState.isPositionClear(position, ECHO_ZONE_MIN_ZONE_DISTANCE)) continue;
@@ -682,8 +690,11 @@ async function startWebGpuAppInternal(
 
   function spawnRandomArenaEcho(time: number): boolean {
     for (let attempt = 0; attempt < ECHO_ZONE_SPAWN_ATTEMPTS; attempt += 1) {
-      const radius = Math.sqrt(Math.random()) * Math.max(0, preset.fieldRadius - ECHO_ZONE_RADIUS - PLAYER_BOUNDARY_PADDING);
-      const angle = Math.random() * Math.PI * 2;
+      const radius = Math.sqrt(echoPlacementRandom()) * Math.max(
+        0,
+        preset.fieldRadius - ECHO_ZONE_RADIUS - PLAYER_BOUNDARY_PADDING
+      );
+      const angle = echoPlacementRandom() * Math.PI * 2;
       const position = new THREE.Vector3(
         Math.cos(angle) * radius,
         0,
@@ -855,12 +866,19 @@ async function startWebGpuAppInternal(
       tick,
       simulationTimeSeconds,
       qualityId: input.qualityPreset.id,
+      skyboxId: input.scenePresentation.skyboxId,
+      bloomEnabled: input.bloomStrength > 0.02,
+      shadowMode: runtime.getStats().shadowMode ?? "disabled",
       fieldInstances: fieldMetrics.instanceCount,
       activeSources: input.pulseSources.activeCount,
       activeEchoes: input.echoVisualState.activeEchoes,
       activeParticles: particleMetrics.activeParticles,
       sourceState: createVisualCaptureSourceState(input.pulseSources),
       echoState: createVisualCaptureEchoState(input.echoVisualState),
+      particleState: createVisualCaptureParticleState(
+        input.particleState,
+        getRenderRandomSourceDescriptor("particles")
+      ),
       field: {
         mode: fieldLayout.buildStats.mode,
         fullHexCount: fieldLayout.buildStats.fullHexCount,
@@ -890,6 +908,8 @@ async function startWebGpuAppInternal(
         stepId: input.training.stepId,
         stepIndex: input.training.stepIndex,
         markerVisible: input.training.marker.visible,
+        markerPosition: input.training.marker.position,
+        markerFacingYawRadians: input.training.marker.facingYawRadians,
         markerDigest: hashVisualCaptureNumbers([
           input.training.marker.position.x,
           input.training.marker.position.y,
@@ -1382,7 +1402,7 @@ async function startWebGpuAppInternal(
     preset = getQualityPreset(settings);
     settings.bloomStrength = preset.bloomStrength;
     settings.bloomEnabled = preset.bloomStrength > 0;
-    particleState = new ParticleVeilState(preset.particleBudget);
+    particleState = new ParticleVeilState(preset.particleBudget, particleRandom);
     raceTrack.setArena(preset.fieldRadius, settings.arenaRadiusMeters, "quality");
     runtime.applyQualityPreset(preset, getWebGpuBloomStrength(settings), "quality");
     rebuildActiveModeAfterSettingsChange("quality");

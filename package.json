@@ -28,6 +28,7 @@
     "verify:benchmark:reporting": "node scripts/verify-benchmark-reporting.mjs",
     "audit:render:parity": "npm run build && node scripts/audit-renderer-parity.mjs",
     "audit:render:parity:core": "npm run build && node scripts/audit-renderer-parity.mjs --presentation=core",
+    "audit:render:parity:closure": "npm run build && node scripts/audit-renderer-parity.mjs --suite=closure",
     "benchmark:renderers": "npm run build && node scripts/benchmark-renderers.mjs",
     "benchmark:renderers:package": "node scripts/package-renderer-benchmark.mjs",
     "smoke": "node scripts/smoke.mjs",

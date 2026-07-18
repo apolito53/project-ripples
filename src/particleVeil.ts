@@ -4,6 +4,7 @@ import {
   ParticleVeilState,
   type ParticleStateSnapshot
 } from "./particleState";
+import type { RandomSource } from "./randomStream";
 
 export class ParticleVeil {
   readonly points: THREE.Points;
@@ -18,7 +19,13 @@ export class ParticleVeil {
   private readonly cloudinessAttribute: THREE.BufferAttribute;
   private lastSyncedVersion = -1;
 
-  constructor(scene: THREE.Scene, budget: number, pixelRatio: number, state = new ParticleVeilState(budget)) {
+  constructor(
+    scene: THREE.Scene,
+    budget: number,
+    pixelRatio: number,
+    private readonly random: RandomSource = () => Math.random(),
+    state = new ParticleVeilState(budget, random)
+  ) {
     this.state = state;
     const snapshot = this.state.getSnapshot();
 
@@ -109,7 +116,7 @@ export class ParticleVeil {
 
   resizeBudget(scene: THREE.Scene, budget: number, pixelRatio: number): ParticleVeil {
     this.dispose();
-    return new ParticleVeil(scene, budget, pixelRatio);
+    return new ParticleVeil(scene, budget, pixelRatio, this.random);
   }
 
   setPixelRatio(pixelRatio: number): void {

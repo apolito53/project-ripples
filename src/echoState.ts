@@ -1,11 +1,13 @@
 import * as THREE from "three";
 import { debugEvent, roundMetric, vectorPayload } from "./debugLog";
+import type { RandomSource } from "./randomStream";
 
 export const ECHO_COLUMN_HEIGHT = 7.4;
 export const ECHO_COLUMN_BASE_LIFT = 1.45;
 export const ECHO_COLLECTION_EVENT_SECONDS = 1.06;
 
 const ECHO_STATE_FRAME_LOG_INTERVAL_SECONDS = 0.5;
+const DEFAULT_RANDOM_SOURCE: RandomSource = () => Math.random();
 
 export type EchoZoneOptions = {
   readonly radius: number;
@@ -86,7 +88,10 @@ export class EchoZoneStateStore {
   private nextId = 1;
   private lastFrameLogAt = -Infinity;
 
-  constructor(private readonly collectionEventSeconds = ECHO_COLLECTION_EVENT_SECONDS) {}
+  constructor(
+    private readonly collectionEventSeconds = ECHO_COLLECTION_EVENT_SECONDS,
+    private readonly random: RandomSource = DEFAULT_RANDOM_SOURCE
+  ) {}
 
   add(position: THREE.Vector3, startTime: number, options: EchoZoneOptions): EchoZoneState {
     const zone: EchoZoneState = {
@@ -96,7 +101,7 @@ export class EchoZoneStateStore {
       spawnTime: startTime,
       // Visuals and WebGPU diagnostics both consume this phase so newly shared
       // Echo state still breathes with per-zone variation.
-      phase: Math.random() * Math.PI * 2,
+      phase: this.random() * Math.PI * 2,
       columnRadius: Math.max(0.85, options.radius * 0.34)
     };
 
@@ -250,5 +255,8 @@ export class EchoZoneStateStore {
   clear(): void {
     this.zones.splice(0, this.zones.length);
     this.collectionEvents.splice(0, this.collectionEvents.length);
+    // A cleared store represents a fresh scene session. Restarting IDs keeps
+    // reset/rebuild behavior stable across renderer-specific lifecycle details.
+    this.nextId = 1;
   }
 }

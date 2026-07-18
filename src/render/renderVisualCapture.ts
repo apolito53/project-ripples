@@ -1,5 +1,7 @@
 import type { EchoVisualStateSnapshot } from "../echoState";
+import type { ParticleStateSnapshot } from "../particleState";
 import type { RippleRenderSourceSnapshot } from "../rippleSources";
+import type { RenderRandomSourceDescriptor } from "./renderRandom";
 
 export type RenderVisualCaptureDescription = Readonly<Record<string, unknown>>;
 
@@ -181,16 +183,17 @@ export function hashVisualCaptureBytes(values: ArrayLike<number>): string {
   return toCaptureHash(hash);
 }
 
-export function hashVisualCaptureNumbers(values: Iterable<number>): string {
+export function hashVisualCaptureNumbers(values: Iterable<number>, decimalPlaces = 6): string {
   const buffer = new ArrayBuffer(8);
   const view = new DataView(buffer);
+  const canonicalScale = 10 ** Math.max(0, Math.min(9, Math.trunc(decimalPlaces)));
   let hash = FNV_OFFSET_BASIS;
   let index = 0;
   for (const value of values) {
     if (!Number.isFinite(value)) {
       throw new Error(`Visual capture digest value ${index} must be finite; received ${value}.`);
     }
-    const canonicalValue = Math.round(value * 1_000_000) / 1_000_000 || 0;
+    const canonicalValue = Math.round(value * canonicalScale) / canonicalScale || 0;
     view.setFloat64(0, canonicalValue, true);
     for (let byteIndex = 0; byteIndex < 8; byteIndex += 1) {
       hash = Math.imul(hash ^ view.getUint8(byteIndex), FNV_PRIME);
@@ -251,9 +254,6 @@ export function createVisualCaptureEchoState(snapshot: EchoVisualStateSnapshot):
     discBurstRadius: event.discBurstRadius
   }));
   for (const echo of echoes) {
-    // Per-renderer visual initialization currently shifts the random phase
-    // stream. Gameplay identity is position/scale/timing, so phase remains a
-    // presentation observation until particle/Echo RNG streams are named.
     values.push(
       echo.id,
       echo.positionX,
@@ -287,6 +287,52 @@ export function createVisualCaptureEchoState(snapshot: EchoVisualStateSnapshot):
   };
 }
 
+export function createVisualCaptureParticleState(
+  snapshot: ParticleStateSnapshot,
+  random: RenderRandomSourceDescriptor
+): Readonly<Record<string, unknown>> {
+  const activeParticles = Math.max(0, Math.min(snapshot.activeParticles, snapshot.particleBudget));
+  return {
+    activeParticles,
+    particleBudget: snapshot.particleBudget,
+    elapsedSeconds: snapshot.elapsedSeconds,
+    streamName: random.streamName,
+    randomBaseSeed: random.baseSeed,
+    randomSeedMode: random.seedMode,
+    dynamicPrecisionDecimals: 6,
+    dynamicDigest: hashVisualCaptureNumbers(iterateParticleDynamicState(snapshot, activeParticles)),
+    staticDigest: hashVisualCaptureNumbers(iterateParticleStaticState(snapshot, activeParticles))
+  };
+}
+
+function* iterateParticleDynamicState(
+  snapshot: ParticleStateSnapshot,
+  activeParticles: number
+): Iterable<number> {
+  for (let index = 0; index < activeParticles; index += 1) {
+    const positionOffset = index * 3;
+    yield snapshot.positions[positionOffset];
+    yield snapshot.positions[positionOffset + 1];
+    yield snapshot.positions[positionOffset + 2];
+    yield snapshot.alphas[index];
+    yield snapshot.sizes[index];
+  }
+}
+
+function* iterateParticleStaticState(
+  snapshot: ParticleStateSnapshot,
+  activeParticles: number
+): Iterable<number> {
+  for (let index = 0; index < activeParticles; index += 1) {
+    const colorOffset = index * 3;
+    yield snapshot.colors[colorOffset];
+    yield snapshot.colors[colorOffset + 1];
+    yield snapshot.colors[colorOffset + 2];
+    yield snapshot.twinkles[index];
+    yield snapshot.cloudinesses[index];
+  }
+}
+
 type VisualCaptureCourseMask = {
   readonly width: number;
   readonly height: number;
@@ -316,7 +362,8 @@ export function createVisualCaptureCourseState(
       maskDigest: "none",
       wallVersion: 0,
       wallSegmentCount: 0,
-      wallDigest: "none"
+      wallDigest: "none",
+      centerlineSamples: []
     };
   }
   const wallBytes = new Uint8Array(
@@ -324,6 +371,18 @@ export function createVisualCaptureCourseState(
     walls.packedSegments.byteOffset,
     walls.packedSegments.byteLength
   );
+  const centerlineSamples = [];
+  for (let segmentIndex = 0; segmentIndex < walls.segmentCount; segmentIndex += 1) {
+    const segmentOffset = segmentIndex * 4;
+    // The neutral wall snapshot stores left/right ribbon edges. Their midpoint is
+    // a stable navigation breadcrumb for deterministic browser fixtures; this
+    // exposes no RaceTrack object or mutable gameplay state to the renderer.
+    centerlineSamples.push({
+      segmentIndex,
+      x: (walls.packedSegments[segmentOffset] + walls.packedSegments[segmentOffset + 2]) * 0.5,
+      z: (walls.packedSegments[segmentOffset + 1] + walls.packedSegments[segmentOffset + 3]) * 0.5
+    });
+  }
   return {
     enabled: true,
     maskWidth: mask.width,
@@ -334,7 +393,8 @@ export function createVisualCaptureCourseState(
     wallSegmentCount: walls.segmentCount,
     wallBaseY: walls.baseY,
     wallHeight: walls.height,
-    wallDigest: hashVisualCaptureBytes(wallBytes)
+    wallDigest: hashVisualCaptureBytes(wallBytes),
+    centerlineSamples
   };
 }
 
