@@ -9,6 +9,7 @@ import {
 import {
   getFieldPaletteShaderIndex,
   resolveFieldPaletteForProfile,
+  shouldPreserveCorePalette,
   type ResolvedFieldPaletteId
 } from "../fieldPalette";
 import { MAX_SHADER_RIPPLE_SOURCES, RIPPLE_LIFETIME_SECONDS, type RippleRenderSourceSnapshot } from "../rippleSources";
@@ -535,7 +536,12 @@ export class WebGpuRippleFieldPreview {
     this.uniforms[uniformOffset + 31] = input.raceTrack.mask.height;
     this.fieldPalette = resolveFieldPaletteForProfile(input.settings.fieldPaletteId, this.presentationProfile);
     this.uniforms[uniformOffset + 32] = getFieldPaletteShaderIndex(this.fieldPalette);
-    this.uniforms[uniformOffset + 33] = 0;
+    // Core's Match Field Style option preserves the original muted treatment;
+    // an explicit Legacy Neon choice opts into the stronger shared palette.
+    this.uniforms[uniformOffset + 33] = shouldPreserveCorePalette(
+      input.settings.fieldPaletteId,
+      this.presentationProfile
+    ) ? 1 : 0;
     this.uniforms[uniformOffset + 34] = 0;
     this.uniforms[uniformOffset + 35] = 0;
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniforms);

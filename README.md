@@ -266,12 +266,14 @@ fail closed to Classic. Switching profiles changes the field pipeline in place w
 resetting the current mode, player position, or simulation clock. WebGL ignores
 the WebGPU presentation preference.
 
-The adjacent **Field Palette** selector is renderer-neutral. **Style Default**
-keeps WebGL and WebGPU Classic on the current reference colors while preserving
-Core's original blue/cyan/purple/gold neon treatment. **Reference** and
-**Legacy Neon** can be forced explicitly on either renderer profile. Legacy
-Neon restores only the older color response; it continues using the corrected
-source fade, wake transfer, and pulse lifecycle.
+The adjacent **Field Palette** selector is renderer-neutral. **Match Field
+Style** keeps WebGL and WebGPU Classic on the current Reference Sea Glass colors
+while preserving Core's original muted neon treatment. **Reference Sea Glass**
+and **Legacy Neon** can be forced explicitly on either renderer profile.
+Explicit Legacy Neon gives the resting field a clearly saturated indigo/violet/
+cyan identity, then uses cyan crests, violet troughs, and gold highlights as
+waves move through it. It changes color only; the corrected source fade, wake
+transfer, and pulse lifecycle remain shared.
 
 ### Renderer Presentation Audit
 

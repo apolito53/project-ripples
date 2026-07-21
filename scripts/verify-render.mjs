@@ -43,6 +43,8 @@ const WEBGPU_MOTE_AVATAR_ASSET_ID = "mote-core-orbit";
 const WEBGPU_PRESENTATION_PROFILE = "classic";
 const WEBGPU_CORE_PRESENTATION_PROFILE = "core";
 const WEBGL_PRESENTATION_PROFILE = "webgl-reference";
+const FIELD_PALETTE_MIN_CHANGED_RATIO = 0.2;
+const FIELD_PALETTE_MIN_MEAN_RGB_DELTA = 5.5;
 const WEBGPU_REQUIRED_REMAINING_GAPS = [];
 const WEBGPU_SUCCESS_FORBIDDEN_CHANNELS = Object.freeze([
   "webgpu.uncapturedError",
@@ -475,9 +477,24 @@ async function verifyPauseMenuTabsAndPalette(page, smokeRun, backendId) {
   await page.locator("#settings-panel-effects:not([hidden])").waitFor({ timeout: 5000 });
   await page.locator("#settings-tab-graphics").click();
 
+  // Metadata alone once let two nearly identical palettes pass this smoke.
+  // Capture the paused canvas at the same simulation state so the selector has
+  // to produce a meaningful color change in both renderer implementations.
+  const referenceBaselineIndex = await getLatestRunEntryIndex(page, smokeRun);
+  await page.locator("#field-palette-select").selectOption("reference");
+  const settingsChannel = backendId === "webgpu" ? "webgpu.settings.change" : "settings.change";
+  await waitForRunEvent(page, smokeRun, settingsChannel, (record) => {
+    const payload = record.entry.payload;
+    return record.entry.index > referenceBaselineIndex &&
+      payload.setting === "fieldPalette" &&
+      payload.fieldPalette === "reference" &&
+      payload.resolvedFieldPalette === "reference";
+  });
+  await delay(150);
+  const referencePalettePng = await capturePausedCanvasPng(page, backendId);
+
   const changeBaselineIndex = await getLatestRunEntryIndex(page, smokeRun);
   await page.locator("#field-palette-select").selectOption("legacy-neon");
-  const settingsChannel = backendId === "webgpu" ? "webgpu.settings.change" : "settings.change";
   await waitForRunEvent(page, smokeRun, settingsChannel, (record) => {
     const payload = record.entry.payload;
     return record.entry.index > changeBaselineIndex &&
@@ -485,6 +502,15 @@ async function verifyPauseMenuTabsAndPalette(page, smokeRun, backendId) {
       payload.fieldPalette === "legacy-neon" &&
       payload.resolvedFieldPalette === "legacy-neon";
   });
+  await delay(150);
+  const legacyPalettePng = await capturePausedCanvasPng(page, backendId);
+  assertVisiblyDifferentPng(
+    referencePalettePng,
+    legacyPalettePng,
+    `${backendId} Reference versus Legacy Neon palette`,
+    FIELD_PALETTE_MIN_CHANGED_RATIO,
+    FIELD_PALETTE_MIN_MEAN_RGB_DELTA
+  );
 
   await page.locator("#resume-button").click();
   await page.locator("#scene-menu-backdrop").waitFor({ state: "hidden", timeout: 5000 });
@@ -2181,6 +2207,26 @@ async function captureCanvasPng(page) {
   return canvas.screenshot({ type: "png" });
 }
 
+async function capturePausedCanvasPng(page, backendId) {
+  const backdrop = page.locator("#scene-menu-backdrop");
+  const previousVisibility = await backdrop.evaluate((element) => element.style.visibility);
+  await backdrop.evaluate((element) => {
+    element.style.visibility = "hidden";
+  });
+
+  try {
+    // Let the browser compositor apply the temporary visibility change without
+    // changing the app's paused state or advancing its simulation clock.
+    await delay(50);
+    const canvas = await waitForVisibleCanvas(page, backendId);
+    return await canvas.screenshot({ type: "png" });
+  } finally {
+    await backdrop.evaluate((element, visibility) => {
+      element.style.visibility = visibility;
+    }, previousVisibility);
+  }
+}
+
 async function waitForRunEvent(page, smokeRun, channel, predicate = () => true, timeoutMs = 15000) {
   const deadline = Date.now() + timeoutMs;
   let lastChannels = [];
@@ -2656,6 +2702,46 @@ function assertAnimatedPng(firstBuffer, secondBuffer, label) {
 
   if (changedRatio <= 0.02 || averageDiff <= 1) {
     throw new Error(`${label} did not visibly animate: changedRatio=${round(changedRatio)} averageDiff=${round(averageDiff)}`);
+  }
+}
+
+function assertVisiblyDifferentPng(
+  firstBuffer,
+  secondBuffer,
+  label,
+  minimumChangedRatio,
+  minimumMeanRgbDelta
+) {
+  const first = PNG.sync.read(firstBuffer);
+  const second = PNG.sync.read(secondBuffer);
+
+  if (first.width !== second.width || first.height !== second.height) {
+    throw new Error(`${label} dimensions changed from ${first.width}x${first.height} to ${second.width}x${second.height}.`);
+  }
+
+  let changedPixels = 0;
+  let diffTotal = 0;
+  const totalPixels = first.width * first.height;
+
+  for (let index = 0; index < first.data.length; index += 4) {
+    const diff =
+      Math.abs(first.data[index] - second.data[index]) +
+      Math.abs(first.data[index + 1] - second.data[index + 1]) +
+      Math.abs(first.data[index + 2] - second.data[index + 2]);
+    const meanPixelDiff = diff / 3;
+
+    if (meanPixelDiff > 8) changedPixels += 1;
+    diffTotal += meanPixelDiff;
+  }
+
+  const changedRatio = changedPixels / Math.max(1, totalPixels);
+  const meanRgbDelta = diffTotal / Math.max(1, totalPixels);
+
+  if (changedRatio < minimumChangedRatio || meanRgbDelta < minimumMeanRgbDelta) {
+    throw new Error(
+      `${label} was not visually distinct enough: changedRatio=${round(changedRatio)} ` +
+      `meanRgbDelta=${round(meanRgbDelta)}`
+    );
   }
 }
 

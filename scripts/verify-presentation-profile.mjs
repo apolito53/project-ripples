@@ -147,6 +147,9 @@ test("field palette defaults follow the active presentation profile", () => {
   assert.equal(fieldPalettePolicy.resolveFieldPaletteForProfile("profile", "core"), "legacy-neon");
   assert.equal(fieldPalettePolicy.getFieldPaletteShaderIndex("reference"), 0);
   assert.equal(fieldPalettePolicy.getFieldPaletteShaderIndex("legacy-neon"), 1);
+  assert.equal(fieldPalettePolicy.shouldPreserveCorePalette("profile", "core"), true);
+  assert.equal(fieldPalettePolicy.shouldPreserveCorePalette("legacy-neon", "core"), false);
+  assert.equal(fieldPalettePolicy.shouldPreserveCorePalette("profile", "classic"), false);
 });
 
 test("the preserved Core vertex and fragment shader contract stays unchanged", () => {

@@ -2,12 +2,24 @@
 
 ## Unreleased
 
+### Changed
+
+- Strengthened the explicitly selected renderer-neutral Legacy Neon field
+  palette so it remains visibly indigo/violet/cyan while the field is still and
+  carries gold crest accents during waves in both WebGL and WebGPU. Core's
+  profile-following default retains its original muted treatment. The browser
+  renderer smoke now measures Reference-versus-Legacy canvas separation instead
+  of trusting only palette-setting diagnostics.
+- Renamed the palette selector's profile-following option to **Match Field
+  Style** and the explicit reference option to **Reference Sea Glass** so the
+  intentional default alias is clear in the pause menu.
+
 ### Added
 
-- Added a renderer-neutral Field Palette selector with **Style Default**,
-  **Reference**, and **Legacy Neon** choices. Style Default preserves the
-  reference palette for WebGL/Classic and the original neon palette for Core;
-  explicit Legacy Neon restores color only, not the retired pulse dynamics.
+- Added a renderer-neutral Field Palette selector with **Match Field Style**,
+  **Reference Sea Glass**, and **Legacy Neon** choices. Match Field Style
+  preserves the reference palette for WebGL/Classic and the original muted neon
+  palette for Core; explicit Legacy Neon changes color only, not pulse dynamics.
 - Added the selectively integrated raw-WebGPU renderer runtime behind
   `?renderer=webgpu`, including the compute wake, hex field, skybox, hover-pod,
   particle, Echo, pulse-light, local-light, shadow-map, bloom, and Arena curtain

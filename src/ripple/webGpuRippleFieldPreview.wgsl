@@ -121,11 +121,35 @@ fn legacyNeonPaletteTint(
   crestEnergy: f32,
   shimmer: f32
 ) -> vec3f {
-  var tint = baseTint * (0.48 + heightWhiteness * 0.34 + shimmer * 0.05);
-  tint = tint + max(heightEnergy, 0.0) * vec3f(0.04, 0.42, 0.5);
-  tint = tint + max(-heightEnergy, 0.0) * vec3f(0.34, 0.09, 0.44);
-  tint = tint + velocityEnergy * vec3f(0.03, 0.2, 0.11);
-  return tint + crestEnergy * vec3f(0.62, 0.52, 0.2);
+  var preservedCoreTint = baseTint * (0.48 + heightWhiteness * 0.34 + shimmer * 0.05);
+  preservedCoreTint = preservedCoreTint + max(heightEnergy, 0.0) * vec3f(0.04, 0.42, 0.5);
+  preservedCoreTint = preservedCoreTint + max(-heightEnergy, 0.0) * vec3f(0.34, 0.09, 0.44);
+  preservedCoreTint = preservedCoreTint + velocityEnergy * vec3f(0.03, 0.2, 0.11);
+  preservedCoreTint = preservedCoreTint + crestEnergy * vec3f(0.62, 0.52, 0.2);
+
+  // The legacy palette must read differently even while the field is still.
+  // Remap shared terrain luminance into a saturated indigo/cyan base, then let
+  // the original violet trough and gold crest language ride on top.
+  let terrainLuma = dot(baseTint, vec3f(0.2126, 0.7152, 0.0722));
+  let heightBand = clamp(terrainLuma * 2.15 + heightWhiteness * 0.34, 0.0, 1.0);
+  let violetBand = clamp(
+    (baseTint.b - baseTint.g) * 3.8 + (1.0 - heightWhiteness) * 0.2 +
+      (shimmer - 0.5) * 0.1,
+    0.0,
+    0.72
+  );
+  var tint = mix(
+    vec3f(0.018, 0.045, 0.16),
+    vec3f(0.035, 0.42, 0.62),
+    heightBand
+  );
+  tint = mix(tint, vec3f(0.42, 0.055, 0.58), violetBand * 0.62);
+  tint = tint * (0.9 + shimmer * 0.1);
+  tint = tint + max(heightEnergy, 0.0) * vec3f(0.02, 0.48, 0.68);
+  tint = tint + max(-heightEnergy, 0.0) * vec3f(0.48, 0.06, 0.56);
+  tint = tint + velocityEnergy * vec3f(0.02, 0.24, 0.16);
+  tint = tint + crestEnergy * vec3f(0.82, 0.56, 0.12);
+  return mix(tint, preservedCoreTint, clamp(field.palette.y, 0.0, 1.0));
 }
 
 fn selectFieldPalette(referenceTint: vec3f, legacyTint: vec3f) -> vec3f {
@@ -703,9 +727,12 @@ fn fragmentClassicMain(input: VertexOutput) -> @location(0) vec4f {
   var color = input.color * globalLight * (0.78 + interior * 0.22);
   color = color * mix(1.0, 0.7 + input.faceData.y * 0.3, sideFace);
   color = color * (1.0 - combinedShadow);
-  color = color + gridLine * vec3f(0.015, 0.07, 0.075);
+  let paletteMix = clamp(field.palette.x, 0.0, 1.0);
+  let gridTint = mix(vec3f(0.015, 0.07, 0.075), vec3f(0.055, 0.025, 0.13), paletteMix);
+  let paletteCrestTint = mix(vec3f(0.7, 1.0, 0.9), vec3f(1.0, 0.62, 0.16), paletteMix);
+  color = color + gridLine * gridTint;
   let crestFaceStrength = mix(1.0, 0.34, sideFace);
-  let crestLight = mix(input.color, vec3f(0.7, 1.0, 0.9), 0.55);
+  let crestLight = mix(input.color, paletteCrestTint, 0.55);
   color = color + input.color * input.energy.x * (0.025 + field.medium.z * 0.055) * interior;
   color = color + crestLight * input.energy.z * (0.12 + field.medium.z * 0.32) *
     interior * crestFaceStrength;

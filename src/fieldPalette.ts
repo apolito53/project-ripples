@@ -31,3 +31,14 @@ export function resolveFieldPaletteForProfile(
 export function getFieldPaletteShaderIndex(palette: ResolvedFieldPaletteId): 0 | 1 {
   return palette === "legacy-neon" ? 1 : 0;
 }
+
+/**
+ * Core's profile default is a preserved art-direction option. Explicitly
+ * choosing Legacy Neon asks for the stronger cross-renderer palette instead.
+ */
+export function shouldPreserveCorePalette(
+  selected: FieldPaletteId,
+  profile: FieldPalettePresentationProfile
+): boolean {
+  return selected === "profile" && profile === "core";
+}

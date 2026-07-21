@@ -428,11 +428,29 @@ export class RippleField {
           float legacyHeightEnergy = clamp(wakeTextureWave * 10.0 + sourceWave * 0.88, -1.0, 1.0);
           float legacyVelocityEnergy = clamp(abs(wakeSample.g * uWakeStrength) * 10.0, 0.0, 1.0);
           float legacyCrestEnergy = clamp(max(wakeTextureGlow, 0.0) * 2.2 + max(sourceWave, 0.0) * 0.64, 0.0, 1.0);
-          vec3 legacyTint = instanceTint * (0.48 + heightWhiteness * 0.34 + shimmer * 0.05);
-          legacyTint += max(legacyHeightEnergy, 0.0) * vec3(0.04, 0.42, 0.5);
-          legacyTint += max(-legacyHeightEnergy, 0.0) * vec3(0.34, 0.09, 0.44);
-          legacyTint += legacyVelocityEnergy * vec3(0.03, 0.2, 0.11);
-          legacyTint += legacyCrestEnergy * vec3(0.62, 0.52, 0.2);
+          // Give Legacy Neon a visible resting identity instead of waiting for
+          // a wave to reveal it. The baked terrain tint supplies luminance and
+          // variation, while this remap moves the field into indigo, violet,
+          // and electric cyan before the dynamic wave accents are added.
+          float legacyTerrainLuma = dot(instanceTint, vec3(0.2126, 0.7152, 0.0722));
+          float legacyHeightBand = clamp(legacyTerrainLuma * 2.15 + heightWhiteness * 0.34, 0.0, 1.0);
+          float legacyVioletBand = clamp(
+            (instanceTint.b - instanceTint.g) * 3.8 + (1.0 - heightWhiteness) * 0.2 +
+              (shimmer - 0.5) * 0.1,
+            0.0,
+            0.72
+          );
+          vec3 legacyTint = mix(
+            vec3(0.018, 0.045, 0.16),
+            vec3(0.035, 0.42, 0.62),
+            legacyHeightBand
+          );
+          legacyTint = mix(legacyTint, vec3(0.42, 0.055, 0.58), legacyVioletBand * 0.62);
+          legacyTint *= 0.9 + shimmer * 0.1;
+          legacyTint += max(legacyHeightEnergy, 0.0) * vec3(0.02, 0.48, 0.68);
+          legacyTint += max(-legacyHeightEnergy, 0.0) * vec3(0.48, 0.06, 0.56);
+          legacyTint += legacyVelocityEnergy * vec3(0.02, 0.24, 0.16);
+          legacyTint += legacyCrestEnergy * vec3(0.82, 0.56, 0.12);
           vRippleTint = mix(referenceTint, legacyTint, clamp(uFieldPalette, 0.0, 1.0));`
         );
 
@@ -441,6 +459,7 @@ export class RippleField {
           "#include <common>",
           `#include <common>
           uniform float uBloomMood;
+          uniform float uFieldPalette;
           uniform sampler2D uTrackTexture;
           uniform float uTrackFieldRadius;
           uniform float uTrackStrength;
@@ -460,9 +479,14 @@ export class RippleField {
           float trackColorEdge = trackColorSample.g * trackColorActive;
           float trackColorCenter = trackColorSample.b * trackColorActive;
           float offTrackDim = mix(0.035, 1.1, smoothstep(0.08, 0.78, trackColorBody));
+          vec3 paletteCrestTint = mix(
+            vec3(0.78, 1.0, 0.94),
+            vec3(1.0, 0.68, 0.22),
+            clamp(uFieldPalette, 0.0, 1.0)
+          );
           diffuseColor.rgb *= vRippleTint * (0.62 + vRippleGlow * 0.05 + vHeightWhiteness * 0.07 + vCrestGlow * 0.2);
           diffuseColor.rgb *= offTrackDim;
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.78, 1.0, 0.94), vCrestGlow * 0.26);
+          diffuseColor.rgb = mix(diffuseColor.rgb, paletteCrestTint, vCrestGlow * 0.26);
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.1, 0.82, 0.9), trackColorSample.r * trackColorActive * 0.36);
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.82, 1.0, 0.94), trackColorEdge * 0.74 + trackColorCenter * 0.16);`
         )
@@ -475,7 +499,12 @@ export class RippleField {
           float trackGlowBody = trackGlowSample.r * trackGlowActive;
           float trackGlowEdge = trackGlowSample.g * trackGlowActive;
           float trackGlowCenter = trackGlowSample.b * trackGlowActive;
-          vec3 crestLight = mix(vRippleTint, vec3(0.7, 1.0, 0.9), 0.55);
+          vec3 paletteCrestLight = mix(
+            vec3(0.7, 1.0, 0.9),
+            vec3(1.0, 0.62, 0.16),
+            clamp(uFieldPalette, 0.0, 1.0)
+          );
+          vec3 crestLight = mix(vRippleTint, paletteCrestLight, 0.55);
           totalEmissiveRadiance += vRippleTint * vRippleGlow * (0.025 + uBloomMood * 0.055);
           totalEmissiveRadiance += crestLight * vCrestGlow * (0.12 + uBloomMood * 0.32);
           totalEmissiveRadiance += vec3(0.06, 0.74, 0.72) * trackGlowBody * (0.04 + uBloomMood * 0.08);
