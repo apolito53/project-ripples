@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.6.0-ALPHA - 2026-07-22
+
 ### Changed
 
 - Strengthened the explicitly selected renderer-neutral Legacy Neon field

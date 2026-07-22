@@ -1,6 +1,6 @@
 # Codebase Index
 
-Last reviewed: 2026-07-18
+Last reviewed: 2026-07-22
 
 Purpose: compact map for the standalone ripple-field visual lab.
 
@@ -10,7 +10,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Three.js/WebGL default renderer plus a forced raw-WebGPU runtime, neutral
   render snapshots, WebGPU compute/render passes, postprocessing bloom,
   shader-customized `InstancedMesh`, additive `Points`, and dynamic lights.
-- Current alpha baseline: `v0.5.5-ALPHA`; keep release tags in alpha prerelease
+- Current alpha baseline: `v0.6.0-ALPHA`; keep release tags in alpha prerelease
   territory until the lab graduates from prototype status.
 - Dedicated dev port `5183`; benchmark preview port `4183`; strict renderer
   presentation-audit preview port `4184`.

@@ -1,6 +1,6 @@
 {
   "name": "ripple-field-lab",
-  "version": "0.5.5-ALPHA",
+  "version": "0.6.0-ALPHA",
   "private": true,
   "type": "module",
   "scripts": {
