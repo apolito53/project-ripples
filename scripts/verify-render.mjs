@@ -43,6 +43,13 @@ const WEBGPU_MOTE_AVATAR_ASSET_ID = "mote-core-orbit";
 const WEBGPU_PRESENTATION_PROFILE = "classic";
 const WEBGPU_CORE_PRESENTATION_PROFILE = "core";
 const WEBGL_PRESENTATION_PROFILE = "webgl-reference";
+const WEBGPU_PLAYER_PRESENCE_MODE = "pressure-rim";
+const CORE_IDLE_PRESENCE_SETTLED_TICK = 600;
+// Core's existing 3.7 rad/s material shimmer nearly repeats after 102 fixed
+// ticks, while the 5.8 rad/s player-pressure shimmer advances by about 205deg.
+const CORE_IDLE_PRESENCE_PHASE_TICKS = 102;
+const PLAYER_FIELD_OFFSET = 1.75;
+const PLAYER_PRESENCE_RING_RADIUS = 2.35;
 const FIELD_PALETTE_MIN_CHANGED_RATIO = 0.2;
 const FIELD_PALETTE_MIN_MEAN_RGB_DELTA = 5.5;
 const WEBGPU_REQUIRED_REMAINING_GAPS = [];
@@ -1058,6 +1065,7 @@ async function verifyWebGpuCoreProfile(page, pageProblems) {
     renderer: "webgpu",
     presentation: WEBGPU_CORE_PRESENTATION_PROFILE,
     mode: "arena",
+    visualCapture: "1",
     smokeRun
   });
 
@@ -1096,6 +1104,30 @@ async function verifyWebGpuCoreProfile(page, pageProblems) {
   const coreCapture = await assertNonBlankCanvas(page, "WebGPU Core profile canvas", "webgpu");
   assertWebGpuVisualBounds(coreCapture.analysis, "WebGPU Core profile canvas");
 
+  // Strip later additive passes from the fixture so the sampled annulus is
+  // measuring field tiles, not particle or bloom animation around the avatar.
+  await clickControl(page, "#particle-toggle");
+  await clickControl(page, "#bloom-toggle");
+  const idleFirstState = await advanceVisualCaptureToTick(page, CORE_IDLE_PRESENCE_SETTLED_TICK);
+  const idleFirstPng = await captureCanvasPng(page);
+  const idleSecondState = await advanceVisualCaptureToTick(
+    page,
+    CORE_IDLE_PRESENCE_SETTLED_TICK + CORE_IDLE_PRESENCE_PHASE_TICKS
+  );
+  const idleSecondPng = await captureCanvasPng(page);
+  assertStationaryIdlePresenceFixture(idleFirstState, idleSecondState);
+  const idlePresenceDiff = analyzePlayerPresenceDifference(
+    idleFirstPng,
+    idleSecondPng,
+    idleFirstState
+  );
+  assertPlayerPresenceDifference(idlePresenceDiff);
+  console.log(
+    `[ripple-field-lab:verify:webgpu:core] idle presence nearDelta=${round(idlePresenceDiff.near.meanRgbDelta)} ` +
+    `farDelta=${round(idlePresenceDiff.far.meanRgbDelta)} nearChanged=${round(idlePresenceDiff.near.changedRatio)} ` +
+    `farChanged=${round(idlePresenceDiff.far.changedRatio)}`
+  );
+
   await setControlValue(page, "#presentation-profile-select", WEBGPU_PRESENTATION_PROFILE, "change");
   const profileChange = await waitForRunEvent(page, smokeRun, "webgpu.presentation.change", (record) => {
     const payload = record.entry.payload;
@@ -1115,6 +1147,15 @@ async function verifyWebGpuCoreProfile(page, pageProblems) {
     record.entry.payload.previousPresentationProfile === WEBGPU_CORE_PRESENTATION_PROFILE &&
     record.entry.payload.profileSwitchPreservedSession === true
   );
+  await delay(100);
+  const classicCapture = await captureCanvasPng(page);
+  const classicAnalysis = analyzePng(classicCapture);
+  assertAnimatedPng(idleSecondPng, classicCapture, "WebGPU Core-to-Classic profile switch");
+  assertWebGpuVisualBounds(classicAnalysis, "WebGPU Classic profile after Core switch");
+
+  // Visual-capture mode freezes simulation time. Advance one diagnostics
+  // interval so the post-switch Classic frame sample can be emitted.
+  await advanceVisualCaptureToTick(page, idleSecondState.tick + 31);
   await waitForRunEvent(page, smokeRun, "webgpu.sceneState.frame", (record) => {
     const payload = record.entry.payload;
     return record.entry.index > profileChange.entry.index &&
@@ -1126,12 +1167,6 @@ async function verifyWebGpuCoreProfile(page, pageProblems) {
       payload.simulationTimeSeconds >= coreFrame.entry.payload.simulationTimeSeconds &&
       payload.deviceLost === false;
   });
-
-  await delay(700);
-  const classicCapture = await captureCanvasPng(page);
-  const classicAnalysis = analyzePng(classicCapture);
-  assertAnimatedPng(coreCapture.png, classicCapture, "WebGPU Core-to-Classic profile switch");
-  assertWebGpuVisualBounds(classicAnalysis, "WebGPU Classic profile after Core switch");
 
   const events = await readRunEvents(smokeRun);
   assertNoDiagnosticErrors(events);
@@ -2207,6 +2242,16 @@ async function captureCanvasPng(page) {
   return canvas.screenshot({ type: "png" });
 }
 
+async function advanceVisualCaptureToTick(page, targetTick) {
+  return page.evaluate(async (requestedTick) => {
+    const capture = window.__rippleVisualCapture;
+    if (!capture) throw new Error("Visual capture API is unavailable.");
+    await capture.ready();
+    await capture.advanceToTick(requestedTick);
+    return capture.freezeAndDescribe();
+  }, targetTick);
+}
+
 async function capturePausedCanvasPng(page, backendId) {
   const backdrop = page.locator("#scene-menu-backdrop");
   const previousVisibility = await backdrop.evaluate((element) => element.style.visibility);
@@ -2372,6 +2417,7 @@ function hasDiagnosticCoreReadiness(payload) {
 function hasClassicFieldGeometry(payload) {
   return payload?.presentationProfile === WEBGPU_PRESENTATION_PROFILE &&
     payload?.waveDynamicsMode === "classic-parity" &&
+    hasAnimatedPlayerPresence(payload) &&
     payload?.fieldGeometryMode === "hex-prism" &&
     payload?.fieldVerticesPerInstance === 72 &&
     payload?.fieldTrianglesPerInstance === 24 &&
@@ -2395,6 +2441,7 @@ function hasCorePulseGlowState(payload) {
 function hasCoreFieldGeometry(payload) {
   return payload?.presentationProfile === WEBGPU_CORE_PRESENTATION_PROFILE &&
     payload?.waveDynamicsMode === "core-stylized" &&
+    hasAnimatedPlayerPresence(payload) &&
     payload?.fieldGeometryMode === "hex-cap" &&
     payload?.fieldVerticesPerInstance === 18 &&
     payload?.fieldTrianglesPerInstance === 6 &&
@@ -2403,11 +2450,52 @@ function hasCoreFieldGeometry(payload) {
     payload?.tileHeightMode === "flat-cap";
 }
 
+function hasAnimatedPlayerPresence(payload) {
+  return payload?.playerPresenceMode === WEBGPU_PLAYER_PRESENCE_MODE &&
+    payload?.playerPresenceAnimated === true;
+}
+
 function vectorsApproximatelyEqual(left, right, tolerance) {
   if (!left || !right) return false;
   return Math.abs((left.x ?? 0) - (right.x ?? 0)) <= tolerance &&
     Math.abs((left.y ?? 0) - (right.y ?? 0)) <= tolerance &&
     Math.abs((left.z ?? 0) - (right.z ?? 0)) <= tolerance;
+}
+
+function assertStationaryIdlePresenceFixture(first, second) {
+  for (const [label, state] of [["first", first], ["second", second]]) {
+    if (state.presentationProfile !== WEBGPU_CORE_PRESENTATION_PROFILE) {
+      throw new Error(`Core idle-presence ${label} state used ${JSON.stringify(state.presentationProfile)}.`);
+    }
+    if (state.activeSources !== 0 || state.sourceState?.renderedCount !== 0) {
+      throw new Error(`Core idle-presence ${label} state retained ripple sources.`);
+    }
+    if (state.activeParticles !== 0 || state.bloomEnabled !== false) {
+      throw new Error(`Core idle-presence ${label} state did not isolate particles/bloom.`);
+    }
+    if ((state.player?.speed ?? Infinity) > 0.01 || (state.player?.groundContact ?? 0) < 0.999) {
+      throw new Error(`Core idle-presence ${label} state was not stationary and grounded.`);
+    }
+  }
+
+  if (!vectorsApproximatelyEqual(first.player.position, second.player.position, 0.0001)) {
+    throw new Error("Core idle-presence fixture moved the player between phase captures.");
+  }
+  if (!vectorsApproximatelyEqual(first.camera.position, second.camera.position, 0.0001)) {
+    throw new Error("Core idle-presence fixture moved the camera between phase captures.");
+  }
+  if (!numberArraysApproximatelyEqual(
+    first.camera.viewProjectionMatrix,
+    second.camera.viewProjectionMatrix,
+    0.000001
+  )) {
+    throw new Error("Core idle-presence fixture changed the camera matrix between phase captures.");
+  }
+}
+
+function numberArraysApproximatelyEqual(left, right, tolerance) {
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+  return left.every((value, index) => Math.abs(value - right[index]) <= tolerance);
 }
 
 async function verifyWebGpuDeviceLost(page, pageProblems) {
@@ -2672,6 +2760,114 @@ function assertWebGpuVisualBounds(analysis, label) {
   }
   if (analysis.blueWashRatio > WEBGPU_MAX_BLUE_WASH_RATIO) {
     throw new Error(`${label} exceeded blue wash coverage bounds: ${JSON.stringify(analysis)}`);
+  }
+}
+
+function analyzePlayerPresenceDifference(firstBuffer, secondBuffer, fixtureState) {
+  const first = PNG.sync.read(firstBuffer);
+  const second = PNG.sync.read(secondBuffer);
+  if (first.width !== second.width || first.height !== second.height) {
+    throw new Error(
+      `Core idle-presence dimensions changed from ${first.width}x${first.height} ` +
+      `to ${second.width}x${second.height}.`
+    );
+  }
+
+  const player = fixtureState.player?.position;
+  const matrix = fixtureState.camera?.viewProjectionMatrix;
+  if (!player || !Array.isArray(matrix) || matrix.length !== 16) {
+    throw new Error("Core idle-presence fixture did not expose a projectable player/camera snapshot.");
+  }
+
+  const groundY = player.y - PLAYER_FIELD_OFFSET;
+  const center = projectWorldPoint(matrix, {
+    x: player.x,
+    y: groundY,
+    z: player.z
+  }, first.width, first.height);
+  const radiusX = projectWorldPoint(matrix, {
+    x: player.x + PLAYER_PRESENCE_RING_RADIUS,
+    y: groundY,
+    z: player.z
+  }, first.width, first.height);
+  const radiusZ = projectWorldPoint(matrix, {
+    x: player.x,
+    y: groundY,
+    z: player.z + PLAYER_PRESENCE_RING_RADIUS
+  }, first.width, first.height);
+  const ellipse = {
+    center,
+    axisX: { x: radiusX.x - center.x, y: radiusX.y - center.y },
+    axisZ: { x: radiusZ.x - center.x, y: radiusZ.y - center.y }
+  };
+
+  return {
+    center,
+    near: measurePngDifferenceInEllipse(first, second, ellipse, 0.7, 1.45),
+    far: measurePngDifferenceInEllipse(first, second, ellipse, 2.5, 3.6)
+  };
+}
+
+function projectWorldPoint(matrix, point, width, height) {
+  const clipX = matrix[0] * point.x + matrix[4] * point.y + matrix[8] * point.z + matrix[12];
+  const clipY = matrix[1] * point.x + matrix[5] * point.y + matrix[9] * point.z + matrix[13];
+  const clipW = matrix[3] * point.x + matrix[7] * point.y + matrix[11] * point.z + matrix[15];
+  if (Math.abs(clipW) < 0.000001) throw new Error("Core idle-presence player projection reached clip w=0.");
+  return {
+    x: (clipX / clipW * 0.5 + 0.5) * width,
+    y: (0.5 - clipY / clipW * 0.5) * height
+  };
+}
+
+function measurePngDifferenceInEllipse(first, second, ellipse, innerRadius, outerRadius) {
+  const determinant = ellipse.axisX.x * ellipse.axisZ.y - ellipse.axisX.y * ellipse.axisZ.x;
+  if (Math.abs(determinant) < 1) {
+    throw new Error(`Core idle-presence projection ellipse collapsed: determinant=${round(determinant)}.`);
+  }
+
+  let samples = 0;
+  let changedPixels = 0;
+  let diffTotal = 0;
+  for (let y = 0; y < first.height; y += 1) {
+    for (let x = 0; x < first.width; x += 1) {
+      const dx = x + 0.5 - ellipse.center.x;
+      const dy = y + 0.5 - ellipse.center.y;
+      const localX = (dx * ellipse.axisZ.y - dy * ellipse.axisZ.x) / determinant;
+      const localZ = (ellipse.axisX.x * dy - ellipse.axisX.y * dx) / determinant;
+      const radius = Math.hypot(localX, localZ);
+      if (radius < innerRadius || radius > outerRadius) continue;
+
+      const index = (y * first.width + x) * 4;
+      const meanPixelDiff = (
+        Math.abs(first.data[index] - second.data[index]) +
+        Math.abs(first.data[index + 1] - second.data[index + 1]) +
+        Math.abs(first.data[index + 2] - second.data[index + 2])
+      ) / 3;
+      samples += 1;
+      diffTotal += meanPixelDiff;
+      if (meanPixelDiff > 3) changedPixels += 1;
+    }
+  }
+
+  return {
+    samples,
+    changedRatio: changedPixels / Math.max(1, samples),
+    meanRgbDelta: diffTotal / Math.max(1, samples)
+  };
+}
+
+function assertPlayerPresenceDifference(analysis) {
+  if (analysis.near.samples < 100 || analysis.far.samples < 100) {
+    throw new Error(`Core idle-presence regions were undersampled: ${JSON.stringify(analysis)}.`);
+  }
+  if (analysis.near.meanRgbDelta < 0.45 || analysis.near.changedRatio < 0.02) {
+    throw new Error(`Core idle-presence ring did not visibly animate: ${JSON.stringify(analysis)}.`);
+  }
+  if (
+    analysis.near.meanRgbDelta < analysis.far.meanRgbDelta * 1.12 ||
+    analysis.near.changedRatio < analysis.far.changedRatio + 0.01
+  ) {
+    throw new Error(`Core idle-presence animation was not localized around the player: ${JSON.stringify(analysis)}.`);
   }
 }
 

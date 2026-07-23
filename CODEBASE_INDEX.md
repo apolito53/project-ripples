@@ -31,7 +31,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Deterministic WebGL/WebGPU controller contract: `npm.cmd run verify:gamepad`
 - Browser WebGPU capability smoke: `npm.cmd run verify:webgpu:capabilities`
 - Browser forced-WebGPU lifecycle smoke: `npm.cmd run verify:render:webgpu`
-- Browser preserved WebGPU Core profile and live Classic switch smoke:
+- Browser WebGPU Core profile, stationary player-presence, and live Classic
+  switch smoke:
   `npm.cmd run verify:render:webgpu:core`
 - Browser stock-Chrome WebGPU smoke without unsafe/blocklist flags:
   `npm.cmd run verify:render:webgpu:stock`
@@ -173,8 +174,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
   expanded parity-closure fixtures, and non-gating image comparison:
   `scripts/audit-renderer-parity.mjs`, `scripts/renderer-parity-fixtures.mjs`,
   `scripts/render-parity-analysis.mjs`, and `devlog/renderer-parity/README.md`
-- Classic 3D/Core field pipelines, procedural prism geometry, profile-specific
-  wave transfer, and profile diagnostics: `src/ripple/webGpuRippleFieldPreview.ts` and
+- Classic 3D/Core field pipelines, procedural prism geometry, shared grounded
+  pressure-rim response, profile-specific wave transfer, and profile
+  diagnostics: `src/ripple/webGpuRippleFieldPreview.ts` and
   `src/ripple/webGpuRippleFieldPreview.wgsl`
 - Rollout policy checks: `scripts/verify-renderer-rollout.mjs`
 - Benchmark baseline registry, accepted RTX 4070 Ti v3 Classic evidence,

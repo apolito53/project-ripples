@@ -58,6 +58,8 @@ export type WebGpuRippleFieldPreviewMetrics = {
   readonly presentationProfile: RenderPresentationProfile;
   readonly fieldPalette: ResolvedFieldPaletteId;
   readonly waveDynamicsMode: "classic-parity" | "core-stylized";
+  readonly playerPresenceMode: "pressure-rim";
+  readonly playerPresenceAnimated: true;
   readonly fieldGeometryMode: "hex-cap" | "hex-prism";
   readonly fieldVerticesPerInstance: number;
   readonly fieldTrianglesPerInstance: number;
@@ -199,6 +201,7 @@ export class WebGpuRippleFieldPreview {
       presentationProfile: this.presentationProfile,
       fieldPalette: this.fieldPalette,
       waveDynamicsMode: getWaveDynamicsMode(this.presentationProfile),
+      ...getPlayerPresenceMetrics(),
       ...getFieldGeometryMetrics(this.presentationProfile),
       drawCalls: FIELD_DRAW_CALLS,
       triangles: this.getTriangleCount()
@@ -416,6 +419,7 @@ export class WebGpuRippleFieldPreview {
       presentationProfile: this.presentationProfile,
       fieldPalette: this.fieldPalette,
       waveDynamicsMode: getWaveDynamicsMode(this.presentationProfile),
+      ...getPlayerPresenceMetrics(),
       ...getFieldGeometryMetrics(this.presentationProfile),
       instanceCount: this.layout.instanceCount,
       sourceLimit: this.layout.renderedRippleSourceLimit,
@@ -722,6 +726,7 @@ export class WebGpuRippleFieldPreview {
       presentationProfile: this.presentationProfile,
       fieldPalette: this.fieldPalette,
       waveDynamicsMode: getWaveDynamicsMode(this.presentationProfile),
+      ...getPlayerPresenceMetrics(),
       ...getFieldGeometryMetrics(this.presentationProfile),
       instanceCount: this.layout.instanceCount,
       sourceLimit: this.layout.renderedRippleSourceLimit,
@@ -805,6 +810,7 @@ export class WebGpuRippleFieldPreview {
     this.log("ripple.webgpu.geometry", "Selected WebGPU RippleField geometry profile", {
       presentationProfile: this.presentationProfile,
       waveDynamicsMode: getWaveDynamicsMode(this.presentationProfile),
+      ...getPlayerPresenceMetrics(),
       previousPresentationProfile,
       geometrySelectionReason: previousPresentationProfile === null ? "startup" : "profile-switch",
       ...getFieldGeometryMetrics(this.presentationProfile),
@@ -927,6 +933,13 @@ function getFieldGeometryMetrics(profile: RenderPresentationProfile) {
     visibleSideFaceCount: classic ? CLASSIC_FIELD_VISIBLE_SIDE_FACE_COUNT : 0,
     bottomFaceIncluded: classic,
     tileHeightMode: classic ? "animated-prism" as const : "flat-cap" as const
+  };
+}
+
+function getPlayerPresenceMetrics() {
+  return {
+    playerPresenceMode: "pressure-rim" as const,
+    playerPresenceAnimated: true as const
   };
 }
 

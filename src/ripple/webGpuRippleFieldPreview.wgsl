@@ -462,8 +462,44 @@ fn shadowMapOcclusion(shadowClip: vec4f, interior: f32) -> f32 {
   return clamp((1.0 - visibility) * edgeFade * interior * validSample * strength, 0.0, 0.28);
 }
 
-// Keep Core's original flat-cap math isolated. Classic may evolve toward the
-// Three reference without quietly retuning the minimalist profile.
+struct PlayerPresenceSignal {
+  lift: f32,
+  glow: f32,
+  footprintGrowth: f32,
+  pressureRim: f32,
+};
+
+// Core keeps its flat-cap art direction, but the player must still press into
+// the field while standing still. These coefficients intentionally mirror the
+// WebGL/Classic pressure trough, animated rim, and contact gating.
+fn playerPresenceAt(cellPosition: vec2f, instancePhase: f32) -> PlayerPresenceSignal {
+  let fromPlayer = cellPosition - field.player.xy;
+  let playerDistance = length(fromPlayer);
+  let playerContact = clamp(field.player.w, 0.0, 1.0);
+  let proximity = (1.0 - smoothstep(0.0, field.render.y, playerDistance)) *
+    (0.12 + playerContact * 0.88);
+  let bodyPressure = (1.0 - smoothstep(0.15, 2.55, playerDistance)) * playerContact;
+  let pressureRim = exp(-pow((playerDistance - 2.35) / 0.9, 2.0)) * playerContact;
+  let movementPush = clamp(field.player.z / 16.0, 0.0, 1.0) * playerContact;
+  let shimmer = sin(field.timing.x * 5.8 - playerDistance * 2.15 + instancePhase) * 0.5 + 0.5;
+  let pressureDepression = bodyPressure * (0.35 + shimmer * 0.09 + movementPush * 0.115);
+  let rimLift = pressureRim * (0.16 + shimmer * 0.14 + movementPush * 0.1);
+  let glow = clamp(
+    proximity * (0.04 + shimmer * 0.08) + pressureRim * 0.08,
+    0.0,
+    0.62
+  );
+
+  var signal: PlayerPresenceSignal;
+  signal.lift = (-pressureDepression + rimLift) * field.render.x;
+  signal.glow = glow;
+  signal.footprintGrowth = glow * 0.05;
+  signal.pressureRim = pressureRim;
+  return signal;
+}
+
+// Keep Core's flat-cap math isolated. Classic may evolve toward the Three
+// reference without quietly retuning the minimalist profile.
 fn buildCoreFieldVertex(instanceIndex: u32, local: vec2f) -> VertexOutput {
   let cell = cells[instanceIndex];
   let cellPosition = cell.positionPhase.xz;
@@ -471,14 +507,20 @@ fn buildCoreFieldVertex(instanceIndex: u32, local: vec2f) -> VertexOutput {
   let trackSignal = trackSignalAt(cellPosition);
   let sourceWave = sourceWaveAt(cellPosition);
   let echoSignal = echoSignalAt(cellPosition);
+  let playerPresence = playerPresenceAt(cellPosition, cell.positionPhase.w);
   let heightEnergy = clamp(wake.x * 10.0 + sourceWave * 0.88, -1.0, 1.0);
   let crestEnergy = clamp(max(wake.z, 0.0) * 2.2 + max(sourceWave, 0.0) * 0.64, 0.0, 1.0);
   let velocityEnergy = clamp(abs(wake.y) * 10.0, 0.0, 1.0);
   let shimmer = 0.5 + 0.5 * sin(field.timing.x * 3.7 + cell.positionPhase.w);
-  let footprintDiameter = field.shape.z + crestEnergy * 0.05 + echoSignal.x * 0.012;
+  let footprintDiameter = field.shape.z + crestEnergy * 0.05 + echoSignal.x * 0.012 +
+    playerPresence.footprintGrowth;
   let footprint = footprintDiameter * field.render.z * 0.5;
   let worldOffset = local * footprint;
-  let lift = clamp(heightEnergy * field.render.x + sourceWave * 0.36 + echoSignal.z * 0.72, -1.6, 2.5);
+  let lift = clamp(
+    heightEnergy * field.render.x + sourceWave * 0.36 + echoSignal.z * 0.72 + playerPresence.lift,
+    -1.6,
+    2.5
+  );
   let worldPosition = vec3f(
     cellPosition.x + worldOffset.x,
     cell.positionPhase.y + lift,
@@ -487,12 +529,16 @@ fn buildCoreFieldVertex(instanceIndex: u32, local: vec2f) -> VertexOutput {
   let terrainWhiteness = smoothstep(-0.75, 3.05, cell.positionPhase.y + heightEnergy * field.render.x);
   let keyLight = max(dot(vec3f(0.0, 1.0, 0.0), normalize(vec3f(-0.26, 0.82, 0.48))), 0.0);
   let rim = 0.2 + 0.16 * smoothstep(0.1, 0.98, abs(local.x)) + shimmer * 0.04;
-  let crestLight = crestEnergy * (0.28 + shimmer * 0.12);
+  let crestLight = crestEnergy * (0.28 + shimmer * 0.12) + playerPresence.pressureRim * 0.06;
 
   var output: VertexOutput;
   output.position = field.viewProjection * vec4f(worldPosition, 1.0);
   output.local = local;
-  output.energy = vec3f(heightEnergy, velocityEnergy, max(crestEnergy, echoSignal.y * 0.34));
+  output.energy = vec3f(
+    heightEnergy,
+    velocityEnergy,
+    max(max(crestEnergy, echoSignal.y * 0.34), playerPresence.glow * 0.42)
+  );
   output.lighting = vec3f(keyLight, rim, crestLight);
   output.localLighting = localLightingAt(worldPosition);
   output.contactShadow = contactShadowAt(worldPosition);
@@ -500,7 +546,11 @@ fn buildCoreFieldVertex(instanceIndex: u32, local: vec2f) -> VertexOutput {
   output.trackSignal = trackSignal;
   output.worldNormal = vec3f(0.0, 1.0, 0.0);
   output.faceData = vec2f(0.0);
-  let referenceGlow = clamp(max(heightEnergy, 0.0) * 0.56 + crestEnergy * 0.48, 0.0, 0.62);
+  let referenceGlow = clamp(
+    max(heightEnergy, 0.0) * 0.56 + crestEnergy * 0.48 + playerPresence.glow * 0.72,
+    0.0,
+    0.62
+  );
   let referenceTint = referencePaletteTint(cell.tint.rgb, terrainWhiteness, referenceGlow, crestEnergy) *
     (0.62 + referenceGlow * 0.05 + terrainWhiteness * 0.07 + crestEnergy * 0.2);
   let legacyTint = legacyNeonPaletteTint(
@@ -512,6 +562,7 @@ fn buildCoreFieldVertex(instanceIndex: u32, local: vec2f) -> VertexOutput {
     shimmer
   );
   output.color = selectFieldPalette(referenceTint, legacyTint);
+  output.color = output.color + playerPresence.glow * vec3f(0.04, 0.12, 0.1);
   output.color = output.color + echoSignal.x * vec3f(0.18, 0.36, 0.3);
   output.color = output.color + echoSignal.y * vec3f(0.42, 0.28, 0.1);
   let trackBody = mix(1.0, trackSignal.r, trackSignal.w);

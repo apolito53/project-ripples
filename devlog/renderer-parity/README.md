@@ -64,7 +64,7 @@ packed dynamic and static particle state.
 | --- | --- | --- | --- |
 | Gameplay, camera, mode, field placement, Track mask, Training state | Shared/exact | Keep shared neutral ownership | No change unless a fixed-tick state mismatch appears |
 | Ripple field geometry/material | Classic 3D geometry restored; material remains review-required | Preserve cap-focused graphic treatment | Tune prism thickness, side-face material response, and field horizon without flattening geometry |
-| Immediate player trough/rim/body wake | Classic transfer aligned | Keep the cleaner Core response | Review residual raster/material differences without retuning shared coefficients |
+| Immediate player trough/rim/body wake | Shared grounded pressure/rim coefficients aligned | Preserve Core's flat-cap material around the shared local response | Review residual raster/material differences without retuning shared coefficients |
 | Persistent wake solver | Shared coefficients aligned | Keep Core's stylized display response | Continue Track boost/coast/stop soak coverage without adding backend-only settling |
 | Avatar | Intentional Core difference | Preserve WebGPU hover-pod/mote treatment and saved mote asset | Compare dimensional silhouette, fins, thrusters, trails, and fixtures |
 | Active Echoes and collection | WebGPU-native equivalent | Preserve dense tiny-sun orbs as the Core read | Compare Three shells/columns, event mist, and field-response duplication |

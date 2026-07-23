@@ -426,6 +426,8 @@ export class WebGpuRenderRuntime implements RenderRuntime {
         fieldPalette: input.settings.fieldPaletteId,
         resolvedFieldPalette: fieldMetrics.fieldPalette,
         waveDynamicsMode: fieldMetrics.waveDynamicsMode,
+        playerPresenceMode: fieldMetrics.playerPresenceMode,
+        playerPresenceAnimated: fieldMetrics.playerPresenceAnimated,
         fieldGeometryMode: fieldMetrics.fieldGeometryMode,
         fieldVerticesPerInstance: fieldMetrics.fieldVerticesPerInstance,
         fieldTrianglesPerInstance: fieldMetrics.fieldTrianglesPerInstance,

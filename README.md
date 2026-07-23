@@ -255,8 +255,10 @@ side walls, animated tile height, wake/source displacement, and profile-specific
 lighting. Classic now uses the same source fade, local body-wake response,
 unamplified wake-texture transfer, pulse-light envelope, and late wake settling
 policy as the WebGL reference. A downward cap keeps the field closed during the supported underside
-camera orbit. The original flat,
-minimalist WebGPU treatment remains available as `core`.
+camera orbit. The flat, minimalist WebGPU treatment remains available as
+`core`; it preserves that graphic cap-focused material while sharing the
+grounded center depression, animated pressure rim, and local presence response
+used by WebGL and Classic.
 
 Choose the profile with the pause-menu **Field Style** selector or with
 `?presentation=classic|core`. The query wins over
@@ -287,6 +289,11 @@ wall-geometry, and Training-marker identity before producing image evidence. Set
 `RIPPLE_PARITY_APP_URL` only when deliberately targeting an existing server.
 External-server reports are marked `external-unverified` and are not attributed
 to the current workspace commit.
+
+`npm.cmd run verify:render:webgpu:core` also runs a settled stationary-player
+fixture with particles and bloom isolated. It compares two frozen phases chosen
+to hold Core's global material shimmer nearly constant and requires the local
+pressure-ring region to animate substantially more than a distant control area.
 
 Arena and Track pulse evidence follows one manual source through early (0.6s),
 middle (3.75s), late (6.5s), and post-expiry (8.0s) captures. The audit verifies

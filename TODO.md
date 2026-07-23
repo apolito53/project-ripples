@@ -104,6 +104,10 @@ concrete follow-ups that we actually intend to revisit.
 - Preserved the minimalist WebGPU art direction as selectable `core` and added a deterministic fixed-tick
   renderer presentation audit with state matching, repeatability checks, paired
   captures, image metrics, and amplified diffs.
+- Restored WebGL/Classic's contact-gated idle pressure trough, animated rim, and
+  local glow in Core without replacing its flat-cap material, then added a
+  stationary two-phase browser fixture that separates the local response from
+  Core's global material shimmer.
 - Filled the circular arena with cubes instead of stopping the field at a square
   patch.
 - Clamped the player avatar inside the same circular arena used by the cube

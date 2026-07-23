@@ -7,7 +7,9 @@ import ts from "typescript";
 const profilePolicy = await importTypeScriptModule("../src/render/presentationProfile.ts");
 const fieldPalettePolicy = await importTypeScriptModule("../src/fieldPalette.ts");
 const tests = [];
-const PRESERVED_CORE_SHADER_SHA256 = "78e6fa3d341dde49353a43a8b667b84188f4a564b73e14a074a0a02e80ec967d";
+// Reviewed after the v0.6 Core idle-presence parity capture. Update this only
+// after a deliberate Core art-direction change receives fresh visual evidence.
+const PRESERVED_CORE_SHADER_SHA256 = "19288760217a51410ae8e60e960318b7a2852f82653056d6c98d6a299abfc69a";
 
 async function importTypeScriptModule(relativePath) {
   const sourceUrl = new URL(relativePath, import.meta.url);
@@ -152,7 +154,7 @@ test("field palette defaults follow the active presentation profile", () => {
   assert.equal(fieldPalettePolicy.shouldPreserveCorePalette("profile", "classic"), false);
 });
 
-test("the preserved Core vertex and fragment shader contract stays unchanged", () => {
+test("the reviewed Core vertex and fragment shader contract stays unchanged", () => {
   const shaderSource = readFileSync(
     fileURLToPath(new URL("../src/ripple/webGpuRippleFieldPreview.wgsl", import.meta.url)),
     "utf8"
@@ -167,6 +169,33 @@ test("the preserved Core vertex and fragment shader contract stays unchanged", (
     PRESERVED_CORE_SHADER_SHA256,
     "Core shader math changed. Treat that as an intentional art-direction change and update the golden only after visual review."
   );
+});
+
+test("Core keeps the WebGL pressure-rim player-presence contract", () => {
+  const shaderSource = readFileSync(
+    fileURLToPath(new URL("../src/ripple/webGpuRippleFieldPreview.wgsl", import.meta.url)),
+    "utf8"
+  );
+  const presence = extractWgslFunction(shaderSource, "playerPresenceAt");
+  const coreVertex = extractWgslFunction(shaderSource, "buildCoreFieldVertex");
+
+  for (const expected of [
+    "smoothstep(0.15, 2.55, playerDistance)",
+    "(playerDistance - 2.35) / 0.9",
+    "field.timing.x * 5.8 - playerDistance * 2.15 + instancePhase",
+    "0.35 + shimmer * 0.09 + movementPush * 0.115",
+    "0.16 + shimmer * 0.14 + movementPush * 0.1"
+  ]) {
+    assert.ok(presence.includes(expected), `Core player presence lost ${JSON.stringify(expected)}.`);
+  }
+  for (const expected of [
+    "playerPresenceAt(cellPosition, cell.positionPhase.w)",
+    "playerPresence.footprintGrowth",
+    "playerPresence.lift",
+    "playerPresence.glow"
+  ]) {
+    assert.ok(coreVertex.includes(expected), `Core field vertex no longer consumes ${JSON.stringify(expected)}.`);
+  }
 });
 
 function extractWgslFunction(source, functionName) {

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Changed
+
+- Restored the grounded idle player-presence response in the selectable WebGPU
+  Core profile. Its minimalist flat caps now mirror WebGL/Classic's
+  contact-gated center depression, animated pressure rim, local glow, and
+  footprint breathing without adopting Classic's 3D prism material. The Core
+  browser smoke freezes two settled phases and verifies that animation remains
+  strongly localized around a stationary player.
+
 ## 0.6.0-ALPHA - 2026-07-22
 
 ### Changed
