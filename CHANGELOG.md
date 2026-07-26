@@ -13,6 +13,10 @@
 
 ### Changed
 
+- Restored the visible Base Speed and Boost Speed controls in the Movement tab
+  after the renderer-switch menu cleanup exposed stale `hidden` attributes.
+  The renderer round-trip verifier now checks their visibility and values in
+  both WebGL and WebGPU.
 - Restored the grounded idle player-presence response in the selectable WebGPU
   Core profile. Its minimalist flat caps now mirror WebGL/Classic's
   contact-gated center depression, animated pressure rim, local glow, and

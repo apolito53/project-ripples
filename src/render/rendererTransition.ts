@@ -149,6 +149,8 @@ export function wireRendererSwitch(options: RendererSwitchOptions): void {
       quality: handoff.settings.qualityId,
       skybox: handoff.settings.skyboxId,
       fieldPalette: handoff.settings.fieldPaletteId,
+      baseSpeed: roundMetric(handoff.settings.playerSpeed.baseSpeedMetersPerSecond),
+      boostSpeed: roundMetric(handoff.settings.playerSpeed.boostSpeedMetersPerSecond),
       particlesEnabled: handoff.settings.particlesEnabled,
       bloomEnabled: handoff.settings.bloomEnabled,
       perfOverlayVisible: handoff.perfOverlayVisible
@@ -187,6 +189,8 @@ export function reportRendererTransitionRestored(
     quality: handoff.settings.qualityId,
     skybox: handoff.settings.skyboxId,
     fieldPalette: handoff.settings.fieldPaletteId,
+    baseSpeed: roundMetric(handoff.settings.playerSpeed.baseSpeedMetersPerSecond),
+    boostSpeed: roundMetric(handoff.settings.playerSpeed.boostSpeedMetersPerSecond),
     particlesEnabled: handoff.settings.particlesEnabled,
     particleDensity: roundMetric(handoff.settings.particleDensity),
     bloomEnabled: handoff.settings.bloomEnabled,

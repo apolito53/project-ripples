@@ -293,8 +293,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
     versioned one-shot `sessionStorage` handoff, reloads with an explicit
     renderer query, rebuilds the same play mode, restores renderer-neutral
     settings and diagnostics visibility, and leaves the destination paused.
-    Hidden base/boost speed rows remain wired for future tuning, but are not
-    currently exposed in the visible menu.
+    The Movement tab exposes shared base/boost speed sliders, and their values
+    survive the same renderer handoff.
 15. The scene renders through bloom when bloom strength is above zero.
 16. Forced WebGPU builds `RenderFrameInput` from neutral gameplay snapshots.
     Arena enables the circular curtain; Track and Training upload the course
@@ -344,7 +344,7 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Change pulse source strength or cooldown: `src/main.ts`
 - Change propagation-speed semantics or medium parameters: `src/waveMedium.ts`,
   `src/labSettings.ts`, and `devlog/PROPAGATION_NOTES.md`
-- Change momentum, surface grip, jump feel, hidden speed defaults/limits,
+- Change momentum, surface grip, jump feel, speed defaults/limits,
   movement/camera feel, track containment, or the circular player fallback
   boundary: `src/controls.ts`, `src/raceTrack.ts`, `src/labSettings.ts`, and
   `src/main.ts`

@@ -505,8 +505,8 @@ export class PlayerRig {
   }
 
   setSpeedSettings(settings: PlayerSpeedSettings): void {
-    // Keep the hidden speed controls and any future callers honest: boost
-    // should remain meaningfully faster even while the visible UI is simplified.
+    // Keep the speed controls and any programmatic callers honest: boost should
+    // remain meaningfully faster than the selected base speed.
     this.speedSettings = normalizePlayerSpeedSettings(settings);
   }
 

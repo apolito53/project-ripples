@@ -606,10 +606,14 @@ async function verifyRendererSwitch(page, pageProblems) {
   await setControlValue(page, "#field-palette-select", "legacy-neon", "change");
   await setControlValue(page, "#voxel-size-slider", "1.35", "input");
   await setControlValue(page, "#arena-radius-slider", "175", "input");
+  await assertMovementSpeedControlsVisible(page);
+  await setControlValue(page, "#base-speed-slider", "14.5", "input");
+  await setControlValue(page, "#boost-speed-slider", "42", "input");
   await setControlValue(page, "#surface-grip-slider", "1.35", "input");
   await setControlValue(page, "#particle-slider", "0.37", "input");
   await clickControl(page, "#particle-toggle");
   await clickControl(page, "#perf-overlay-toggle");
+  await page.locator("#settings-tab-graphics").click();
 
   await switchRenderer(page, "webgpu");
   await waitForRunEvent(page, smokeRun, "webgpu.firstFrame");
@@ -627,6 +631,8 @@ async function verifyRendererSwitch(page, pageProblems) {
       payload.quality === "clean" &&
       payload.skybox === "aurora" &&
       payload.fieldPalette === "legacy-neon" &&
+      payload.baseSpeed === 14.5 &&
+      payload.boostSpeed === 42 &&
       payload.particlesEnabled === false &&
       payload.particleDensity === 0.37 &&
       payload.perfOverlayVisible === true;
@@ -634,6 +640,8 @@ async function verifyRendererSwitch(page, pageProblems) {
   await assertNonBlankCanvas(page, "renderer switch WebGPU canvas", "webgpu");
   await assertRendererSwitchUi(page, "webgpu");
   await assertRendererTransitionSettings(page);
+  await assertMovementSpeedControlsVisible(page);
+  await page.locator("#settings-tab-graphics").click();
 
   await switchRenderer(page, "webgl");
   await waitForRunEvent(page, smokeRun, "wake.init");
@@ -651,6 +659,8 @@ async function verifyRendererSwitch(page, pageProblems) {
       payload.quality === "clean" &&
       payload.skybox === "aurora" &&
       payload.fieldPalette === "legacy-neon" &&
+      payload.baseSpeed === 14.5 &&
+      payload.boostSpeed === 42 &&
       payload.particlesEnabled === false &&
       payload.particleDensity === 0.37 &&
       payload.perfOverlayVisible === true;
@@ -658,6 +668,7 @@ async function verifyRendererSwitch(page, pageProblems) {
   await assertNonBlankCanvas(page, "renderer switch restored WebGL canvas", "webgl");
   await assertRendererSwitchUi(page, "webgl");
   await assertRendererTransitionSettings(page);
+  await assertMovementSpeedControlsVisible(page);
 
   const records = await readRunEvents(smokeRun);
   const transitionRequests = records.filter((record) => record.entry.channel === "renderer.transition.request");
@@ -735,6 +746,16 @@ async function assertRendererSwitchUi(page, activeBackend) {
   }
 }
 
+async function assertMovementSpeedControlsVisible(page) {
+  await page.locator("#settings-tab-movement").click();
+  await page.locator("#settings-panel-movement:not([hidden])").waitFor({ timeout: 5000 });
+  for (const selector of ["#base-speed-slider", "#boost-speed-slider"]) {
+    if (!await page.locator(selector).isVisible()) {
+      throw new Error(`Movement speed control is not visible: ${selector}`);
+    }
+  }
+}
+
 async function assertRendererTransitionSettings(page) {
   const values = await page.evaluate(() => ({
     quality: document.querySelector("#quality-select")?.value,
@@ -742,6 +763,8 @@ async function assertRendererTransitionSettings(page) {
     fieldPalette: document.querySelector("#field-palette-select")?.value,
     voxelSize: document.querySelector("#voxel-size-slider")?.value,
     arenaRadius: document.querySelector("#arena-radius-slider")?.value,
+    baseSpeed: document.querySelector("#base-speed-slider")?.value,
+    boostSpeed: document.querySelector("#boost-speed-slider")?.value,
     surfaceGrip: document.querySelector("#surface-grip-slider")?.value,
     particleDensity: document.querySelector("#particle-slider")?.value,
     particlesEnabled: document.querySelector("#particle-toggle")?.getAttribute("aria-pressed"),
@@ -753,6 +776,8 @@ async function assertRendererTransitionSettings(page) {
     fieldPalette: "legacy-neon",
     voxelSize: "1.35",
     arenaRadius: "175",
+    baseSpeed: "14.5",
+    boostSpeed: "42",
     surfaceGrip: "1.35",
     particleDensity: "0.37",
     particlesEnabled: "false",

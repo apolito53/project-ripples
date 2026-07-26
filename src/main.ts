@@ -1974,8 +1974,7 @@ function updatePlayerSpeedSettingsFromControls(changedSlider: "base" | "boost"):
 }
 
 function syncPlayerSpeedControls(): void {
-  // These rows are hidden for now, but keeping the DOM state valid means we can
-  // unhide them later without relearning this exact constraint dance.
+  // Keep boost meaningfully above base while either visible slider is adjusted.
   const minimumBoostSpeed = getMinimumBoostSpeedMetersPerSecond(
     settings.playerSpeed.baseSpeedMetersPerSecond
   );
