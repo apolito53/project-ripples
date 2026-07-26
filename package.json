@@ -20,6 +20,7 @@
     "verify:render:webgpu:readiness": "node scripts/verify-render.mjs webgpu-readiness",
     "verify:render:webgpu:default-soak": "node scripts/verify-render.mjs webgpu-default-soak",
     "verify:render:webgpu:device-lost": "node scripts/verify-render.mjs webgpu-device-lost",
+    "verify:renderer:switch": "node scripts/verify-render.mjs renderer-switch",
     "verify:render:webgpu:unavailable": "node scripts/verify-render.mjs webgpu-unavailable",
     "verify:renderer:auto-rollout": "node scripts/verify-renderer-rollout.mjs",
     "verify:renderer:presentation-profile": "node scripts/verify-presentation-profile.mjs",

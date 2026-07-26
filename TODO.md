@@ -30,8 +30,10 @@ concrete follow-ups that we actually intend to revisit.
   `devlog/benchmark-baselines/rtx-4070-ti-2026-07-12-73df45e/`; the old July 11
   dirty pre-column-stagger result remains superseded.
   Stage 0 keeps `auto` on WebGL and `defaultEligible=false` while those artifacts
-  establish cross-adapter confidence. Only then implement same-navigation
-  startup fallback/runtime-loss recovery and consider a 5% allowlisted cohort.
+  establish cross-adapter confidence. The pause-menu renderer switch now proves
+  one-shot same-mode/settings handoff in both directions; reuse that transition
+  seam for startup fallback/runtime-loss recovery before considering a 5%
+  allowlisted cohort.
 
 - Shape the lab into a racing-game prototype.
   First pass now has a wide non-crossing track ribbon inside the arena with
@@ -82,6 +84,11 @@ concrete follow-ups that we actually intend to revisit.
 
 ## Done / Recent Decisions
 
+- Added a pause-menu WebGL/WebGPU segmented control backed by a controlled
+  document reload. A versioned one-shot session handoff preserves the active
+  mode, renderer-neutral settings, diagnostics visibility, and paused state;
+  dedicated browser coverage proves WebGL -> WebGPU -> WebGL restoration while
+  Stage-0 `auto` remains WebGL.
 - Added named renderer-neutral particle and Echo gameplay streams, exact
   canonical particle-state digests, a reusable deterministic gamepad fixture
   harness, and the exhaustive `audit:render:parity:closure` evidence matrix.

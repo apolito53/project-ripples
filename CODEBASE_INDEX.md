@@ -1,6 +1,6 @@
 # Codebase Index
 
-Last reviewed: 2026-07-22
+Last reviewed: 2026-07-26
 
 Purpose: compact map for the standalone ripple-field visual lab.
 
@@ -46,6 +46,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
   `npm.cmd run verify:render:webgpu:default-soak`
 - Browser forced-WebGPU terminal device-loss path:
   `npm.cmd run verify:render:webgpu:device-lost`
+- Browser pause-menu WebGL/WebGPU round trip with session handoff:
+  `npm.cmd run verify:renderer:switch`
 - Dormant auto-rollout policy verifier:
   `npm.cmd run verify:renderer:auto-rollout`
 - WebGPU presentation policy verifier:
@@ -72,8 +74,10 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - HTML shell, startup mode menu, Training HUD, pause menu, changelog dialog,
   performance overlay, and tuning controls: `index.html`
 - Visual styling and overlay layout: `src/styles.css`
-- Renderer-neutral field-palette policy and accessible pause-menu tab wiring:
-  `src/fieldPalette.ts` and `src/pauseMenuTabs.ts`
+- Renderer-neutral field-palette policy, accessible pause-menu tab wiring, and
+  the one-shot backend transition handoff:
+  `src/fieldPalette.ts`, `src/pauseMenuTabs.ts`, and
+  `src/render/rendererTransition.ts`
 - App bootstrap, startup `Training`/`Arena`/`Track` mode selection, session
   reset flow, Three.js scene, render loop, quality wiring, and postprocessing:
   `src/main.ts`
@@ -285,6 +289,10 @@ Purpose: compact map for the standalone ripple-field visual lab.
     persistent menu actions. The field-palette setting is shared by both
     renderers; Style Default resolves to Reference for WebGL/Classic and Legacy
     Neon for Core without changing wave dynamics.
+    Graphics also exposes a WebGL/WebGPU segmented control. It writes a
+    versioned one-shot `sessionStorage` handoff, reloads with an explicit
+    renderer query, rebuilds the same play mode, restores renderer-neutral
+    settings and diagnostics visibility, and leaves the destination paused.
     Hidden base/boost speed rows remain wired for future tuning, but are not
     currently exposed in the visible menu.
 15. The scene renders through bloom when bloom strength is above zero.

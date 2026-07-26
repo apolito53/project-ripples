@@ -541,10 +541,60 @@ canvas {
   min-width: 0;
 }
 
+.control-row[hidden] {
+  display: none;
+}
+
 .control-row span {
   color: rgba(237, 247, 255, 0.72);
   font-size: 12px;
   font-weight: 900;
+}
+
+.renderer-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  min-width: 0;
+  padding: 2px;
+  border: 1px solid rgba(142, 218, 255, 0.24);
+  border-radius: 6px;
+  background: rgba(2, 8, 15, 0.9);
+}
+
+.renderer-switch__option {
+  min-width: 0;
+  height: 26px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(237, 247, 255, 0.56);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.renderer-switch__option:hover:not(:disabled),
+.renderer-switch__option:focus-visible {
+  color: #edf7ff;
+  background: rgba(142, 218, 255, 0.1);
+  outline: none;
+}
+
+.renderer-switch__option--active {
+  color: #061218;
+  background: #9effe7;
+  box-shadow: 0 0 12px rgba(117, 255, 215, 0.28);
+}
+
+.renderer-switch__option:disabled:not(.renderer-switch__option--active) {
+  opacity: 0.36;
+  cursor: not-allowed;
+}
+
+.renderer-switch[aria-busy="true"] .renderer-switch__option {
+  cursor: wait;
 }
 
 select,

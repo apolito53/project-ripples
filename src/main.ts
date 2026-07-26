@@ -43,6 +43,12 @@ import {
   type RendererRolloutDecision
 } from "./render/rendererRollout";
 import {
+  applyRendererTransitionSettings,
+  consumeRendererTransition,
+  reportRendererTransitionRestored,
+  wireRendererSwitch
+} from "./render/rendererTransition";
+import {
   applyRenderBenchmarkSettings,
   createRenderBenchmarkMotion,
   isRenderBenchmarkEnabled,
@@ -324,13 +330,16 @@ function getSafeLocalStorage(): Storage | null {
 }
 
 const rendererModeSelection = resolveRendererMode();
+const activeRendererBackend = rendererModeSelection.requestedMode === "webgpu" ? "webgpu" : "webgl";
+const rendererTransition = consumeRendererTransition(activeRendererBackend);
 const rendererRolloutDecision = createRendererRolloutDecision(rendererModeSelection.requestedMode);
 reportRendererRolloutDecision(rendererRolloutDecision);
 
 if (rendererModeSelection.requestedMode === "webgpu") {
   void startWebGpuApp(
     rendererModeSelection,
-    (fieldRadius, arenaRadiusMeters) => new RaceTrack(null, fieldRadius, arenaRadiusMeters)
+    (fieldRadius, arenaRadiusMeters) => new RaceTrack(null, fieldRadius, arenaRadiusMeters),
+    rendererTransition
   );
 } else {
 
@@ -339,6 +348,7 @@ scene.background = new THREE.Color(0x020409);
 const camera = new THREE.PerspectiveCamera(54, 1, 0.1, 450);
 const clock = new THREE.Clock();
 const settings = cloneDefaultSettings();
+applyRendererTransitionSettings(settings, rendererTransition);
 applyRenderBenchmarkSettings(settings);
 const renderRuntime = new ThreeRenderRuntime({
   app,
@@ -394,7 +404,7 @@ let appState: AppState = "mainMenu";
 let activePlayMode: PlayModeId | null = null;
 let menuVisible = false;
 let changelogVisible = false;
-let perfOverlayVisible = false;
+let perfOverlayVisible = rendererTransition?.perfOverlayVisible ?? false;
 let pointerLockWasActive = false;
 let lastGamepadStatusText = "";
 // Mouse-button release is now normal camera behavior, while Esc/unexpected
@@ -469,6 +479,12 @@ const arenaBarrier = new ArenaBarrier(scene);
 skybox.setSkybox(settings.skyboxId);
 syncControlValues();
 wireControls();
+wireRendererSwitch({
+  activeBackend: "webgl",
+  getPlayMode: () => activePlayMode,
+  getSettings: () => settings,
+  getPerfOverlayVisible: () => perfOverlayVisible
+});
 wirePauseMenuTabs();
 updateTuningReadouts();
 applyQualityPreset(preset, true);
@@ -486,9 +502,11 @@ const visualCapture = createRenderVisualCaptureController({
   }
 });
 
-const requestedMode = readRequestedPlayMode();
+const requestedMode = rendererTransition?.playMode ?? readRequestedPlayMode();
 if (requestedMode) {
-  startGame(requestedMode, "query");
+  startGame(requestedMode, rendererTransition ? "renderer-transition" : "query");
+  if (rendererTransition?.restorePaused) setMenuVisible(true);
+  reportRendererTransitionRestored(rendererTransition, "webgl");
 } else {
   showMainMenu(false, "startup");
 }

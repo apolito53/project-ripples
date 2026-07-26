@@ -57,6 +57,12 @@ import {
   type PresentationProfileSelection
 } from "./presentationProfile";
 import {
+  applyRendererTransitionSettings,
+  reportRendererTransitionRestored,
+  wireRendererSwitch,
+  type RendererTransitionHandoff
+} from "./rendererTransition";
+import {
   applyRenderBenchmarkSettings,
   createRenderBenchmarkMotion,
   isRenderBenchmarkEnabled,
@@ -191,7 +197,8 @@ export type WebGpuCourseGameplayFactory = (
 
 export async function startWebGpuApp(
   rendererModeSelection: RendererModeSelection,
-  createCourseGameplay: WebGpuCourseGameplayFactory
+  createCourseGameplay: WebGpuCourseGameplayFactory,
+  rendererTransition: RendererTransitionHandoff | null = null
 ): Promise<void> {
   const dom = getDom();
   const presentationSelection = resolveWebGpuPresentationProfile();
@@ -202,6 +209,7 @@ export async function startWebGpuApp(
       rendererModeSelection,
       createCourseGameplay,
       presentationSelection,
+      rendererTransition,
       dom,
       (runtime) => { runtimeHolder.current = runtime; },
       (cleanup) => { cleanupHolder.current = cleanup; }
@@ -228,11 +236,13 @@ async function startWebGpuAppInternal(
   rendererModeSelection: RendererModeSelection,
   createCourseGameplay: WebGpuCourseGameplayFactory,
   presentationSelection: PresentationProfileSelection,
+  rendererTransition: RendererTransitionHandoff | null,
   dom: WebGpuDom,
   registerRuntime: (runtime: WebGpuRenderRuntime) => void,
   registerCleanup: (cleanup: () => void) => void
 ): Promise<void> {
   const settings = cloneDefaultSettings();
+  applyRendererTransitionSettings(settings, rendererTransition);
   applyRenderBenchmarkSettings(settings);
   let preset = getQualityPreset(settings);
   let presentationProfile = presentationSelection.profile;
@@ -260,7 +270,7 @@ async function startWebGpuAppInternal(
   let lastFrameUpdateMs = 0;
   let lastFrameSnapshotMs = 0;
   let lastFrameRenderMs = 0;
-  let perfOverlayVisible = false;
+  let perfOverlayVisible = rendererTransition?.perfOverlayVisible ?? false;
   let changelogVisible = false;
   let lastGamepadStatusText = "";
   let pointerLockWasActive = false;
@@ -425,6 +435,13 @@ async function startWebGpuAppInternal(
   playerReference = player;
 
   wireUi();
+  wireRendererSwitch({
+    activeBackend: "webgpu",
+    getPlayMode: () => activePlayMode,
+    getSettings: () => settings,
+    getPerfOverlayVisible: () => perfOverlayVisible,
+    signal: uiAbortController.signal
+  });
   wirePauseMenuTabs();
   dom.presentationProfileRow.hidden = false;
   syncControlValues();
@@ -438,9 +455,11 @@ async function startWebGpuAppInternal(
   });
   visualCaptureReference = visualCapture;
 
-  const requestedMode = readRequestedPlayMode();
+  const requestedMode = rendererTransition?.playMode ?? readRequestedPlayMode();
   if (requestedMode) {
-    startGame(requestedMode, "query");
+    startGame(requestedMode, rendererTransition ? "renderer-transition" : "query");
+    if (rendererTransition?.restorePaused) setMenuVisible(true);
+    reportRendererTransitionRestored(rendererTransition, "webgpu");
   } else {
     showMainMenu(false, "startup");
   }

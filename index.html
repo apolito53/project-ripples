@@ -80,6 +80,13 @@
 
           <section id="panel" class="scene-controls" aria-label="Tuning controls">
             <div id="settings-panel-graphics" class="scene-control-panel" role="tabpanel" aria-labelledby="settings-tab-graphics" data-settings-panel="graphics">
+              <div class="control-row">
+                <span>Renderer</span>
+                <div id="renderer-switch" class="renderer-switch" role="radiogroup" aria-label="Renderer backend">
+                  <button class="renderer-switch__option" type="button" role="radio" aria-checked="false" data-renderer-target="webgl">WebGL</button>
+                  <button class="renderer-switch__option" type="button" role="radio" aria-checked="false" data-renderer-target="webgpu">WebGPU</button>
+                </div>
+              </div>
               <label class="control-row">
                 <span>Quality</span>
                 <select id="quality-select">

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added
+
+- Added a pause-menu **Renderer** selector that performs a controlled
+  WebGL/WebGPU reload while preserving the active mode, renderer-neutral
+  settings, diagnostics visibility, and paused state through a versioned
+  one-shot session handoff. Added a dedicated Playwright round trip that proves
+  WebGL -> WebGPU -> WebGL restoration without changing the Stage-0 `auto`
+  policy.
+
 ### Changed
 
 - Restored the grounded idle player-presence response in the selectable WebGPU

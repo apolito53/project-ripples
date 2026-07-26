@@ -18,6 +18,7 @@ const SCENARIOS = new Set([
   "webgpu-readiness",
   "webgpu-default-soak",
   "webgpu-device-lost",
+  "renderer-switch",
   "webgpu-unavailable"
 ]);
 const PRE_3D_FIELD_TRIANGLE_COUNT = 53706;
@@ -124,6 +125,8 @@ try {
     await verifyWebGpuDefaultSoak(page, pageProblems);
   } else if (scenario === "webgpu-device-lost") {
     await verifyWebGpuDeviceLost(page, pageProblems);
+  } else if (scenario === "renderer-switch") {
+    await verifyRendererSwitch(page, pageProblems);
   } else {
     await verifyWebGpuUnavailable(page, pageProblems);
   }
@@ -580,6 +583,184 @@ async function verifyWebGpuCapabilities(page, pageProblems) {
     `[ripple-field-lab:verify:webgpu:capabilities] navigator.gpu OK ` +
     `(format=${capabilities.preferredFormat}, maxTexture=${capabilities.maxTextureDimension2D})`
   );
+}
+
+async function verifyRendererSwitch(page, pageProblems) {
+  const smokeRun = createSmokeRun("renderer-switch");
+  const url = buildAppUrl(config, { renderer: "webgl", mode: "arena", smokeRun });
+  await page.goto(url, { waitUntil: "domcontentloaded" });
+  await waitForRunEvent(page, smokeRun, "renderer.mode", (record) =>
+    record.entry.payload.activeBackend === "webgl" &&
+    record.entry.payload.playMode === "arena"
+  );
+  await assertNonBlankCanvas(page, "renderer switch initial WebGL canvas", "webgl");
+
+  await page.locator("#menu-toggle").click();
+  await page.locator("#scene-menu-backdrop:not([hidden])").waitFor({ timeout: 5000 });
+  await assertRendererSwitchUi(page, "webgl");
+
+  // Give the handoff enough non-default state to prove this is not merely a
+  // query-string redirect wearing a nice button.
+  await setControlValue(page, "#quality-select", "clean", "change");
+  await setControlValue(page, "#skybox-select", "aurora", "change");
+  await setControlValue(page, "#field-palette-select", "legacy-neon", "change");
+  await setControlValue(page, "#voxel-size-slider", "1.35", "input");
+  await setControlValue(page, "#arena-radius-slider", "175", "input");
+  await setControlValue(page, "#surface-grip-slider", "1.35", "input");
+  await setControlValue(page, "#particle-slider", "0.37", "input");
+  await clickControl(page, "#particle-toggle");
+  await clickControl(page, "#perf-overlay-toggle");
+
+  await switchRenderer(page, "webgpu");
+  await waitForRunEvent(page, smokeRun, "webgpu.firstFrame");
+  await waitForRunEvent(page, smokeRun, "renderer.mode", (record) =>
+    record.entry.payload.activeBackend === "webgpu" &&
+    record.entry.payload.playMode === "arena"
+  );
+  await waitForRunEvent(page, smokeRun, "renderer.transition.restore", (record) => {
+    const payload = record.entry.payload ?? {};
+    return payload.sourceBackend === "webgl" &&
+      payload.targetBackend === "webgpu" &&
+      payload.activeBackend === "webgpu" &&
+      payload.playMode === "arena" &&
+      payload.paused === true &&
+      payload.quality === "clean" &&
+      payload.skybox === "aurora" &&
+      payload.fieldPalette === "legacy-neon" &&
+      payload.particlesEnabled === false &&
+      payload.particleDensity === 0.37 &&
+      payload.perfOverlayVisible === true;
+  }, 25000);
+  await assertNonBlankCanvas(page, "renderer switch WebGPU canvas", "webgpu");
+  await assertRendererSwitchUi(page, "webgpu");
+  await assertRendererTransitionSettings(page);
+
+  await switchRenderer(page, "webgl");
+  await waitForRunEvent(page, smokeRun, "wake.init");
+  await waitForRunEvent(page, smokeRun, "renderer.mode", (record) =>
+    record.entry.payload.activeBackend === "webgl" &&
+    record.entry.payload.playMode === "arena"
+  );
+  await waitForRunEvent(page, smokeRun, "renderer.transition.restore", (record) => {
+    const payload = record.entry.payload ?? {};
+    return payload.sourceBackend === "webgpu" &&
+      payload.targetBackend === "webgl" &&
+      payload.activeBackend === "webgl" &&
+      payload.playMode === "arena" &&
+      payload.paused === true &&
+      payload.quality === "clean" &&
+      payload.skybox === "aurora" &&
+      payload.fieldPalette === "legacy-neon" &&
+      payload.particlesEnabled === false &&
+      payload.particleDensity === 0.37 &&
+      payload.perfOverlayVisible === true;
+  }, 25000);
+  await assertNonBlankCanvas(page, "renderer switch restored WebGL canvas", "webgl");
+  await assertRendererSwitchUi(page, "webgl");
+  await assertRendererTransitionSettings(page);
+
+  const records = await readRunEvents(smokeRun);
+  const transitionRequests = records.filter((record) => record.entry.channel === "renderer.transition.request");
+  if (!transitionRequests.some((record) =>
+    record.entry.payload?.sourceBackend === "webgl" &&
+    record.entry.payload?.targetBackend === "webgpu" &&
+    record.entry.payload?.handoffStored === true
+  )) {
+    throw new Error("Renderer switch did not retain the WebGL-to-WebGPU transition request.");
+  }
+  if (!transitionRequests.some((record) =>
+    record.entry.payload?.sourceBackend === "webgpu" &&
+    record.entry.payload?.targetBackend === "webgl" &&
+    record.entry.payload?.handoffStored === true
+  )) {
+    throw new Error("Renderer switch did not retain the WebGPU-to-WebGL transition request.");
+  }
+  assertNoChannels(records, [
+    "webgpu.uncapturedError",
+    "webgpu.deviceLost",
+    "webgpu.runtimeFatal",
+    "webgpu.fallback",
+    "webgpu.unavailable"
+  ], "renderer switch round trip");
+  pageProblems.assertNoErrors("renderer switch round trip");
+
+  console.log(`[ripple-field-lab:verify:renderer:switch] WebGL -> WebGPU -> WebGL handoff OK at ${url}`);
+}
+
+async function switchRenderer(page, targetBackend) {
+  await Promise.all([
+    page.waitForURL((nextUrl) =>
+      nextUrl.searchParams.get("renderer") === targetBackend &&
+      nextUrl.searchParams.get("mode") === "arena",
+    { timeout: 25000 }),
+    page.locator(`[data-renderer-target="${targetBackend}"]`).click()
+  ]);
+  await page.locator("#scene-menu-backdrop:not([hidden])").waitFor({ timeout: 25000 });
+  const marker = new URL(page.url()).searchParams.get("rendererTransition");
+  if (marker !== null) {
+    throw new Error(`Renderer transition marker survived the ${targetBackend} restore: ${marker}`);
+  }
+  const storedHandoff = await page.evaluate(() => sessionStorage.getItem("rippleRendererTransition.v1"));
+  if (storedHandoff !== null) {
+    throw new Error(`Renderer transition handoff was not consumed after loading ${targetBackend}.`);
+  }
+}
+
+async function assertRendererSwitchUi(page, activeBackend) {
+  const state = await page.evaluate(() => {
+    const root = document.querySelector("#renderer-switch");
+    const webgl = document.querySelector("[data-renderer-target='webgl']");
+    const webgpu = document.querySelector("[data-renderer-target='webgpu']");
+    const presentationProfileRow = document.querySelector("#presentation-profile-row");
+    return {
+      rootBackend: root instanceof HTMLElement ? root.dataset.activeBackend : null,
+      webglChecked: webgl?.getAttribute("aria-checked"),
+      webgpuChecked: webgpu?.getAttribute("aria-checked"),
+      pauseVisible: document.querySelector("#scene-menu-backdrop")?.hasAttribute("hidden") === false,
+      presentationProfileVisible: presentationProfileRow instanceof HTMLElement &&
+        presentationProfileRow.hidden === false &&
+        getComputedStyle(presentationProfileRow).display !== "none"
+    };
+  });
+  const expectedWebGl = activeBackend === "webgl" ? "true" : "false";
+  const expectedWebGpu = activeBackend === "webgpu" ? "true" : "false";
+  if (
+    state.rootBackend !== activeBackend ||
+    state.webglChecked !== expectedWebGl ||
+    state.webgpuChecked !== expectedWebGpu ||
+    state.pauseVisible !== true ||
+    state.presentationProfileVisible !== (activeBackend === "webgpu")
+  ) {
+    throw new Error(`Renderer selector did not reflect ${activeBackend}: ${JSON.stringify(state)}`);
+  }
+}
+
+async function assertRendererTransitionSettings(page) {
+  const values = await page.evaluate(() => ({
+    quality: document.querySelector("#quality-select")?.value,
+    skybox: document.querySelector("#skybox-select")?.value,
+    fieldPalette: document.querySelector("#field-palette-select")?.value,
+    voxelSize: document.querySelector("#voxel-size-slider")?.value,
+    arenaRadius: document.querySelector("#arena-radius-slider")?.value,
+    surfaceGrip: document.querySelector("#surface-grip-slider")?.value,
+    particleDensity: document.querySelector("#particle-slider")?.value,
+    particlesEnabled: document.querySelector("#particle-toggle")?.getAttribute("aria-pressed"),
+    diagnosticsEnabled: document.querySelector("#perf-overlay-toggle")?.getAttribute("aria-pressed")
+  }));
+  const expected = {
+    quality: "clean",
+    skybox: "aurora",
+    fieldPalette: "legacy-neon",
+    voxelSize: "1.35",
+    arenaRadius: "175",
+    surfaceGrip: "1.35",
+    particleDensity: "0.37",
+    particlesEnabled: "false",
+    diagnosticsEnabled: "true"
+  };
+  if (JSON.stringify(values) !== JSON.stringify(expected)) {
+    throw new Error(`Renderer transition settings changed across reload: ${JSON.stringify(values)}`);
+  }
 }
 
 async function verifyWebGpuRender(page, pageProblems) {

@@ -230,6 +230,15 @@ Omitted renderer selection and `?renderer=auto` remain on Three/WebGL. Use
 WebGPU runtime; if the browser cannot initialize WebGPU, the app shows a visible
 failure state and does not silently fall back.
 
+The pause menu's **Graphics > Renderer** segmented control switches the active
+backend through a controlled document reload. It preserves the selected
+Training/Track/Arena mode, renderer-neutral settings, and diagnostics visibility,
+then restores the destination backend paused. Gameplay progress is intentionally
+reset because the two renderers own incompatible canvases and GPU resources.
+The one-shot `sessionStorage` handoff is consumed on arrival; the explicit
+`renderer=webgl|webgpu` query remains visible and Stage-0 `auto` policy is not
+bypassed.
+
 During Stage 0, only the URL query may force WebGPU. A legacy
 `localStorage.rippleRendererMode = "webgpu"` preference is treated as `auto`, so
 an old persisted choice cannot bypass the dormant rollout policy.
@@ -436,6 +445,7 @@ npm.cmd run verify:render:webgpu:soak
 npm.cmd run verify:render:webgpu:readiness
 npm.cmd run verify:render:webgpu:default-soak
 npm.cmd run verify:render:webgpu:device-lost
+npm.cmd run verify:renderer:switch
 npm.cmd run verify:renderer:auto-rollout
 npm.cmd run verify:smoke-harness
 npm.cmd run verify:hex-lattice
