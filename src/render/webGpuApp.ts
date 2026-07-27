@@ -43,6 +43,12 @@ import {
   type RippleRenderSourceSnapshot,
   type RippleSourceOptions
 } from "../rippleSources";
+import {
+  KEY_LIGHT_FIXTURE,
+  RIM_LIGHT_FIXTURE,
+  resolveSceneSpotLightFixture,
+  type SceneSpotLightFixtureConfig
+} from "../sceneLighting";
 import { getSkyboxOption, isSkyboxId, SKYBOX_OPTIONS } from "../skybox";
 import { sampleFieldHeight } from "../terrain";
 import { TrainingRun, type TrainingCourse, type TrainingHudState } from "../trainingRun";
@@ -89,6 +95,7 @@ import {
   type RenderRaceTrackWallSnapshot,
   type RenderSceneLightingSnapshot,
   type RenderSceneLocalLightSnapshot,
+  type RenderSceneSpotLightSnapshot,
   type RenderSceneShadowCasterSnapshot,
   type RenderSceneShadowSnapshot,
   type RenderTrainingSnapshot,
@@ -1049,6 +1056,7 @@ async function startWebGpuAppInternal(
       avatarPresentation,
       sceneLighting: createSceneLightingSnapshot(
         settings,
+        preset.fieldRadius,
         playerSnapshot,
         pulseSources,
         echoVisualState,
@@ -2019,6 +2027,7 @@ function createAvatarPresentationSnapshot(player: {
 
 function createSceneLightingSnapshot(
   settings: LabSettings,
+  fieldRadius: number,
   player: { readonly position: RenderVector3Snapshot; readonly speed: number; readonly groundContact: number },
   pulseSources: RippleRenderSourceSnapshot,
   echoState: EchoVisualStateSnapshot,
@@ -2078,18 +2087,48 @@ function createSceneLightingSnapshot(
   localLights.sort((a, b) => b.importance - a.importance);
   const rendered = localLights.slice(0, RENDER_SCENE_LOCAL_LIGHT_LIMIT);
   const waveSpeed = basePropagationSpeed;
+  const keySpotLight = createSceneSpotLightSnapshot(fieldRadius, KEY_LIGHT_FIXTURE);
+  const rimSpotLight = createSceneSpotLightSnapshot(fieldRadius, RIM_LIGHT_FIXTURE);
   return {
     ambientColor: { x: 0.12, y: 0.2, z: 0.32 },
     ambientIntensity: 0.34,
-    keyDirection: normalizeVector({ x: -0.44, y: -1, z: 0.28 }),
-    keyColor: { x: 0.74, y: 0.92, z: 1 },
+    keyDirection: keySpotLight.direction,
+    keyColor: keySpotLight.color,
     keyIntensity: 1.02 + waveSpeed * 0.004,
-    rimDirection: normalizeVector({ x: 0.54, y: -0.42, z: -0.72 }),
-    rimColor: { x: 1, y: 0.42, z: 0.86 },
+    keySpotLight,
+    rimDirection: rimSpotLight.direction,
+    rimColor: rimSpotLight.color,
     rimIntensity: 0.58,
+    rimSpotLight,
     activeLocalLights: localLights.length,
     localLightLimit: RENDER_SCENE_LOCAL_LIGHT_LIMIT,
     localLights: rendered
+  };
+}
+
+function createSceneSpotLightSnapshot(
+  fieldRadius: number,
+  fixture: SceneSpotLightFixtureConfig
+): RenderSceneSpotLightSnapshot {
+  const resolved = resolveSceneSpotLightFixture(fixture, fieldRadius);
+
+  return {
+    position: resolved.position,
+    direction: resolved.direction,
+    color: colorHexToRenderVector(resolved.colorHex),
+    intensity: resolved.intensity,
+    range: resolved.range,
+    angleRadians: resolved.angleRadians,
+    penumbra: resolved.penumbra,
+    decay: resolved.decay
+  };
+}
+
+function colorHexToRenderVector(colorHex: number): RenderVector3Snapshot {
+  return {
+    x: ((colorHex >> 16) & 0xff) / 255,
+    y: ((colorHex >> 8) & 0xff) / 255,
+    z: (colorHex & 0xff) / 255
   };
 }
 
@@ -2199,11 +2238,6 @@ function createDisabledTrainingSnapshot(): RenderTrainingSnapshot {
 
 function vectorSnapshot(vector: THREE.Vector3): RenderVector3Snapshot {
   return { x: vector.x, y: vector.y, z: vector.z };
-}
-
-function normalizeVector(vector: RenderVector3Snapshot): RenderVector3Snapshot {
-  const length = Math.hypot(vector.x, vector.y, vector.z) || 1;
-  return { x: vector.x / length, y: vector.y / length, z: vector.z / length };
 }
 
 function createViewProjectionSnapshot(camera: THREE.Camera): readonly number[] {

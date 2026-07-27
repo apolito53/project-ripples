@@ -144,9 +144,10 @@ Purpose: compact map for the standalone ripple-field visual lab.
 - Guided Training Run director, tutorial objective gate, compact HUD state,
   scripted Echo request, completion pulse trigger, and `training.*`
   diagnostics: `src/trainingRun.ts`
-- Visible cyan/magenta spotlight fixtures, stage floor, core scene lighting,
-  active hover-pod avatar visuals, and shelved legacy glow-orb avatar:
-  `src/main.ts`
+- Renderer-neutral cyan/magenta spotlight fixture placement and cone policy:
+  `src/sceneLighting.ts`
+- Visible spotlight fixtures, stage floor, WebGL scene lighting, active
+  hover-pod avatar visuals, and shelved legacy glow-orb avatar: `src/main.ts`
 - Lifetime-pruned manual/Echo pulse source list and shader uniform writer:
   `src/rippleSources.ts`
 - Persistent collectible Echo-column lights, bright orb lights, vertical
@@ -290,7 +291,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
     renderers; Style Default resolves to Reference for WebGL/Classic and Legacy
     Neon for Core without changing wave dynamics. Core and Classic also share
     the same WebGL-matched crest/trough transfer; Field Style changes geometry
-    and material presentation only.
+    and material presentation only. `RenderSceneLightingSnapshot` carries the
+    WebGL key/rim fixture positions and spotlight parameters so WebGPU tile
+    faces retain the same camera-dependent cyan/magenta reflected-light pools.
     Graphics also exposes a WebGL/WebGPU segmented control. It writes a
     versioned one-shot `sessionStorage` handoff, reloads with an explicit
     renderer query, rebuilds the same play mode, restores renderer-neutral

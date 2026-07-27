@@ -157,15 +157,28 @@ export type RenderSceneLocalLightSnapshot = {
   readonly importance: number;
 };
 
+export type RenderSceneSpotLightSnapshot = {
+  readonly position: RenderVector3Snapshot;
+  readonly direction: RenderVector3Snapshot;
+  readonly color: RenderVector3Snapshot;
+  readonly intensity: number;
+  readonly range: number;
+  readonly angleRadians: number;
+  readonly penumbra: number;
+  readonly decay: number;
+};
+
 export type RenderSceneLightingSnapshot = {
   readonly ambientColor: RenderVector3Snapshot;
   readonly ambientIntensity: number;
   readonly keyDirection: RenderVector3Snapshot;
   readonly keyColor: RenderVector3Snapshot;
   readonly keyIntensity: number;
+  readonly keySpotLight: RenderSceneSpotLightSnapshot;
   readonly rimDirection: RenderVector3Snapshot;
   readonly rimColor: RenderVector3Snapshot;
   readonly rimIntensity: number;
+  readonly rimSpotLight: RenderSceneSpotLightSnapshot;
   readonly activeLocalLights: number;
   readonly localLightLimit: number;
   readonly localLights: readonly RenderSceneLocalLightSnapshot[];

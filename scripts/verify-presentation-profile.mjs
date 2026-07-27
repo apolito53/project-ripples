@@ -7,9 +7,10 @@ import ts from "typescript";
 const profilePolicy = await importTypeScriptModule("../src/render/presentationProfile.ts");
 const fieldPalettePolicy = await importTypeScriptModule("../src/fieldPalette.ts");
 const tests = [];
-// Reviewed after the v0.6 Core water-crest parity correction. Update this only
-// after a deliberate Core art-direction change receives fresh visual evidence.
-const PRESERVED_CORE_SHADER_SHA256 = "f03d92b748f7cd6e501c9ba8a7d37c4f3fba0f3a3c3a325111d3d39bb9a972ad";
+// Reviewed after the v0.6 water-crest and reflected-light parity corrections.
+// Update this only after a deliberate Core art-direction change receives fresh
+// visual evidence.
+const PRESERVED_CORE_SHADER_SHA256 = "d4b3540e58812664d8cabf47763ce9b2feab700938705879f517f00bf66a42c4";
 
 async function importTypeScriptModule(relativePath) {
   const sourceUrl = new URL(relativePath, import.meta.url);
@@ -230,6 +231,46 @@ test("Core and Classic share the WebGL-matched field-wave transfer", () => {
     false,
     "Core restored its retired amplified wake/source displacement."
   );
+});
+
+test("WebGPU field styles preserve the MeshStandard reflected-light contract", () => {
+  const shaderSource = readFileSync(
+    fileURLToPath(new URL("../src/ripple/webGpuRippleFieldPreview.wgsl", import.meta.url)),
+    "utf8"
+  );
+  const specular = extractWgslFunction(shaderSource, "fieldSpecularBrdf");
+  const spotLight = extractWgslFunction(shaderSource, "fieldSpotLightAt");
+  const reflectedLight = extractWgslFunction(shaderSource, "reflectedFieldLightAt");
+  const coreFragment = extractWgslFunction(shaderSource, "fragmentCoreMain");
+  const classicFragment = extractWgslFunction(shaderSource, "fragmentClassicMain");
+
+  assert.ok(shaderSource.includes("const FIELD_METALNESS: f32 = 0.22;"));
+  assert.ok(shaderSource.includes("const FIELD_ROUGHNESS: f32 = 0.32;"));
+  for (const expected of ["distribution", "geometryView", "geometryLight", "fresnel"]) {
+    assert.ok(specular.includes(expected), `Field specular BRDF lost ${JSON.stringify(expected)}.`);
+  }
+  for (const expected of [
+    "coneAttenuation",
+    "rangeAttenuation",
+    "distanceAttenuation",
+    "fieldSpecularBrdf"
+  ]) {
+    assert.ok(spotLight.includes(expected), `Field spotlight response lost ${JSON.stringify(expected)}.`);
+  }
+  for (const expected of [
+    "field.camera.xyz - worldPosition",
+    "sceneLights.keySpotPositionRange",
+    "sceneLights.rimSpotPositionRange",
+    "localLights[index]"
+  ]) {
+    assert.ok(reflectedLight.includes(expected), `Reflected field lighting lost ${JSON.stringify(expected)}.`);
+  }
+  for (const [profile, fragment] of [["Core", coreFragment], ["Classic", classicFragment]]) {
+    assert.ok(
+      fragment.includes("reflectedFieldLightAt("),
+      `${profile} no longer consumes the shared reflected-light response.`
+    );
+  }
 });
 
 function extractWgslFunction(source, functionName) {

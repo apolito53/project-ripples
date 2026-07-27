@@ -7,7 +7,7 @@ import {
 } from "./types";
 import type { WebGpuDiagnosticLogger } from "./webgpu";
 
-const LIGHT_UNIFORM_FLOATS = 24;
+const LIGHT_UNIFORM_FLOATS = 48;
 const LOCAL_LIGHT_FLOATS = 8;
 const LIGHT_FRAME_LOG_INTERVAL_SECONDS = 0.5;
 
@@ -65,7 +65,7 @@ export class WebGpuSceneLightBuffer {
     this.log("lighting.webgpu.init", "WebGPU scene lighting buffer initialized", {
       mode: "webgpu-scene-light-buffer",
       localLightLimit: RENDER_SCENE_LOCAL_LIGHT_LIMIT,
-      packing: "vec4-position-radius + vec4-color-intensity"
+      packing: "ambient/directional + key/rim spotlight fixtures + vec4 local lights"
     });
   }
 
@@ -130,6 +130,8 @@ export class WebGpuSceneLightBuffer {
     this.uniforms[21] = renderedLights;
     this.uniforms[22] = RENDER_SCENE_LOCAL_LIGHT_LIMIT;
     this.uniforms[23] = input.time;
+    writeSpotLightUniforms(this.uniforms, 24, lighting.keySpotLight);
+    writeSpotLightUniforms(this.uniforms, 36, lighting.rimSpotLight);
 
     this.localLightScratch.fill(0);
     for (let index = 0; index < renderedLights; index += 1) {
@@ -195,10 +197,35 @@ export class WebGpuSceneLightBuffer {
       ambientIntensity: roundMetric(this.ambientIntensity),
       keyIntensity: roundMetric(this.keyIntensity),
       rimIntensity: roundMetric(this.rimIntensity),
+      keySpotIntensity: roundMetric(input.sceneLighting.keySpotLight.intensity),
+      keySpotRange: roundMetric(input.sceneLighting.keySpotLight.range),
+      rimSpotIntensity: roundMetric(input.sceneLighting.rimSpotLight.intensity),
+      rimSpotRange: roundMetric(input.sceneLighting.rimSpotLight.range),
       updateMs: roundMetric(this.updateMs),
       deviceLost
     }, "debug");
   }
+}
+
+function writeSpotLightUniforms(
+  target: Float32Array,
+  offset: number,
+  light: RenderFrameInput["sceneLighting"]["keySpotLight"]
+): void {
+  const angle = Math.max(0.01, finiteOrDefault(light.angleRadians, 1.08));
+  const penumbra = Math.min(1, Math.max(0, finiteOrDefault(light.penumbra, 0.74)));
+  target[offset] = finiteOrDefault(light.position.x, 0);
+  target[offset + 1] = finiteOrDefault(light.position.y, 24);
+  target[offset + 2] = finiteOrDefault(light.position.z, 0);
+  target[offset + 3] = Math.max(0.1, finiteOrDefault(light.range, 150));
+  target[offset + 4] = finiteOrDefault(light.direction.x, 0);
+  target[offset + 5] = finiteOrDefault(light.direction.y, -1);
+  target[offset + 6] = finiteOrDefault(light.direction.z, 0);
+  target[offset + 7] = Math.max(0, finiteOrDefault(light.intensity, 0));
+  target[offset + 8] = Math.cos(angle);
+  target[offset + 9] = Math.cos(angle * (1 - penumbra));
+  target[offset + 10] = Math.max(0, finiteOrDefault(light.decay, 1.18));
+  target[offset + 11] = 0;
 }
 
 function compareLocalLights(a: RenderSceneLocalLightSnapshot, b: RenderSceneLocalLightSnapshot): number {

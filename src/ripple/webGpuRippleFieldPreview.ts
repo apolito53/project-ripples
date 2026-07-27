@@ -22,7 +22,7 @@ import rippleFieldPreviewSource from "./webGpuRippleFieldPreview.wgsl?raw";
 
 const FIELD_PREVIEW_FRAME_LOG_INTERVAL_SECONDS = 0.5;
 const FIELD_CAMERA_MATRIX_FLOATS = 16;
-const FIELD_UNIFORM_FLOATS = FIELD_CAMERA_MATRIX_FLOATS + 36;
+const FIELD_UNIFORM_FLOATS = FIELD_CAMERA_MATRIX_FLOATS + 40;
 const FIELD_CELL_FLOATS = 8;
 const SOURCE_FLOATS = 8;
 const ECHO_FLOATS = 8;
@@ -548,6 +548,12 @@ export class WebGpuRippleFieldPreview {
     ) ? 1 : 0;
     this.uniforms[uniformOffset + 34] = 0;
     this.uniforms[uniformOffset + 35] = 0;
+    // The field fragment shader needs the real camera position for the same
+    // view-dependent reflected-light response as Three's MeshStandardMaterial.
+    this.uniforms[uniformOffset + 36] = input.camera.position.x;
+    this.uniforms[uniformOffset + 37] = input.camera.position.y;
+    this.uniforms[uniformOffset + 38] = input.camera.position.z;
+    this.uniforms[uniformOffset + 39] = 1;
     this.device.queue.writeBuffer(this.uniformBuffer, 0, this.uniforms);
   }
 

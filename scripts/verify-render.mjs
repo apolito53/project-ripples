@@ -933,7 +933,8 @@ async function verifyWebGpuRender(page, pageProblems) {
   await waitForRunEvent(page, smokeRun, "lighting.webgpu.init", (record) => {
     const payload = record.entry.payload;
     return payload.mode === "webgpu-scene-light-buffer" &&
-      payload.localLightLimit === 16;
+      payload.localLightLimit === 16 &&
+      payload.packing === "ambient/directional + key/rim spotlight fixtures + vec4 local lights";
   });
   await waitForRunEvent(page, smokeRun, "shadow.webgpu.init", (record) => {
     const payload = record.entry.payload;
@@ -1056,6 +1057,10 @@ async function verifyWebGpuRender(page, pageProblems) {
     return payload.mode === "webgpu-scene-light-buffer" &&
       payload.scenePresentationMode === "webgpu-core-scene" &&
       payload.renderedLocalLights > 0 &&
+      payload.keySpotIntensity === 330 &&
+      payload.keySpotRange >= 150 &&
+      payload.rimSpotIntensity === 150 &&
+      payload.rimSpotRange >= 150 &&
       payload.deviceLost === false;
   });
   await waitForRunEvent(page, smokeRun, "shadow.webgpu.frame", (record) => {
@@ -2316,6 +2321,10 @@ async function verifyWebGpuDemoHarness(page, pageProblems) {
     return payload.mode === "webgpu-scene-light-buffer" &&
       payload.scenePresentationMode === "webgpu-core-scene" &&
       payload.renderedLocalLights > 0 &&
+      payload.keySpotIntensity === 330 &&
+      payload.keySpotRange >= 150 &&
+      payload.rimSpotIntensity === 150 &&
+      payload.rimSpotRange >= 150 &&
       payload.deviceLost === false;
   });
   await waitForRunEvent(page, smokeRun, "shadow.webgpu.frame", (record) => {

@@ -9,6 +9,7 @@ struct FieldParams {
   echo: vec4f,
   track: vec4f,
   palette: vec4f,
+  camera: vec4f,
 };
 
 struct FieldCell {
@@ -33,6 +34,12 @@ struct SceneLightParams {
   rimDirection: vec4f,
   rimColor: vec4f,
   counts: vec4f,
+  keySpotPositionRange: vec4f,
+  keySpotDirectionIntensity: vec4f,
+  keySpotConeDecay: vec4f,
+  rimSpotPositionRange: vec4f,
+  rimSpotDirectionIntensity: vec4f,
+  rimSpotConeDecay: vec4f,
 };
 
 struct LocalLightData {
@@ -68,6 +75,7 @@ struct VertexOutput {
   @location(7) trackSignal: vec4f,
   @location(8) worldNormal: vec3f,
   @location(9) faceData: vec2f,
+  @location(10) worldPosition: vec3f,
 };
 
 struct ProceduralFieldVertex {
@@ -98,6 +106,9 @@ const ECHO_BURST_LIMIT: u32 = 8u;
 const ECHO_BURST_OFFSET: u32 = 8u;
 const LOCAL_LIGHT_LIMIT: u32 = 16u;
 const SHADOW_CASTER_LIMIT: u32 = 16u;
+const PI: f32 = 3.14159265359;
+const FIELD_METALNESS: f32 = 0.22;
+const FIELD_ROUGHNESS: f32 = 0.32;
 
 fn referencePaletteTint(baseTint: vec3f, heightWhiteness: f32, glow: f32, crestGlow: f32) -> vec3f {
   let rippleTint = mix(baseTint, vec3f(0.18, 0.82, 0.74), clamp(glow * 0.46, 0.0, 0.7));
@@ -388,6 +399,160 @@ fn localLightingAt(worldPosition: vec3f) -> vec3f {
   return min(lighting, vec3f(1.35));
 }
 
+fn safeNormalize3(value: vec3f) -> vec3f {
+  let magnitude = length(value);
+  if (magnitude < 0.0001) {
+    return vec3f(0.0, 1.0, 0.0);
+  }
+  return value / magnitude;
+}
+
+// Match the view-dependent reflected-light read supplied by Three's
+// MeshStandardMaterial. The WebGL field uses metalness 0.22 and roughness 0.32;
+// carrying those same constants here keeps raised tile faces glossy without
+// turning their ordinary diffuse response into more emissive glow.
+fn fieldSpecularBrdf(
+  worldNormal: vec3f,
+  viewDirection: vec3f,
+  lightDirection: vec3f,
+  baseColor: vec3f
+) -> vec3f {
+  let normal = safeNormalize3(worldNormal);
+  let view = safeNormalize3(viewDirection);
+  let light = safeNormalize3(lightDirection);
+  let nDotL = max(dot(normal, light), 0.0);
+  let nDotV = max(dot(normal, view), 0.0);
+  if (nDotL <= 0.0001 || nDotV <= 0.0001) {
+    return vec3f(0.0);
+  }
+
+  let halfVector = safeNormalize3(view + light);
+  let nDotH = max(dot(normal, halfVector), 0.0);
+  let vDotH = max(dot(view, halfVector), 0.0);
+  let alpha = FIELD_ROUGHNESS * FIELD_ROUGHNESS;
+  let alphaSquared = alpha * alpha;
+  let distributionDenominator = PI * pow(
+    nDotH * nDotH * (alphaSquared - 1.0) + 1.0,
+    2.0
+  );
+  let distribution = alphaSquared / max(0.0001, distributionDenominator);
+  let geometryK = pow(FIELD_ROUGHNESS + 1.0, 2.0) * 0.125;
+  let geometryView = nDotV / max(0.0001, nDotV * (1.0 - geometryK) + geometryK);
+  let geometryLight = nDotL / max(0.0001, nDotL * (1.0 - geometryK) + geometryK);
+  let dielectricF0 = vec3f(0.04);
+  let f0 = mix(dielectricF0, clamp(baseColor, vec3f(0.0), vec3f(1.0)), FIELD_METALNESS);
+  let fresnel = f0 + (vec3f(1.0) - f0) * pow(1.0 - vDotH, 5.0);
+  return fresnel * distribution * geometryView * geometryLight /
+    max(0.0001, 4.0 * nDotV * nDotL) * nDotL;
+}
+
+fn fieldSpotLightAt(
+  worldPosition: vec3f,
+  worldNormal: vec3f,
+  viewDirection: vec3f,
+  baseColor: vec3f,
+  lightColor: vec3f,
+  positionRange: vec4f,
+  directionIntensity: vec4f,
+  coneDecay: vec4f,
+  responseScale: vec2f
+) -> vec3f {
+  let offset = positionRange.xyz - worldPosition;
+  let distanceToLight = length(offset);
+  let range = max(0.1, positionRange.w);
+  if (distanceToLight >= range) {
+    return vec3f(0.0);
+  }
+
+  let lightDirection = safeNormalize3(offset);
+  let directionFromLight = -lightDirection;
+  let spotDirection = safeNormalize3(directionIntensity.xyz);
+  let spotCosine = dot(directionFromLight, spotDirection);
+  let coneAttenuation = smoothstep(coneDecay.x, coneDecay.y, spotCosine);
+  let rangeAttenuation = pow(max(0.0, 1.0 - distanceToLight / range), 2.0);
+  let distanceAttenuation = 1.0 / max(
+    0.01,
+    pow(max(0.1, distanceToLight), max(0.0, coneDecay.z))
+  );
+  let irradiance = lightColor * directionIntensity.w *
+    coneAttenuation * rangeAttenuation * distanceAttenuation;
+  let normal = safeNormalize3(worldNormal);
+  let nDotL = max(dot(normal, lightDirection), 0.0);
+  let diffuse = clamp(baseColor, vec3f(0.0), vec3f(1.0)) *
+    (1.0 - FIELD_METALNESS) * nDotL / PI;
+  let specular = fieldSpecularBrdf(
+    normal,
+    viewDirection,
+    lightDirection,
+    baseColor
+  );
+  return irradiance * (
+    diffuse * responseScale.x +
+    specular * responseScale.y
+  );
+}
+
+fn reflectedFieldLightAt(
+  worldPosition: vec3f,
+  worldNormal: vec3f,
+  baseColor: vec3f
+) -> vec3f {
+  let viewDirection = field.camera.xyz - worldPosition;
+  let keyReflection = fieldSpotLightAt(
+    worldPosition,
+    worldNormal,
+    viewDirection,
+    baseColor,
+    sceneLights.keyColor.rgb,
+    sceneLights.keySpotPositionRange,
+    sceneLights.keySpotDirectionIntensity,
+    sceneLights.keySpotConeDecay,
+    vec2f(1.0, 0.9)
+  );
+  let rimReflection = fieldSpotLightAt(
+    worldPosition,
+    worldNormal,
+    viewDirection,
+    baseColor,
+    vec3f(
+      sceneLights.rimColor.r,
+      sceneLights.rimColor.g * 0.58,
+      min(1.0, sceneLights.rimColor.b * 1.02)
+    ),
+    sceneLights.rimSpotPositionRange,
+    sceneLights.rimSpotDirectionIntensity,
+    sceneLights.rimSpotConeDecay,
+    vec2f(4.5, 0.55)
+  );
+  var localReflection = vec3f(0.0);
+  let lightCount = min(u32(sceneLights.counts.y + 0.5), LOCAL_LIGHT_LIMIT);
+
+  for (var index = 0u; index < LOCAL_LIGHT_LIMIT; index = index + 1u) {
+    if (index >= lightCount) {
+      break;
+    }
+
+    let light = localLights[index];
+    let offset = light.positionRadius.xyz - worldPosition;
+    let radius = max(0.1, light.positionRadius.w);
+    let distanceToLight = length(offset);
+    let attenuation = pow(max(0.0, 1.0 - distanceToLight / radius), 2.0);
+    localReflection = localReflection + fieldSpecularBrdf(
+      worldNormal,
+      viewDirection,
+      offset,
+      baseColor
+    ) * light.colorIntensity.rgb * light.colorIntensity.w * attenuation * 0.72;
+  }
+
+  // Reflections should reveal the tile faces, not become a second bloom source
+  // capable of washing the field. The real bloom pass can still catch the
+  // brightest bounded highlights.
+  // The calibrated diffuse/specular balance keeps Three's broad magenta pool
+  // without clipping its center into a white bloom streak.
+  return min(keyReflection + rimReflection + localReflection, vec3f(1.25));
+}
+
 fn safeNormalize2(value: vec2f) -> vec2f {
   let magnitude = length(value);
   if (magnitude < 0.0001) {
@@ -613,6 +778,7 @@ fn buildCoreFieldVertex(instanceIndex: u32, local: vec2f) -> VertexOutput {
   output.trackSignal = trackSignal;
   output.worldNormal = vec3f(0.0, 1.0, 0.0);
   output.faceData = vec2f(0.0);
+  output.worldPosition = worldPosition;
   let referenceGlow = clamp(
     glow * 0.56 + fieldWave.crestGlow * 0.48 + playerPresence.glow * 0.72,
     0.0,
@@ -753,6 +919,7 @@ fn buildClassicFieldVertex(
   output.trackSignal = trackSignal;
   output.worldNormal = worldNormal;
   output.faceData = faceData;
+  output.worldPosition = worldPosition;
   let referenceColor = classicTint * (
     0.62 + glow * 0.05 + terrainWhiteness * 0.07 + fieldWave.crestGlow * 0.2
   );
@@ -809,8 +976,14 @@ fn fragmentCoreMain(input: VertexOutput) -> @location(0) vec4f {
   let contactShadow = input.contactShadow * interior;
   let directionalShadow = shadowMapOcclusion(input.shadowClip, interior);
   let combinedShadow = min(contactShadow + directionalShadow, 0.44);
+  let reflectedLight = reflectedFieldLightAt(
+    input.worldPosition,
+    input.worldNormal,
+    input.color
+  ) * 0.78;
   var color = input.color * globalLight * (0.78 + interior * 0.22);
   color = color * (1.0 - combinedShadow);
+  color = color + reflectedLight * interior;
   color = color + gridLine * vec3f(0.015, 0.07, 0.075);
   color = color + input.energy.z * interior * vec3f(0.16, 0.22, 0.09);
   color = color + input.lighting.z * vec3f(0.18, 0.16, 0.06);
@@ -842,9 +1015,15 @@ fn fragmentClassicMain(input: VertexOutput) -> @location(0) vec4f {
   let contactShadow = input.contactShadow * interior;
   let directionalShadow = shadowMapOcclusion(input.shadowClip, interior);
   let combinedShadow = min(contactShadow + directionalShadow, 0.44);
+  let reflectedLight = reflectedFieldLightAt(
+    input.worldPosition,
+    normal,
+    input.color
+  );
   var color = input.color * globalLight * (0.78 + interior * 0.22);
   color = color * mix(1.0, 0.7 + input.faceData.y * 0.3, sideFace);
   color = color * (1.0 - combinedShadow);
+  color = color + reflectedLight * interior * mix(1.0, 0.72, sideFace) * (1.0 - bottomFace);
   let paletteMix = clamp(field.palette.x, 0.0, 1.0);
   let gridTint = mix(vec3f(0.015, 0.07, 0.075), vec3f(0.055, 0.025, 0.13), paletteMix);
   let paletteCrestTint = mix(vec3f(0.7, 1.0, 0.9), vec3f(1.0, 0.62, 0.16), paletteMix);

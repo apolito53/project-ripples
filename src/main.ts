@@ -69,6 +69,15 @@ import { startWebGpuApp } from "./render/webGpuApp";
 import { RippleField } from "./rippleField";
 import type { FieldPlacementClipper } from "./rippleFieldLayout";
 import { RippleSourceStore, type RippleSourceOptions } from "./rippleSources";
+import {
+  KEY_LIGHT_FIXTURE,
+  RIM_LIGHT_FIXTURE,
+  SCENE_SPOT_LIGHT_ANGLE_RADIANS,
+  SCENE_SPOT_LIGHT_DECAY,
+  SCENE_SPOT_LIGHT_PENUMBRA,
+  resolveSceneSpotLightFixture,
+  type SceneSpotLightFixtureConfig
+} from "./sceneLighting";
 import { SKYBOX_OPTIONS, SkyboxManager, isSkyboxId } from "./skybox";
 import "./styles.css";
 import { sampleFieldHeight } from "./terrain";
@@ -218,8 +227,6 @@ const AVATAR_FORWARD_AXIS = new THREE.Vector3(0, 0, 1);
 // A low visual floor remains while the playable surface is still planar. The
 // upcoming sphere pass can delete or replace this without touching RippleField.
 const STAGE_FLOOR_Y = -3.2;
-const KEY_LIGHT_SOURCE_COLOR = 0xbcecff;
-const RIM_LIGHT_SOURCE_COLOR = 0xff7de7;
 
 type AvatarStyle = "hoverPod" | "legacyGlowOrb";
 
@@ -255,10 +262,7 @@ type SceneLightSource = {
   readonly target: THREE.Object3D;
   readonly plasmaVisual: THREE.Group;
   readonly billboardMaterials: readonly THREE.ShaderMaterial[];
-  readonly horizontalDirection: THREE.Vector3;
-  readonly heightScale: number;
-  readonly intensity: number;
-  readonly distanceScale: number;
+  readonly fixture: SceneSpotLightFixtureConfig;
   readonly phaseOffset: number;
 };
 
@@ -2167,12 +2171,7 @@ function createLighting(): void {
   const keySource = createSceneLightSource(
     "Cyan key source fixture",
     "Cyan key source spotlight",
-    new THREE.Vector3(-24, 38, 18),
-    KEY_LIGHT_SOURCE_COLOR,
-    1.25,
-    0.34,
-    330,
-    2.75
+    KEY_LIGHT_FIXTURE
   );
   sceneLightSources.push(keySource);
   scene.add(keySource.object, keySource.target);
@@ -2180,12 +2179,7 @@ function createLighting(): void {
   const rimSource = createSceneLightSource(
     "Magenta rim source fixture",
     "Magenta rim source spotlight",
-    new THREE.Vector3(30, 18, -24),
-    RIM_LIGHT_SOURCE_COLOR,
-    0.92,
-    0.27,
-    150,
-    2.25
+    RIM_LIGHT_FIXTURE
   );
   sceneLightSources.push(rimSource);
   scene.add(rimSource.object, rimSource.target);
@@ -2194,21 +2188,12 @@ function createLighting(): void {
 function createSceneLightSource(
   name: string,
   lightName: string,
-  position: THREE.Vector3,
-  colorHex: number,
-  scale: number,
-  heightScale: number,
-  intensity: number,
-  distanceScale: number
+  fixture: SceneSpotLightFixtureConfig
 ): SceneLightSource {
-  const color = new THREE.Color(colorHex);
+  const color = new THREE.Color(fixture.colorHex);
   const hotColor = color.clone().lerp(new THREE.Color(0xffffff), 0.72);
   const object = new THREE.Group();
   object.name = name;
-
-  const horizontalDirection = new THREE.Vector3(position.x, 0, position.z);
-  if (horizontalDirection.lengthSq() <= 0.0001) horizontalDirection.set(1, 0, 0);
-  horizontalDirection.normalize();
 
   // These fixtures are the actual key/rim sources. The visible part is now a
   // layered billboard impostor: flat shader cards that always face the camera,
@@ -2259,22 +2244,34 @@ function createSceneLightSource(
     const material = createPlasmaBillboardMaterial(color, hotColor, layer);
     const billboard = new THREE.Mesh(billboardGeometry, material);
     billboard.name = `${name} ${layer.name} billboard`;
-    billboard.scale.setScalar(layer.size * scale);
-    billboard.position.z = layer.depthOffset * scale;
+    billboard.scale.setScalar(layer.size * fixture.visualScale);
+    billboard.position.z = layer.depthOffset * fixture.visualScale;
     billboard.renderOrder = layer.renderOrder;
     billboard.frustumCulled = false;
     plasmaVisual.add(billboard);
     billboardMaterials.push(material);
   }
 
-  const light = new THREE.SpotLight(colorHex, intensity, 1, 1.08, 0.74, 1.18);
+  const light = new THREE.SpotLight(
+    fixture.colorHex,
+    fixture.intensity,
+    1,
+    SCENE_SPOT_LIGHT_ANGLE_RADIANS,
+    SCENE_SPOT_LIGHT_PENUMBRA,
+    SCENE_SPOT_LIGHT_DECAY
+  );
   light.name = lightName;
   light.position.set(0, 0, 0);
   light.shadow.bias = -0.00018;
   light.shadow.normalBias = 0.018;
   object.add(light);
 
-  const fillLight = new THREE.PointLight(colorHex, intensity * 0.018, 42 * scale, 1.9);
+  const fillLight = new THREE.PointLight(
+    fixture.colorHex,
+    fixture.intensity * 0.018,
+    42 * fixture.visualScale,
+    1.9
+  );
   fillLight.name = `${name} local plasma glow`;
   fillLight.castShadow = false;
   object.add(fillLight);
@@ -2291,11 +2288,12 @@ function createSceneLightSource(
     target,
     plasmaVisual,
     billboardMaterials,
-    horizontalDirection,
-    heightScale,
-    intensity,
-    distanceScale,
-    phaseOffset: position.length() * 0.037
+    fixture,
+    phaseOffset: Math.hypot(
+      fixture.sourcePosition.x,
+      fixture.sourcePosition.y,
+      fixture.sourcePosition.z
+    ) * 0.037
   };
 }
 
@@ -2389,20 +2387,22 @@ function updateSceneLightSourceVisuals(time: number): void {
 }
 
 function updateSceneLightSources(nextPreset: QualityPreset): void {
-  const horizonRadius = nextPreset.fieldRadius * 0.72;
-
   for (const source of sceneLightSources) {
+    const resolved = resolveSceneSpotLightFixture(source.fixture, nextPreset.fieldRadius);
     source.object.position.set(
-      source.horizontalDirection.x * horizonRadius,
-      THREE.MathUtils.clamp(nextPreset.fieldRadius * source.heightScale, 18, 56),
-      source.horizontalDirection.z * horizonRadius
+      resolved.position.x,
+      resolved.position.y,
+      resolved.position.z
     );
-    source.target.position.set(0, 0.35, 0);
-    source.light.intensity = source.intensity;
-    source.light.distance = Math.max(150, nextPreset.fieldRadius * source.distanceScale);
+    source.target.position.set(resolved.target.x, resolved.target.y, resolved.target.z);
+    source.light.intensity = resolved.intensity;
+    source.light.distance = resolved.range;
+    source.light.angle = resolved.angleRadians;
+    source.light.penumbra = resolved.penumbra;
+    source.light.decay = resolved.decay;
     source.light.shadow.camera.far = Math.max(180, nextPreset.fieldRadius * 2.7);
     source.light.shadow.needsUpdate = true;
-    source.fillLight.intensity = source.intensity * 0.018;
+    source.fillLight.intensity = resolved.intensity * 0.018;
     source.fillLight.distance = Math.max(28, nextPreset.fieldRadius * 0.34);
   }
 }

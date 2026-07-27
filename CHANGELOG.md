@@ -13,6 +13,11 @@
 
 ### Changed
 
+- Restored the WebGL field's reflected fixture-light read in WebGPU. The neutral
+  lighting snapshot now carries the cyan key and magenta rim spotlight
+  positions, cones, ranges, and decay, while the field shader applies the same
+  `0.22` metalness / `0.32` roughness response to tile faces and bounded local
+  light reflections.
 - Unified WebGPU Core and Classic field dynamics around the WebGL-matched
   crest/trough transfer. Core keeps its minimalist caps, palette, and pulse
   glow proxy, but no longer multiplies wake displacement by `10x` or leaves

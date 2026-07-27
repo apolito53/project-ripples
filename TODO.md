@@ -111,6 +111,10 @@ concrete follow-ups that we actually intend to revisit.
   proxy, but no longer amplifies wake displacement or leaves an elevated shelf
   behind the traveling crest. The parity audit records early, middle, late, and
   post-expiry evidence for both field styles.
+- Restored the WebGL field's spatial fixture reflections in WebGPU by carrying
+  the real cyan key/magenta rim spotlight geometry through the neutral lighting
+  snapshot and evaluating the field's MeshStandard metalness/roughness response
+  per tile face. Browser checks now require the packed fixture-light contract.
 - Preserved the minimalist WebGPU art direction as selectable `core` and added a deterministic fixed-tick
   renderer presentation audit with state matching, repeatability checks, paired
   captures, image metrics, and amplified diffs.

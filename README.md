@@ -269,7 +269,10 @@ camera orbit. The flat, minimalist WebGPU treatment remains available as
 grounded center depression, animated pressure rim, and local presence response
 used by WebGL and Classic. Field style no longer changes ripple mechanics:
 Core and Classic share the same expanding crest, settled interior, wake
-transfer, and source lifetime as the WebGL reference.
+transfer, and source lifetime as the WebGL reference. WebGPU also carries the
+WebGL cyan key and magenta rim fixtures through the neutral lighting snapshot,
+including their spatial spotlight falloff and the field material's reflected
+`0.22` metalness / `0.32` roughness response.
 
 Choose the profile with the pause-menu **Field Style** selector or with
 `?presentation=classic|core`. The query wins over

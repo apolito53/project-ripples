@@ -66,7 +66,7 @@ packed dynamic and static particle state.
 | System | Current classification | Core policy | Classic audit target |
 | --- | --- | --- | --- |
 | Gameplay, camera, mode, field placement, Track mask, Training state | Shared/exact | Keep shared neutral ownership | No change unless a fixed-tick state mismatch appears |
-| Ripple field geometry/material | Classic 3D geometry restored; material remains review-required | Preserve cap-focused graphic treatment | Tune prism thickness, side-face material response, and field horizon without flattening geometry |
+| Ripple field geometry/material | Classic 3D geometry and key/rim reflected-light pools restored; residual material differences remain review-required | Preserve cap-focused geometry with restrained shared fixture reflections | Review residual tone-map and side-face response without flattening geometry or removing spatial light |
 | Immediate player trough/rim/body wake | Shared grounded pressure/rim coefficients aligned | Preserve Core's flat-cap material around the shared local response | Review residual raster/material differences without retuning shared coefficients |
 | Persistent wake solver | Shared coefficients and field transfer aligned | Keep minimalist geometry and color, not amplified displacement | Continue Track boost/coast/stop soak coverage without adding backend-only settling |
 | Avatar | Intentional Core difference | Preserve WebGPU hover-pod/mote treatment and saved mote asset | Compare dimensional silhouette, fins, thrusters, trails, and fixtures |
