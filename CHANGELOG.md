@@ -13,6 +13,10 @@
 
 ### Changed
 
+- Unified WebGPU Core and Classic field dynamics around the WebGL-matched
+  crest/trough transfer. Core keeps its minimalist caps, palette, and pulse
+  glow proxy, but no longer multiplies wake displacement by `10x` or leaves
+  raised tiles behind an expanding ripple front.
 - Restored the visible Base Speed and Boost Speed controls in the Movement tab
   after the renderer-switch menu cleanup exposed stale `hidden` attributes.
   The renderer round-trip verifier now checks their visibility and values in

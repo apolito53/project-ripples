@@ -288,7 +288,9 @@ Purpose: compact map for the standalone ripple-field visual lab.
     controls, while Resume, Exit To Main Menu, and the version changelog remain
     persistent menu actions. The field-palette setting is shared by both
     renderers; Style Default resolves to Reference for WebGL/Classic and Legacy
-    Neon for Core without changing wave dynamics.
+    Neon for Core without changing wave dynamics. Core and Classic also share
+    the same WebGL-matched crest/trough transfer; Field Style changes geometry
+    and material presentation only.
     Graphics also exposes a WebGL/WebGPU segmented control. It writes a
     versioned one-shot `sessionStorage` handoff, reloads with an explicit
     renderer query, rebuilds the same play mode, restores renderer-neutral

@@ -2646,7 +2646,7 @@ function hasCorePulseGlowState(payload) {
 
 function hasCoreFieldGeometry(payload) {
   return payload?.presentationProfile === WEBGPU_CORE_PRESENTATION_PROFILE &&
-    payload?.waveDynamicsMode === "core-stylized" &&
+    payload?.waveDynamicsMode === "classic-parity" &&
     hasAnimatedPlayerPresence(payload) &&
     payload?.fieldGeometryMode === "hex-cap" &&
     payload?.fieldVerticesPerInstance === 18 &&

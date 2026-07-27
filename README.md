@@ -267,7 +267,9 @@ policy as the WebGL reference. A downward cap keeps the field closed during the 
 camera orbit. The flat, minimalist WebGPU treatment remains available as
 `core`; it preserves that graphic cap-focused material while sharing the
 grounded center depression, animated pressure rim, and local presence response
-used by WebGL and Classic.
+used by WebGL and Classic. Field style no longer changes ripple mechanics:
+Core and Classic share the same expanding crest, settled interior, wake
+transfer, and source lifetime as the WebGL reference.
 
 Choose the profile with the pause-menu **Field Style** selector or with
 `?presentation=classic|core`. The query wins over

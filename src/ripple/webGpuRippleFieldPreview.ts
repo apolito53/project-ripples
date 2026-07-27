@@ -57,7 +57,7 @@ export type WebGpuRippleFieldPreviewMetrics = {
   readonly qualityId: string;
   readonly presentationProfile: RenderPresentationProfile;
   readonly fieldPalette: ResolvedFieldPaletteId;
-  readonly waveDynamicsMode: "classic-parity" | "core-stylized";
+  readonly waveDynamicsMode: "classic-parity";
   readonly playerPresenceMode: "pressure-rim";
   readonly playerPresenceAnimated: true;
   readonly fieldGeometryMode: "hex-cap" | "hex-prism";
@@ -200,7 +200,7 @@ export class WebGpuRippleFieldPreview {
       supportedPresentationProfiles: "classic,core",
       presentationProfile: this.presentationProfile,
       fieldPalette: this.fieldPalette,
-      waveDynamicsMode: getWaveDynamicsMode(this.presentationProfile),
+      waveDynamicsMode: getWaveDynamicsMode(),
       ...getPlayerPresenceMetrics(),
       ...getFieldGeometryMetrics(this.presentationProfile),
       drawCalls: FIELD_DRAW_CALLS,
@@ -418,7 +418,7 @@ export class WebGpuRippleFieldPreview {
       qualityId: this.layout.qualityId,
       presentationProfile: this.presentationProfile,
       fieldPalette: this.fieldPalette,
-      waveDynamicsMode: getWaveDynamicsMode(this.presentationProfile),
+      waveDynamicsMode: getWaveDynamicsMode(),
       ...getPlayerPresenceMetrics(),
       ...getFieldGeometryMetrics(this.presentationProfile),
       instanceCount: this.layout.instanceCount,
@@ -725,7 +725,7 @@ export class WebGpuRippleFieldPreview {
       quality: this.layout.qualityId,
       presentationProfile: this.presentationProfile,
       fieldPalette: this.fieldPalette,
-      waveDynamicsMode: getWaveDynamicsMode(this.presentationProfile),
+      waveDynamicsMode: getWaveDynamicsMode(),
       ...getPlayerPresenceMetrics(),
       ...getFieldGeometryMetrics(this.presentationProfile),
       instanceCount: this.layout.instanceCount,
@@ -809,7 +809,7 @@ export class WebGpuRippleFieldPreview {
     this.lastGeometryLogProfile = this.presentationProfile;
     this.log("ripple.webgpu.geometry", "Selected WebGPU RippleField geometry profile", {
       presentationProfile: this.presentationProfile,
-      waveDynamicsMode: getWaveDynamicsMode(this.presentationProfile),
+      waveDynamicsMode: getWaveDynamicsMode(),
       ...getPlayerPresenceMetrics(),
       previousPresentationProfile,
       geometrySelectionReason: previousPresentationProfile === null ? "startup" : "profile-switch",
@@ -943,10 +943,8 @@ function getPlayerPresenceMetrics() {
   };
 }
 
-function getWaveDynamicsMode(
-  profile: RenderPresentationProfile
-): WebGpuRippleFieldPreviewMetrics["waveDynamicsMode"] {
-  return profile === "classic" ? "classic-parity" : "core-stylized";
+function getWaveDynamicsMode(): WebGpuRippleFieldPreviewMetrics["waveDynamicsMode"] {
+  return "classic-parity";
 }
 
 function roundMetric(value: number): number {

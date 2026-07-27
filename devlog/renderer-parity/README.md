@@ -16,8 +16,11 @@ but independent rendering does not imply identical art direction.
   it is a report label, not a WebGPU profile.
 
 Closer-to-WebGL shader or pass work stays behind `classic`. Changing `core`
-merely to reduce a diff is not parity closure. Both profiles are selectable by
-the pause-menu **Field Style** control or `?presentation=classic|core`.
+merely to reduce a material diff is not parity closure. Shared gameplay-facing
+field dynamics are not profile-specific: Core and Classic use the same
+WebGL-matched crest/trough transfer while keeping distinct geometry and
+materials. Both profiles are selectable by the pause-menu **Field Style**
+control or `?presentation=classic|core`.
 
 ## Current Finding
 
@@ -65,7 +68,7 @@ packed dynamic and static particle state.
 | Gameplay, camera, mode, field placement, Track mask, Training state | Shared/exact | Keep shared neutral ownership | No change unless a fixed-tick state mismatch appears |
 | Ripple field geometry/material | Classic 3D geometry restored; material remains review-required | Preserve cap-focused graphic treatment | Tune prism thickness, side-face material response, and field horizon without flattening geometry |
 | Immediate player trough/rim/body wake | Shared grounded pressure/rim coefficients aligned | Preserve Core's flat-cap material around the shared local response | Review residual raster/material differences without retuning shared coefficients |
-| Persistent wake solver | Shared coefficients aligned | Keep Core's stylized display response | Continue Track boost/coast/stop soak coverage without adding backend-only settling |
+| Persistent wake solver | Shared coefficients and field transfer aligned | Keep minimalist geometry and color, not amplified displacement | Continue Track boost/coast/stop soak coverage without adding backend-only settling |
 | Avatar | Intentional Core difference | Preserve WebGPU hover-pod/mote treatment and saved mote asset | Compare dimensional silhouette, fins, thrusters, trails, and fixtures |
 | Active Echoes and collection | WebGPU-native equivalent | Preserve dense tiny-sun orbs as the Core read | Compare Three shells/columns, event mist, and field-response duplication |
 | Particles | Shared state, suspect presentation | Keep soft-quad path | Audit WebGL depth-test-off against WebGPU field-depth reads |

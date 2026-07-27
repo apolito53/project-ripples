@@ -104,10 +104,13 @@ concrete follow-ups that we actually intend to revisit.
 - Added the default Classic WebGPU profile with procedural 3D hex prisms,
   animated tile thickness, real side-face lighting, query/storage/menu policy,
   live session-preserving profile switches, and dedicated browser/parity checks.
-- Aligned Classic's complete pulse lifecycle with WebGL: source and wake transfer,
+- Aligned both WebGPU field styles with WebGL's complete pulse lifecycle:
+  source and wake transfer,
   immediate player body wake, pulse-light/shadow fading, late wake settling, and
-  per-source expiry. The parity audit now records early, middle, late, and
-  post-expiry evidence while Core keeps its stylized pulse proxy.
+  per-source expiry. Core keeps its minimalist geometry and additive pulse
+  proxy, but no longer amplifies wake displacement or leaves an elevated shelf
+  behind the traveling crest. The parity audit records early, middle, late, and
+  post-expiry evidence for both field styles.
 - Preserved the minimalist WebGPU art direction as selectable `core` and added a deterministic fixed-tick
   renderer presentation audit with state matching, repeatability checks, paired
   captures, image metrics, and amplified diffs.

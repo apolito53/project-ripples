@@ -1502,7 +1502,7 @@ function assertWebGpuPresentationGeometry(payload) {
         visibleSideFaceCount: 0,
         bottomFaceIncluded: false,
         tileHeightMode: "flat-cap",
-        waveDynamicsMode: "core-stylized"
+        waveDynamicsMode: "classic-parity"
       };
   for (const [key, expectedValue] of Object.entries(expected)) {
     if (payload?.[key] !== expectedValue) {

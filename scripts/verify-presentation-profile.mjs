@@ -7,9 +7,9 @@ import ts from "typescript";
 const profilePolicy = await importTypeScriptModule("../src/render/presentationProfile.ts");
 const fieldPalettePolicy = await importTypeScriptModule("../src/fieldPalette.ts");
 const tests = [];
-// Reviewed after the v0.6 Core idle-presence parity capture. Update this only
+// Reviewed after the v0.6 Core water-crest parity correction. Update this only
 // after a deliberate Core art-direction change receives fresh visual evidence.
-const PRESERVED_CORE_SHADER_SHA256 = "19288760217a51410ae8e60e960318b7a2852f82653056d6c98d6a299abfc69a";
+const PRESERVED_CORE_SHADER_SHA256 = "f03d92b748f7cd6e501c9ba8a7d37c4f3fba0f3a3c3a325111d3d39bb9a972ad";
 
 async function importTypeScriptModule(relativePath) {
   const sourceUrl = new URL(relativePath, import.meta.url);
@@ -196,6 +196,40 @@ test("Core keeps the WebGL pressure-rim player-presence contract", () => {
   ]) {
     assert.ok(coreVertex.includes(expected), `Core field vertex no longer consumes ${JSON.stringify(expected)}.`);
   }
+});
+
+test("Core and Classic share the WebGL-matched field-wave transfer", () => {
+  const shaderSource = readFileSync(
+    fileURLToPath(new URL("../src/ripple/webGpuRippleFieldPreview.wgsl", import.meta.url)),
+    "utf8"
+  );
+  const sharedWave = extractWgslFunction(shaderSource, "fieldWaveAt");
+  const coreVertex = extractWgslFunction(shaderSource, "buildCoreFieldVertex");
+  const classicVertex = extractWgslFunction(shaderSource, "buildClassicFieldVertex");
+
+  for (const expected of [
+    "sourceWave * (1.0 - bodyPressure * 0.44)",
+    "shelteredSourceWave * 0.92",
+    "flowWave * 0.42",
+    "wakeTextureWave * 0.95"
+  ]) {
+    assert.ok(sharedWave.includes(expected), `Shared field-wave transfer lost ${JSON.stringify(expected)}.`);
+  }
+  for (const [profile, vertex] of [["Core", coreVertex], ["Classic", classicVertex]]) {
+    assert.ok(
+      vertex.includes("fieldWaveAt(cellPosition, cell.positionPhase.w, playerPresence.bodyPressure)"),
+      `${profile} no longer consumes the shared field-wave response.`
+    );
+    assert.ok(
+      vertex.includes("playerPresence.lift + fieldWave.lift"),
+      `${profile} no longer combines player pressure with the shared crest/trough lift.`
+    );
+  }
+  assert.equal(
+    coreVertex.includes("heightEnergy * field.render.x + sourceWave * 0.36"),
+    false,
+    "Core restored its retired amplified wake/source displacement."
+  );
 });
 
 function extractWgslFunction(source, functionName) {

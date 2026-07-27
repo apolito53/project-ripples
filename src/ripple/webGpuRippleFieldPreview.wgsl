@@ -467,6 +467,21 @@ struct PlayerPresenceSignal {
   glow: f32,
   footprintGrowth: f32,
   pressureRim: f32,
+  bodyPressure: f32,
+  shimmer: f32,
+};
+
+struct FieldWaveSignal {
+  sourceWave: f32,
+  shelteredSourceWave: f32,
+  wakeTextureWave: f32,
+  wakeTextureVelocity: f32,
+  wakeTextureGlow: f32,
+  wakeCrestEnergy: f32,
+  flowWave: f32,
+  lift: f32,
+  glow: f32,
+  crestGlow: f32,
 };
 
 // Core keeps its flat-cap art direction, but the player must still press into
@@ -495,29 +510,80 @@ fn playerPresenceAt(cellPosition: vec2f, instancePhase: f32) -> PlayerPresenceSi
   signal.glow = glow;
   signal.footprintGrowth = glow * 0.05;
   signal.pressureRim = pressureRim;
+  signal.bodyPressure = bodyPressure;
+  signal.shimmer = shimmer;
   return signal;
 }
 
-// Keep Core's flat-cap math isolated. Classic may evolve toward the Three
-// reference without quietly retuning the minimalist profile.
+// Field style changes geometry and material presentation, not ripple physics.
+// Both WebGPU profiles consume this WebGL-matched crest/trough transfer so a
+// traveling front leaves settled water behind instead of a raised Core shelf.
+fn fieldWaveAt(
+  cellPosition: vec2f,
+  instancePhase: f32,
+  bodyPressure: f32
+) -> FieldWaveSignal {
+  let wake = loadWake(cellPosition);
+  let sourceWave = sourceWaveAt(cellPosition);
+  let fromPlayer = cellPosition - field.player.xy;
+  let playerDistance = length(fromPlayer);
+  let flowWave = movingBodyWake(fromPlayer, playerDistance, instancePhase);
+  let wakeTextureWave = wake.x;
+  let wakeTextureVelocity = wake.y;
+  let wakeTextureGlow = wake.z;
+  let wakeCrestEnergy = clamp(
+    wakeTextureGlow * 1.95 + max(wakeTextureWave, 0.0) * 0.28,
+    0.0,
+    1.0
+  );
+  let shelteredSourceWave = sourceWave * (1.0 - bodyPressure * 0.44);
+  let crestGlow = clamp(
+    max(shelteredSourceWave, 0.0) * 1.18 +
+      max(flowWave, 0.0) * 0.34 +
+      wakeCrestEnergy * 1.28,
+    0.0,
+    0.98
+  );
+
+  var signal: FieldWaveSignal;
+  signal.sourceWave = sourceWave;
+  signal.shelteredSourceWave = shelteredSourceWave;
+  signal.wakeTextureWave = wakeTextureWave;
+  signal.wakeTextureVelocity = wakeTextureVelocity;
+  signal.wakeTextureGlow = wakeTextureGlow;
+  signal.wakeCrestEnergy = wakeCrestEnergy;
+  signal.flowWave = flowWave;
+  signal.lift = (
+    shelteredSourceWave * 0.92 +
+    flowWave * 0.42 +
+    wakeTextureWave * 0.95
+  ) * field.render.x;
+  signal.glow =
+    shelteredSourceWave * 0.2 +
+    flowWave * 0.08 +
+    max(wakeTextureWave, 0.0) * 0.06 +
+    wakeCrestEnergy * 0.48;
+  signal.crestGlow = crestGlow;
+  return signal;
+}
+
+// Keep Core's flat-cap geometry and material isolated while sharing the same
+// field dynamics as Classic and WebGL.
 fn buildCoreFieldVertex(instanceIndex: u32, local: vec2f) -> VertexOutput {
   let cell = cells[instanceIndex];
   let cellPosition = cell.positionPhase.xz;
-  let wake = loadWake(cellPosition);
   let trackSignal = trackSignalAt(cellPosition);
-  let sourceWave = sourceWaveAt(cellPosition);
   let echoSignal = echoSignalAt(cellPosition);
   let playerPresence = playerPresenceAt(cellPosition, cell.positionPhase.w);
-  let heightEnergy = clamp(wake.x * 10.0 + sourceWave * 0.88, -1.0, 1.0);
-  let crestEnergy = clamp(max(wake.z, 0.0) * 2.2 + max(sourceWave, 0.0) * 0.64, 0.0, 1.0);
-  let velocityEnergy = clamp(abs(wake.y) * 10.0, 0.0, 1.0);
+  let fieldWave = fieldWaveAt(cellPosition, cell.positionPhase.w, playerPresence.bodyPressure);
+  let glow = clamp(playerPresence.glow + fieldWave.glow, 0.0, 0.62);
   let shimmer = 0.5 + 0.5 * sin(field.timing.x * 3.7 + cell.positionPhase.w);
-  let footprintDiameter = field.shape.z + crestEnergy * 0.05 + echoSignal.x * 0.012 +
-    playerPresence.footprintGrowth;
+  let footprintDiameter =
+    field.shape.z + playerPresence.footprintGrowth + echoSignal.x * 0.012;
   let footprint = footprintDiameter * field.render.z * 0.5;
   let worldOffset = local * footprint;
   let lift = clamp(
-    heightEnergy * field.render.x + sourceWave * 0.36 + echoSignal.z * 0.72 + playerPresence.lift,
+    playerPresence.lift + fieldWave.lift + echoSignal.z * 0.18,
     -1.6,
     2.5
   );
@@ -526,18 +592,19 @@ fn buildCoreFieldVertex(instanceIndex: u32, local: vec2f) -> VertexOutput {
     cell.positionPhase.y + lift,
     cellPosition.y + worldOffset.y
   );
-  let terrainWhiteness = smoothstep(-0.75, 3.05, cell.positionPhase.y + heightEnergy * field.render.x);
+  let terrainWhiteness = smoothstep(-0.75, 3.05, cell.positionPhase.y + lift);
   let keyLight = max(dot(vec3f(0.0, 1.0, 0.0), normalize(vec3f(-0.26, 0.82, 0.48))), 0.0);
   let rim = 0.2 + 0.16 * smoothstep(0.1, 0.98, abs(local.x)) + shimmer * 0.04;
-  let crestLight = crestEnergy * (0.28 + shimmer * 0.12) + playerPresence.pressureRim * 0.06;
+  let crestLight = fieldWave.crestGlow * (0.28 + shimmer * 0.12) +
+    playerPresence.pressureRim * 0.06;
 
   var output: VertexOutput;
   output.position = field.viewProjection * vec4f(worldPosition, 1.0);
   output.local = local;
   output.energy = vec3f(
-    heightEnergy,
-    velocityEnergy,
-    max(max(crestEnergy, echoSignal.y * 0.34), playerPresence.glow * 0.42)
+    glow,
+    abs(fieldWave.wakeTextureVelocity),
+    max(max(fieldWave.crestGlow, echoSignal.y * 0.34), playerPresence.glow * 0.42)
   );
   output.lighting = vec3f(keyLight, rim, crestLight);
   output.localLighting = localLightingAt(worldPosition);
@@ -547,18 +614,37 @@ fn buildCoreFieldVertex(instanceIndex: u32, local: vec2f) -> VertexOutput {
   output.worldNormal = vec3f(0.0, 1.0, 0.0);
   output.faceData = vec2f(0.0);
   let referenceGlow = clamp(
-    max(heightEnergy, 0.0) * 0.56 + crestEnergy * 0.48 + playerPresence.glow * 0.72,
+    glow * 0.56 + fieldWave.crestGlow * 0.48 + playerPresence.glow * 0.72,
     0.0,
     0.62
   );
-  let referenceTint = referencePaletteTint(cell.tint.rgb, terrainWhiteness, referenceGlow, crestEnergy) *
-    (0.62 + referenceGlow * 0.05 + terrainWhiteness * 0.07 + crestEnergy * 0.2);
+  let referenceTint = referencePaletteTint(
+    cell.tint.rgb,
+    terrainWhiteness,
+    referenceGlow,
+    fieldWave.crestGlow
+  ) * (
+    0.62 + referenceGlow * 0.05 + terrainWhiteness * 0.07 + fieldWave.crestGlow * 0.2
+  );
+  // Legacy Neon keeps its original energetic color language, but these values
+  // no longer feed displacement. Palette choice must not change wave shape.
+  let legacyHeightEnergy = clamp(
+    fieldWave.wakeTextureWave * 10.0 + fieldWave.sourceWave * 0.88,
+    -1.0,
+    1.0
+  );
+  let legacyVelocityEnergy = clamp(abs(fieldWave.wakeTextureVelocity) * 10.0, 0.0, 1.0);
+  let legacyCrestEnergy = clamp(
+    max(fieldWave.wakeTextureGlow, 0.0) * 2.2 + max(fieldWave.sourceWave, 0.0) * 0.64,
+    0.0,
+    1.0
+  );
   let legacyTint = legacyNeonPaletteTint(
     cell.tint.rgb,
     terrainWhiteness,
-    heightEnergy,
-    velocityEnergy,
-    crestEnergy,
+    legacyHeightEnergy,
+    legacyVelocityEnergy,
+    legacyCrestEnergy,
     shimmer
   );
   output.color = selectFieldPalette(referenceTint, legacyTint);
@@ -585,60 +671,27 @@ fn buildClassicFieldVertex(
 ) -> VertexOutput {
   let cell = cells[instanceIndex];
   let cellPosition = cell.positionPhase.xz;
-  let wake = loadWake(cellPosition);
   let trackSignal = trackSignalAt(cellPosition);
-  let sourceWave = sourceWaveAt(cellPosition);
   let echoSignal = echoSignalAt(cellPosition);
-  let fromPlayer = cellPosition - field.player.xy;
-  let playerDistance = length(fromPlayer);
-  let playerContact = clamp(field.player.w, 0.0, 1.0);
-  let proximity = (1.0 - smoothstep(0.0, field.render.y, playerDistance)) *
-    (0.12 + playerContact * 0.88);
-  let bodyPressure = (1.0 - smoothstep(0.15, 2.55, playerDistance)) * playerContact;
-  let pressureRim = exp(-pow((playerDistance - 2.35) / 0.9, 2.0)) * playerContact;
-  let movementPush = clamp(field.player.z / 16.0, 0.0, 1.0) * playerContact;
-  let shimmer = sin(field.timing.x * 5.8 - playerDistance * 2.15 + cell.positionPhase.w) * 0.5 + 0.5;
-  let flowWave = movingBodyWake(fromPlayer, playerDistance, cell.positionPhase.w);
-  let wakeTextureWave = wake.x;
-  let wakeTextureGlow = wake.z;
-  let wakeCrestEnergy = clamp(
-    wakeTextureGlow * 1.95 + max(wakeTextureWave, 0.0) * 0.28,
-    0.0,
-    1.0
-  );
-  let pressureDepression = bodyPressure * (0.35 + shimmer * 0.09 + movementPush * 0.115);
-  let rimLift = pressureRim * (0.16 + shimmer * 0.14 + movementPush * 0.1);
-  let shelteredSourceWave = sourceWave * (1.0 - bodyPressure * 0.44);
-  let crestGlow = clamp(
-    max(shelteredSourceWave, 0.0) * 1.18 +
-      max(flowWave, 0.0) * 0.34 +
-      wakeCrestEnergy * 1.28,
-    0.0,
-    0.98
-  );
+  let playerPresence = playerPresenceAt(cellPosition, cell.positionPhase.w);
+  let fieldWave = fieldWaveAt(cellPosition, cell.positionPhase.w, playerPresence.bodyPressure);
+  let shimmer = playerPresence.shimmer;
   let lift = clamp(
-    (-pressureDepression + rimLift + shelteredSourceWave * 0.92 + flowWave * 0.42 +
-      wakeTextureWave * 0.95) * field.render.x + echoSignal.z * 0.18,
+    playerPresence.lift + fieldWave.lift + echoSignal.z * 0.18,
     -1.6,
     2.5
   );
-  let glow = clamp(
-    proximity * (0.04 + shimmer * 0.08) + pressureRim * 0.08 +
-      shelteredSourceWave * 0.2 + flowWave * 0.08 +
-      max(wakeTextureWave, 0.0) * 0.06 + wakeCrestEnergy * 0.48,
-    0.0,
-    0.62
-  );
+  let glow = clamp(playerPresence.glow + fieldWave.glow, 0.0, 0.62);
   let voxelScale = clamp(field.render.z, 0.25, 2.0);
   let tileHeight = max(
     0.02,
     (
       field.shape.w +
-      pressureRim * 0.16 +
-      shelteredSourceWave * 0.44 +
-      flowWave * 0.18 +
-      max(wakeTextureWave, 0.0) * 0.22 -
-      bodyPressure * 0.009
+      playerPresence.pressureRim * 0.16 +
+      fieldWave.shelteredSourceWave * 0.44 +
+      fieldWave.flowWave * 0.18 +
+      max(fieldWave.wakeTextureWave, 0.0) * 0.22 -
+      playerPresence.bodyPressure * 0.009
     ) * voxelScale
   );
   // Procedural corners use a unit circumradius while Three's prism uses 0.5.
@@ -663,11 +716,19 @@ fn buildClassicFieldVertex(
   let topFace = 1.0 - sideFace - bottomFace;
   let bottomRim = 0.08 + keyLight * 0.08 + shimmer * 0.02;
   let rim = topRim * topFace + sideRim * sideFace + bottomRim * bottomFace;
-  let crestLight = crestGlow * (0.28 + shimmer * 0.12);
-  let classicTint = referencePaletteTint(cell.tint.rgb, terrainWhiteness, glow, crestGlow);
-  let legacyHeightEnergy = clamp(wake.x * 10.0 + sourceWave * 0.88, -1.0, 1.0);
-  let legacyVelocityEnergy = clamp(abs(wake.y) * 10.0, 0.0, 1.0);
-  let legacyCrestEnergy = clamp(max(wake.z, 0.0) * 2.2 + max(sourceWave, 0.0) * 0.64, 0.0, 1.0);
+  let crestLight = fieldWave.crestGlow * (0.28 + shimmer * 0.12);
+  let classicTint = referencePaletteTint(cell.tint.rgb, terrainWhiteness, glow, fieldWave.crestGlow);
+  let legacyHeightEnergy = clamp(
+    fieldWave.wakeTextureWave * 10.0 + fieldWave.sourceWave * 0.88,
+    -1.0,
+    1.0
+  );
+  let legacyVelocityEnergy = clamp(abs(fieldWave.wakeTextureVelocity) * 10.0, 0.0, 1.0);
+  let legacyCrestEnergy = clamp(
+    max(fieldWave.wakeTextureGlow, 0.0) * 2.2 + max(fieldWave.sourceWave, 0.0) * 0.64,
+    0.0,
+    1.0
+  );
   let legacyTint = legacyNeonPaletteTint(
     cell.tint.rgb,
     terrainWhiteness,
@@ -680,7 +741,11 @@ fn buildClassicFieldVertex(
   var output: VertexOutput;
   output.position = field.viewProjection * vec4f(worldPosition, 1.0);
   output.local = local;
-  output.energy = vec3f(glow, abs(wake.y), max(crestGlow, echoSignal.y * 0.34));
+  output.energy = vec3f(
+    glow,
+    abs(fieldWave.wakeTextureVelocity),
+    max(fieldWave.crestGlow, echoSignal.y * 0.34)
+  );
   output.lighting = vec3f(keyLight, rim, crestLight);
   output.localLighting = localLightingAt(worldPosition);
   output.contactShadow = contactShadowAt(worldPosition);
@@ -688,7 +753,9 @@ fn buildClassicFieldVertex(
   output.trackSignal = trackSignal;
   output.worldNormal = worldNormal;
   output.faceData = faceData;
-  let referenceColor = classicTint * (0.62 + glow * 0.05 + terrainWhiteness * 0.07 + crestGlow * 0.2);
+  let referenceColor = classicTint * (
+    0.62 + glow * 0.05 + terrainWhiteness * 0.07 + fieldWave.crestGlow * 0.2
+  );
   output.color = selectFieldPalette(referenceColor, legacyTint);
   output.color = output.color + echoSignal.x * vec3f(0.18, 0.36, 0.3);
   output.color = output.color + echoSignal.y * vec3f(0.42, 0.28, 0.1);
