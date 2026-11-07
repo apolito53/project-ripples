@@ -3,6 +3,30 @@
 Prioritized work for the standalone ripple-field visual lab. Keep this file for
 concrete follow-ups that we actually intend to revisit.
 
+## Resume On This Machine
+
+- Restore local npm/dependency tooling, then run `npm.cmd ci`, typecheck/build,
+  and the existing browser smoke coverage for Training/Track/Arena on WebGL
+  and explicit WebGPU, including Core and the renderer-switch handoff.
+  At the 2026-11-07 catch-up, `npm.cmd` was unavailable on PATH and dependencies
+  and build output were absent. Only the standalone benchmark-reporting and
+  smoke-harness verifiers plus script syntax checks were rerun; historical
+  browser/visual/performance results still need current-machine verification.
+- Reconcile configured ports `5183`, `5184`, `4183`, and `4184` with the
+  [central registry](../PORT_REGISTRY.md) before starting services. They were
+  imported as unreserved/pending, with no listener observed at catch-up;
+  recheck live listeners and OS exclusions before reserving or launching.
+- Finish the existing local logger against the workspace standard, then verify
+  an emitted browser error through collection and retrieval, including a
+  receiver-unavailable case. Source inspection found daily JSONL appends without
+  disk retention/rotation, wildcard CORS, silently discarded fetch failures,
+  and no global `error`/`unhandledrejection` forwarding in `src/`.
+  Reuse `src/debugLog.ts` and `scripts/debug-log-server.mjs`: their existing
+  browser/server buffers and request-size caps are bounded, and the receiver
+  already exposes health, tail, events, and summary endpoints. Restrict local
+  origins, bound disk retention, add the missing error coverage and visible
+  nonblocking failure status, and document/verify the resulting behavior.
+
 ## High Priority
 
 - Close the remaining Classic renderer presentation audit without erasing

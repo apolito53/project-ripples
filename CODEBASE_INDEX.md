@@ -1,8 +1,20 @@
 # Codebase Index
 
-Last reviewed: 2026-07-26
+Code map last reviewed: 2026-07-26; resumption routes reviewed: 2026-11-07.
 
 Purpose: compact map for the standalone ripple-field visual lab.
+
+## Resume And Project Notes
+
+- [Working memory](WORKING_MEMORY.md): current source-based handoff, local
+  tooling/verification limits, and the next useful step.
+- [Crystallized memory](CRYSTALIZED_MEMORY.md): durable renderer decisions and
+  historical benchmark evidence, reconstructed from the surviving repository.
+- [TODO](TODO.md): concrete resumption, logging, renderer, and racing work.
+- [Ideas](SPITBALL_IDEAS.md): possibilities that have not become implementation
+  tasks.
+- [Local logging](logs/README.md): receiver startup and retrieval endpoints;
+  outstanding coverage gaps are in [TODO](TODO.md#resume-on-this-machine).
 
 ## Stack
 
@@ -307,8 +319,8 @@ Purpose: compact map for the standalone ripple-field visual lab.
     Training adds its one-draw objective marker and deterministic Echo policy.
     The selected presentation profile chooses either the default Classic 3D
     hex-prism pipeline or the preserved flat Core pipeline without rebuilding
-    gameplay state. Classic consumes the WebGL source/wake transfer and pulse-
-    light lifecycle; Core retains the earlier stylized amplification and pulse
+    gameplay state. Both profiles share the WebGL source/wake transfer and
+    pulse lifetime; Core retains minimalist geometry/material and its pulse
     glow proxy.
     Readiness stays `diagnostic-core` and `defaultEligible=false` even after the
     automated remaining-gap list reaches empty.
