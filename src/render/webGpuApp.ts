@@ -53,7 +53,7 @@ import { getSkyboxOption, isSkyboxId, SKYBOX_OPTIONS } from "../skybox";
 import { sampleFieldHeight } from "../terrain";
 import { TrainingRun, type TrainingCourse, type TrainingHudState } from "../trainingRun";
 import { getBasePropagationSpeedMetersPerSecond } from "../waveMedium";
-import changelogMarkdown from "../../CHANGELOG.md?raw";
+import { renderPlayerChangelog } from "../playerChangelog";
 import packageMetadata from "../../package.json";
 import type { RendererModeSelection } from "./rendererMode";
 import {
@@ -1466,7 +1466,7 @@ async function startWebGpuAppInternal(
     }
     dom.mainMenuVersionLink.textContent = APP_VERSION;
     dom.versionLink.textContent = APP_VERSION;
-    dom.changelogContent.textContent = changelogMarkdown;
+    renderPlayerChangelog(dom.changelogContent);
     dom.qualitySelect.value = settings.qualityId;
     dom.skyboxSelect.value = settings.skyboxId;
     dom.presentationProfileSelect.value = presentationProfile;
@@ -2418,7 +2418,7 @@ function getDom() {
     changelogBackdrop: requireElement<HTMLDivElement>("#changelog-backdrop"),
     changelogDialog: requireElement<HTMLElement>("#changelog-dialog"),
     changelogClose: requireElement<HTMLButtonElement>("#changelog-close"),
-    changelogContent: requireElement<HTMLPreElement>("#changelog-content"),
+    changelogContent: requireElement<HTMLDivElement>("#changelog-content"),
     perfOverlay: requireElement<HTMLElement>("#perf-overlay"),
     perfOverlayQuality: requireElement<HTMLElement>("#perf-overlay-quality"),
     perfFrame: requireElement<HTMLElement>("#perf-frame"),

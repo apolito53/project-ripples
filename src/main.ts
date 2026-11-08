@@ -84,7 +84,7 @@ import { sampleFieldHeight } from "./terrain";
 import { TrainingRun, type TrainingHudState } from "./trainingRun";
 import { WakeField } from "./wakeField";
 import { getBasePropagationSpeedMetersPerSecond } from "./waveMedium";
-import changelogMarkdown from "../CHANGELOG.md?raw";
+import { renderPlayerChangelog } from "./playerChangelog";
 import packageMetadata from "../package.json";
 
 function requireElement<T extends HTMLElement>(selector: string): T {
@@ -143,7 +143,7 @@ const versionLink = requireElement<HTMLButtonElement>("#version-link");
 const changelogBackdrop = requireElement<HTMLDivElement>("#changelog-backdrop");
 const changelogDialog = requireElement<HTMLElement>("#changelog-dialog");
 const changelogClose = requireElement<HTMLButtonElement>("#changelog-close");
-const changelogContent = requireElement<HTMLPreElement>("#changelog-content");
+const changelogContent = requireElement<HTMLDivElement>("#changelog-content");
 const mobileControls = requireElement<HTMLDivElement>("#mobile-controls");
 const pulseButton = requireElement<HTMLButtonElement>("#pulse-button");
 const perfOverlay = requireElement<HTMLElement>("#perf-overlay");
@@ -1327,7 +1327,7 @@ function triggerEchoZone(echo: TriggeredEchoZone, time: number): void {
 function wireControls(): void {
   versionLink.textContent = APP_VERSION;
   mainMenuVersionLink.textContent = APP_VERSION;
-  changelogContent.textContent = changelogMarkdown.trim();
+  renderPlayerChangelog(changelogContent);
   updateAppChrome();
 
   menuToggle.addEventListener("click", () => {

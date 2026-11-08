@@ -52,7 +52,9 @@ mode directly.
 - `Shift` boosts from base pace with momentum.
 - `F2` shows or hides the live performance overlay and top-left debug readout.
 - `Esc` opens/closes the pause menu after a mode has started.
-- The pause menu's version pill opens the in-app changelog.
+- The main and pause menu version pills open the player-friendly changelog.
+  Maintain its release notes in [`src/playerChangelog.ts`](src/playerChangelog.ts)
+  alongside production releases; `CHANGELOG.md` remains the technical history.
 - `Exit To Main Menu` returns to the mode-select splash and starts the next mode
   from a clean runtime state.
 - The on-screen pulse button drops manual pulses on touch layouts.

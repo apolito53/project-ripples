@@ -15,8 +15,18 @@ WebGPU defaults to Classic 3D, while Core remains a supported minimalist
 style. Both share WebGL-matched field dynamics. See the
 [code map](CODEBASE_INDEX.md) and [durable context](CRYSTALIZED_MEMORY.md).
 
-Current-machine runtime status is unverified. `npm.cmd` was unavailable on
-PATH and `node_modules`/`dist` were absent. Bundled Node passed
+The main and pause menu version pills open a formatted, player-friendly
+changelog maintained in `src/playerChangelog.ts`; both renderer paths share
+the renderer. The isolated changelog worktree passed typecheck and production
+build, and the WebGL main-menu reader was checked in a browser. The forced
+WebGPU browser did not respond to the menu click during this check; the current
+production baseline behaved the same way, so that interaction remains
+unverified. These checks do not replace the broader
+current-machine runtime review below.
+
+The canonical checkout's current-machine runtime status is unverified. At the
+catch-up review, `npm.cmd` was unavailable on PATH and its `node_modules`/`dist`
+were absent. Bundled Node passed
 `scripts/verify-benchmark-reporting.mjs`, `scripts/verify-smoke-harness.mjs`,
 and syntax checks for all 22 `.mjs` scripts; no dependency install, application
 build, or browser run was performed. These checks do not re-establish the

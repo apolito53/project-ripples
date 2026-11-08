@@ -952,12 +952,15 @@ input[type="range"] {
   border-radius: 6px;
   background: rgba(1, 6, 12, 0.62);
   color: rgba(237, 247, 255, 0.78);
-  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
-  line-height: 1.55;
-  padding: 12px;
-  white-space: pre-wrap;
+  font-size: 14px;
+  line-height: 1.6;
+  padding: 16px;
 }
+
+.changelog-content section + section { border-top: 1px solid rgba(142, 218, 255, 0.14); margin-top: 20px; padding-top: 18px; }
+.changelog-content h3 { color: #bceaff; font-size: 15px; margin: 0 0 8px; }
+.changelog-content ul { padding-left: 20px; margin: 0; }
+.changelog-content li + li { margin-top: 7px; }
 
 @keyframes menuFadeIn {
   from {
